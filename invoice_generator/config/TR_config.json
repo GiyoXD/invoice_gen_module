@@ -1,0 +1,213 @@
+{
+  "sheets_to_process": {
+    "Invoice": {
+      "type": "summary",
+      "replacements": [
+        {
+          "find": "[[PO]]",
+          "data_path": ["aggregated_summary", "po"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[GROSS]]",
+          "data_path": ["aggregated_summary", "gross"],
+          "match_mode": "exact" 
+        },
+        {
+          "find": "[[CBM]]",
+          "data_path": ["aggregated_summary", "cbm"],
+          "match_mode": "exact" 
+        },
+        {
+          "find": "[[ITEM]]",
+          "data_path": ["aggregated_summary", "item"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DESCRIPTION]]",
+          "data_path": ["aggregated_summary", "description"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DATE]]",
+          "data_path": ["aggregated_summary", "inv_date"],
+          "is_date": true,
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[REF]]",
+          "data_path": ["aggregated_summary", "inv_ref"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[NET]]",
+          "data_path": ["aggregated_summary", "net"],
+          "match_mode": "exact" 
+        },
+        {
+          "find": "[[UNIT]]",
+          "data_path": ["aggregated_summary", "unit"],
+          "match_mode": "exact" 
+        },
+        {
+          "find": "[[PALLET]]",
+          "data_path": [ "aggregated_summary", "total_pallets" ]
+        },
+        {
+          "find": "[[AMOUNT]]",
+          "formula_template": "{[[NET]]}*{[[UNIT]]}"
+        }
+      ]
+    },
+    "Contract": {
+      "type": "summary",
+      "replacements": [
+        {
+          "find": "[[PO]]",
+          "data_path": ["aggregated_summary", "po"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[GROSS]]",
+          "data_path": ["aggregated_summary", "gross"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[CBM]]",
+          "data_path": ["aggregated_summary", "cbm"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[ITEM]]",
+          "data_path": ["aggregated_summary", "item"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DESCRIPTION]]",
+          "data_path": ["aggregated_summary", "description"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DATE]]",
+          "data_path": ["aggregated_summary", "inv_date"],
+          "is_date": true,
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[REF]]",
+          "data_path": ["aggregated_summary", "inv_ref"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[NET]]",
+          "data_path": ["aggregated_summary", "net"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[UNIT]]",
+          "data_path": ["aggregated_summary", "unit"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[PALLET]]",
+          "data_path": [ "aggregated_summary", "total_pallets" ]
+        },
+        {
+          "find": "[[AMOUNT]]",
+          "formula_template": "{[[NET]]}*{[[UNIT]]}"
+        }
+      ]
+    },
+    "Packing List": {
+      "type": "packing_list",
+      "start_row": 22,
+      "replacements": [
+        {
+          "find": "[[PO]]",
+          "data_path": ["aggregated_summary", "po"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[GROSS]]",
+          "data_path": ["aggregated_summary", "gross"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[CBM]]",
+          "data_path": ["aggregated_summary", "cbm"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[ITEM]]",
+          "data_path": ["aggregated_summary", "item"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DESCRIPTION]]",
+          "data_path": ["aggregated_summary", "description"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[DATE]]",
+          "data_path": ["aggregated_summary", "inv_date"],
+          "is_date": true,
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[REF]]",
+          "data_path": ["aggregated_summary", "inv_ref"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[NET]]",
+          "data_path": ["aggregated_summary", "net"],
+          "match_mode": "exact"
+        },
+        {
+          "find": "[[PALLET]]",
+          "data_path": [ "aggregated_summary", "total_pallets" ]
+        }
+      ],
+      "header_to_write": [
+        { "row": 0, "col": 0, "text": "Mark & Nº", "id": "col_static", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 1, "text": "P.O Nº", "id": "col_po", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 2, "text": "ITEM Nº", "id": "col_item", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 3, "text": "Description", "id": "col_desc", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 4, "text": "PALLET NO.", "id": "col_pallet", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 5, "text": "PCS", "id": "col_qty_pcs", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 6, "text": "N.W (kgs)", "id": "col_net", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 7, "text": "G.W (kgs)", "id": "col_gross", "rowspan": 1, "colspan": 1 },
+        { "row": 0, "col": 8, "text": "CBM", "id": "col_cbm", "rowspan": 1, "colspan": 1 }
+      ],
+      "mappings": {
+        "initial_static": { "column_header_id": "col_static", "values": [ "VENDOR#:", "Des: LEATHER", "Case Qty:", "MADE IN CAMBODIA" ] },
+        "data_map": {
+          "po": { "id": "col_po" }, "item": { "id": "col_item" }, "description": { "id": "col_desc" },
+          "pallet_count": { "id": "col_pallet" }, "pcs": { "id": "col_qty_pcs" }, "sqft": { "id": "col_qty_sf" },
+          "net": { "id": "col_net" }, "gross": { "id": "col_gross" }, "cbm": { "id": "col_cbm" }
+        },
+        "vertical_merge_on_id": [ "col_po", "col_item", "col_desc" ]
+      },
+      "footer_configurations": {
+        "total_text": "TOTAL OF:", "total_text_column_id": "col_po", "pallet_count_column_id": "col_item",
+        "sum_column_ids": [ "col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm" ],
+        "pre_footer_row": { "cells": [ { "column_id": "col_po", "value": "HS.CODE: 4104.19.00" } ], "merge_rules": { "2": 2 } },
+        "footer_merge_rules": {}, "grand_total_merge_rules": {},
+        "style": { "font": { "name": "Times New Roman", "size": 12, "bold": true }, "alignment": { "horizontal": "center", "vertical": "center" }, "border": { "apply": true, "style": "thin" } }
+      },
+      "styling": {
+        "header_font": { "name": "Times New Roman", "size": 12, "bold": true },
+        "header_alignment": { "horizontal": "center", "vertical": "center", "wrap_text": true },
+        "default_font": { "name": "Times New Roman", "size": 12 },
+        "default_alignment": { "horizontal": "center", "vertical": "center", "wrap_text": true },
+        "column_id_styles": {
+          "col_static": { "alignment": { "horizontal": "left", "vertical": "top" } },
+          "col_net": { "number_format": "#,##0.00" }, "col_gross": { "number_format": "#,##0.00" },
+          "col_cbm": { "number_format": "0.00" }, "col_qty_pcs": { "number_format": "#,##0" },
+          "col_qty_sf": { "number_format": "#,##0.00" }
+        },
+        "column_id_widths": {}, "row_heights": { "header": 27, "data_default": 27, "footer": 35 }
+      }
+    }
+  }
+}

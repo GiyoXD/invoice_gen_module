@@ -1,0 +1,20 @@
+Mapping Report
+==================================================
+
+No unrecognized items found.
+
+Current Sheet Mappings:
+-------------------------
+'INV' -> 'Invoice'
+'PAK' -> 'Packing list'
+'CON' -> 'Contract'
+
+Current Header Mappings (7 total):
+-------------------------
+'Amount' -> 'col_amount'
+'Description' -> 'col_desc'
+'ITEM Nº' -> 'col_item'
+'Mark & Nº' -> 'col_static'
+'P.O Nº' -> 'col_po'
+'Quantity' -> 'col_qty_sf'
+'Unit price' -> 'col_unit_price'

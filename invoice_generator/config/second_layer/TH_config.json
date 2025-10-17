@@ -1,0 +1,37 @@
+// In your config.json
+"Packing List": {
+  "type": "packing_list",
+  "start_row": 16,
+  "header_to_write": [
+    // ... header layout ...
+  ],
+  "footer_configurations": {
+     "total_text": "SUB TOTAL:",
+     "sum_column_ids": ["col_pcs", "col_net", "col_gross", "col_cbm"],
+     // THIS CONTROLS THE FOOTER'S STYLE
+     "style": { 
+        "font": {"bold": true, "color": "FFFFFFFF"},
+        "alignment": {"horizontal": "right"},
+        "fill": {"fill_type": "solid", "start_color": "FF4F81BD"}
+     }
+  },
+  // THIS IS THE MAIN STYLE CONTROLLER
+  "styling": {
+     // This controls the style of the header
+     "header_style": {
+        "font": {"bold": true, "size": 12, "color": "FFFFFFFF"},
+        "fill": {"fill_type": "solid", "start_color": "FF4F81BD"}
+     },
+     // This controls the style of the main data rows
+     "data_style": {
+        "font": {"name": "Calibri", "size": 11},
+        "alignment": {"vertical": "center"}
+     },
+     // This controls the column widths
+     "column_widths": { 
+        "Description of Goods": 35, 
+        "Item": 20, 
+        "PO No.": 20 
+      }
+  }
+}
