@@ -21,6 +21,7 @@ from .utils import merge_utils
 from . import text_replace_utils
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
+from .builders.template_state_builder import TemplateStateBuilder
 
 # --- Helper Functions (derive_paths, load_config, load_data) ---
 # These functions remain largely the same but are part of the new script.
@@ -162,34 +163,27 @@ def main():
     if not config or not invoice_data: sys.exit(1)
 
     output_path = Path(args.output).resolve()
+    template_workbook = None
+    output_workbook = None
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(paths['template'], output_path)
+        template_workbook = openpyxl.load_workbook(paths['template'])
+        output_workbook = openpyxl.Workbook()
+        # Remove the default sheet created by openpyxl.Workbook()
+        if "Sheet" in output_workbook.sheetnames: output_workbook.remove(output_workbook["Sheet"])
     except Exception as e:
-        print(f"Error copying template: {e}"); sys.exit(1)
-    print(f"Template copied successfully to {output_path}")
+        print(f"Error preparing workbooks: {e}"); sys.exit(1)
+    print(f"Template workbook loaded and new output workbook created.")
 
     print("\n4. Processing workbook...")
-    workbook = None
     processing_successful = True
 
     try:
-        workbook = openpyxl.load_workbook(output_path)
-
         sheets_to_process_config = config.get('sheets_to_process', [])
-        sheets_to_process = [s for s in sheets_to_process_config if s in workbook.sheetnames]
+        sheets_to_process = [s for s in sheets_to_process_config if s in template_workbook.sheetnames]
 
         if not sheets_to_process:
             print("Error: No valid sheets to process."); sys.exit(1)
-
-        if args.DAF:
-            text_replace_utils.run_DAF_specific_replacement_task(workbook=workbook)
-        
-        text_replace_utils.run_invoice_header_replacement_task(workbook, invoice_data)
-
-        original_merges = merge_utils.store_original_merges(workbook, sheets_to_process)
-        sheet_data_source = config.get('sheet_data_map', {})
-        data_mapping_config = config.get('data_mapping', {})
 
         # Global pallet calculation remains the same
         final_grand_total_pallets = 0
@@ -199,14 +193,19 @@ def main():
             final_grand_total_pallets = sum(int(c) for t in processed_tables_data_for_calc.values() for c in t.get("pallet_count", []) if str(c).isdigit())
         print(f"DEBUG: Globally calculated final grand total pallets: {final_grand_total_pallets}")
 
+        sheet_data_source = config.get('sheet_data_map', {})
+        data_mapping_config = config.get('data_mapping', {})
+
         # --- REFACTORED Main Processing Loop ---
         for sheet_name in sheets_to_process:
             print(f"\n--- Processing Sheet: '{sheet_name}' ---")
-            if sheet_name not in workbook.sheetnames:
-                print(f"Warning: Sheet '{sheet_name}' not found. Skipping.")
+            if sheet_name not in template_workbook.sheetnames:
+                print(f"Warning: Sheet '{sheet_name}' not found in template. Skipping.")
                 continue
             
-            worksheet = workbook[sheet_name]
+            template_worksheet = template_workbook[sheet_name]
+            output_worksheet = output_workbook.create_sheet(title=sheet_name)
+
             sheet_config = data_mapping_config.get(sheet_name, {})
             data_source_indicator = sheet_data_source.get(sheet_name)
 
@@ -214,16 +213,25 @@ def main():
                 print(f"Warning: No config for sheet '{sheet_name}'. Skipping.")
                 continue
 
+            # Instantiate TemplateStateBuilder and capture state
+            template_state_builder = TemplateStateBuilder(template_worksheet)
+            header_end_row = sheet_config.get('start_row', 1) - 1
+            template_state_builder.capture_header(header_end_row)
+            # Capture footer from the original template worksheet, starting from where data would end
+            # This assumes data starts at sheet_config['start_row'] and goes until max_row of template
+            footer_start_row_in_template = sheet_config.get('start_row', 1)
+            template_state_builder.capture_footer(footer_start_row_in_template)
+
             # --- Processor Factory ---
             processor = None
             if data_source_indicator == "processed_tables_multi":
                 processor = MultiTableProcessor(
-                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config, 
                     data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
             else: # Default to single table processor
                 processor = SingleTableProcessor(
-                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config, 
                     data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
             
@@ -236,24 +244,28 @@ def main():
             else:
                 print(f"Warning: No suitable processor found for sheet '{sheet_name}'. Skipping.")
 
+            # Restore header and footer to the output worksheet
+            template_state_builder.restore_state(output_worksheet, sheet_config.get('start_row', 1))
+
         # --- End of Loop ---
 
-        merge_utils.find_and_restore_merges_heuristic(workbook, original_merges, sheets_to_process)
+        if args.DAF:
+            text_replace_utils.run_DAF_specific_replacement_task(workbook=output_workbook)
+        
+        text_replace_utils.run_invoice_header_replacement_task(output_workbook, invoice_data)
 
         print("\n--------------------------------")
         if processing_successful:
             print("5. Saving final workbook...")
-            workbook.save(output_path)
+            output_workbook.save(output_path)
             print(f"--- Workbook saved successfully: '{output_path}' ---")
-        else:
-            print("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
-            workbook.save(output_path)
 
     except Exception as e:
         print(f"\n--- UNHANDLED ERROR: {e} ---"); traceback.print_exc()
     finally:
-        if workbook:
-            try: workbook.close(); print("Workbook closed.")
+        if template_workbook: template_workbook.close()
+        if output_workbook:
+            try: output_workbook.close(); print("Output workbook closed.")
             except Exception: pass
 
     total_time = time.time() - start_time
