@@ -8,7 +8,7 @@ from openpyxl.utils import column_index_from_string, get_column_letter
 from typing import List, Dict, Any, Optional, Tuple, Union
 from decimal import Decimal
 from decimal import Decimal, InvalidOperation
-from .utils.writing import write_data_rows
+
 from .data.data_preparer import prepare_data_rows, parse_mapping_rules
 from .utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths, apply_row_heights, calculate_header_dimensions
 
@@ -694,23 +694,7 @@ def fill_invoice_data(
             # --- Create a reverse map from index to ID for easy lookups inside the loop ---
             idx_to_id_map = {v: k for k, v in col_id_map.items()}
 
-            data_row_indices_written = write_data_rows(
-                worksheet=worksheet,
-                data_start_row=data_start_row,
-                actual_rows_to_process=actual_rows_to_process,
-                data_rows_prepared=data_rows_prepared,
-                pallet_counts_for_rows=pallet_counts_for_rows,
-                num_columns=num_columns,
-                idx_to_id_map=idx_to_id_map,
-                col_id_map=col_id_map,
-                sheet_styling_config=sheet_styling_config,
-                DAF_mode=DAF_mode,
-                data_cell_merging_rules=data_cell_merging_rules,
-                apply_special_border_rule=apply_special_border_rule,
-                col1_index=col1_index,
-                initial_static_col1_values=initial_static_col1_values,
-                local_chunk_pallets=local_chunk_pallets,
-            )
+            data_row_indices_written = []
         except Exception as fill_data_err:
             print(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
             return False, footer_row_final + 1, data_start_row, data_end_row, 0

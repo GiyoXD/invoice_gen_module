@@ -32,7 +32,7 @@ import text_replace_utils # Ensure this is imported
 try:
     # Ensure invoice_utils.py corresponds to the latest version with pallet order updates
     from invoice_generator.utils.excel_operations import unmerge_row, unmerge_block, safe_unmerge_block, apply_row_merges, apply_column_widths, apply_row_heights, merge_contiguous_cells_by_id
-    from invoice_generator.utils.data_processing import prepare_data_rows
+    from invoice_generator.data.data_preparer import prepare_data_rows
     import merge_utils # <-- Import the new merge utility module
     print("Successfully imported invoice_utils and merge_utils.")
 except ImportError as import_err:

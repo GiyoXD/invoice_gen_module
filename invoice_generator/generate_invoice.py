@@ -16,8 +16,8 @@ import ast
 import re
 
 # --- Import utility functions from the new structure ---
-from . import invoice_utils
-from . import merge_utils
+# from . import invoice_utils
+from .utils import merge_utils
 from . import text_replace_utils
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor

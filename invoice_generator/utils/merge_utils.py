@@ -1,3 +1,5 @@
+import sys
+import traceback
 import openpyxl
 import traceback
 from openpyxl.worksheet.worksheet import Worksheet
@@ -219,8 +221,10 @@ def force_unmerge_from_row_down(worksheet: Worksheet, start_row: int):
             try:
                 worksheet.unmerge_cells(str(merged_range))
                 unmerged_count += 1
-            except Exception:
-                pass # Ignore errors, as the goal is a clean slate anyway
+            except Exception as e:
+                print(f"Error unmerging cells: {e}")
+                traceback.print_exc(file=sys.stdout) # Print to stdout
+                raise # Re-raise the exception
     
     if unmerged_count > 0:
         print(f"--- Removed {unmerged_count} merges from the data area (row {start_row}+) ---")

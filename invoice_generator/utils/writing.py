@@ -1,12 +1,44 @@
-from openpyxl.worksheet.worksheet import Worksheet
-from typing import List, Dict, Any, Optional, Tuple
-from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
-from openpyxl.utils import get_column_letter
-from .layout import unmerge_row, unmerge_block, safe_unmerge_block
-import re
-import traceback
-from decimal import Decimal, InvalidOperation
-from .. import merge_utils
+try:
+    import sys
+except ImportError as e:
+    print(f"ImportError for sys: {e}")
+print(f"Loading module: {__file__}")
+try:
+    from openpyxl.worksheet.worksheet import Worksheet
+except ImportError as e:
+    print(f"ImportError for openpyxl.worksheet.worksheet: {e}")
+try:
+    from typing import List, Dict, Any, Optional, Tuple
+except ImportError as e:
+    print(f"ImportError for typing: {e}")
+try:
+    from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
+except ImportError as e:
+    print(f"ImportError for openpyxl.styles: {e}")
+try:
+    from openpyxl.utils import get_column_letter
+except ImportError as e:
+    print(f"ImportError for openpyxl.utils: {e}")
+try:
+    from .layout import unmerge_row, unmerge_block, safe_unmerge_block, calculate_header_dimensions
+except ImportError as e:
+    print(f"ImportError for .layout: {e}")
+try:
+    import re
+except ImportError as e:
+    print(f"ImportError for re: {e}")
+try:
+    import traceback
+except ImportError as e:
+    print(f"ImportError for traceback: {e}")
+try:
+    from decimal import Decimal, InvalidOperation
+except ImportError as e:
+    print(f"ImportError for decimal: {e}")
+try:
+    from . import merge_utils
+except ImportError as e:
+    print(f"ImportError for .merge_utils: {e}")
 
 # --- Constants for Styling ---
 thin_side = Side(border_style="thin", color="000000")
@@ -269,115 +301,64 @@ def write_grand_total_weight_summary(
 def write_header(worksheet: Worksheet, start_row: int, header_layout_config: List[Dict[str, Any]],
                  sheet_styling_config: Optional[Dict[str, Any]] = None
                  ) -> Optional[Dict[str, Any]]:
-    
     if not header_layout_config or start_row <= 0:
         return None
-    
-    merge_utils.force_unmerge_from_row_down(worksheet, start_row)
 
+    num_header_rows, num_header_cols = calculate_header_dimensions(header_layout_config)
+    if num_header_rows > 0 and num_header_cols > 0:
+        unmerge_block(worksheet, start_row, start_row + num_header_rows - 1, num_header_cols)
 
-    # Determine header dimensions from the layout config
-    num_header_rows = max(cell.get('row', 0) for cell in header_layout_config) + 1
-    num_columns = max(cell.get('col', 0) + cell.get('colspan', 1) for cell in header_layout_config)
-    end_row = start_row + num_header_rows - 1
+    first_row_index = start_row
+    last_row_index = start_row
+    max_col = 0
+    column_map = {}
+    column_id_map = {}
 
-    # Get header styling from config
-    header_font_to_apply = bold_font
-    header_alignment_to_apply = center_alignment
-    header_border_to_apply = thin_border
-    header_background_fill_to_apply = None # Default is no fill
-
-    # --- NEW: Code to parse header styling from the config ---
+    header_font = Font(bold=True)
+    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     if sheet_styling_config:
-        # Get font from config
-        header_font_cfg = sheet_styling_config.get("header_font")
-        if header_font_cfg and isinstance(header_font_cfg, dict):
-            try:
-                header_font_to_apply = Font(**header_font_cfg)
-            except TypeError:
-                pass # Keep default on error
+        header_font_config = sheet_styling_config.get('header_font')
+        if header_font_config:
+            header_font = Font(**header_font_config)
+        header_alignment_config = sheet_styling_config.get('header_alignment')
+        if header_alignment_config:
+            header_alignment = Alignment(**header_alignment_config)
 
-        # Get alignment from config
-        header_align_cfg = sheet_styling_config.get("header_alignment")
-        if header_align_cfg and isinstance(header_align_cfg, dict):
-            try:
-                header_alignment_to_apply = Alignment(**header_align_cfg)
-            except TypeError:
-                pass # Keep default on error
-        
-        # Get background fill from config
-        header_fill_cfg = sheet_styling_config.get("header_pattern_fill")
-        if header_fill_cfg and isinstance(header_fill_cfg, dict):
-            try:
-                # Create a PatternFill object from the config dictionary
-                header_background_fill_to_apply = PatternFill(**header_fill_cfg)
-            except TypeError:
-                # This could happen if config keys don't match PatternFill arguments
-                print(f"Warning: Invalid parameters in header_pattern_fill config: {header_fill_cfg}")
-                pass # Keep fill as None on error
-    # --- END NEW CODE ---
+    for cell_config in header_layout_config:
+        row_offset = cell_config.get('row', 0)
+        col_offset = cell_config.get('col', 0)
+        text = cell_config.get('text', '')
+        cell_id = cell_config.get('id')
+        rowspan = cell_config.get('rowspan', 1)
+        colspan = cell_config.get('colspan', 1)
 
-    try:
-        # 1. Unmerge the entire target area first
-        unmerge_block(worksheet, start_row, end_row, num_columns)
+        cell_row = start_row + row_offset
+        cell_col = 1 + col_offset
 
-        column_map_by_text = {}
-        column_map_by_id = {}
+        last_row_index = max(last_row_index, cell_row + rowspan - 1)
+        max_col = max(max_col, cell_col + colspan - 1)
 
-        # 2. Loop through the explicit layout configuration
-        for cell_config in header_layout_config:
-            # Get cell properties from the config object
-            relative_row = cell_config.get('row', 0)
-            relative_col = cell_config.get('col', 0)
-            text_to_write = cell_config.get('text')
-            cell_id = cell_config.get('id')
-            rowspan = cell_config.get('rowspan', 1)
-            colspan = cell_config.get('colspan', 1)
+        cell = worksheet.cell(row=cell_row, column=cell_col, value=text)
+        cell.font = header_font
+        cell.alignment = header_alignment
+        cell.border = thin_border
 
-            # Calculate absolute position on the worksheet
-            abs_row = start_row + relative_row
-            abs_col = 1 + relative_col # openpyxl is 1-based
+        if cell_id:
+            column_map[text] = get_column_letter(cell_col)
+            column_id_map[cell_id] = cell_col
 
-            # 3. Write value and apply style to the top-left cell
-            cell = worksheet.cell(row=abs_row, column=abs_col)
-            cell.value = text_to_write
-            cell.font = header_font_to_apply
-            cell.alignment = header_alignment_to_apply
-            cell.border = header_border_to_apply
-            
-            # This line now applies the fill object we created from the config
-            if header_background_fill_to_apply:
-                cell.fill = header_background_fill_to_apply
+        if rowspan > 1 or colspan > 1:
+            worksheet.merge_cells(start_row=cell_row, start_column=cell_col,
+                                  end_row=cell_row + rowspan - 1, end_column=cell_col + colspan - 1)
 
-            # 4. Populate the ID and Text maps
-            if cell_id:
-                column_map_by_id[cell_id] = abs_col
-            if text_to_write:
-                column_map_by_text[str(text_to_write).strip()] = abs_col
+    return {
+        'first_row_index': first_row_index,
+        'second_row_index': last_row_index,
+        'column_map': column_map,
+        'column_id_map': column_id_map,
+        'num_columns': max_col
+    }
 
-            # 5. Apply merges if needed
-            if rowspan > 1 or colspan > 1:
-                end_merge_row = abs_row + rowspan - 1
-                end_merge_col = abs_col + colspan - 1
-                worksheet.merge_cells(
-                    start_row=abs_row,
-                    start_column=abs_col,
-                    end_row=end_merge_row,
-                    end_column=end_merge_col
-                )
-
-        return {
-            'first_row_index': start_row,
-            'second_row_index': end_row, # The last row of the entire header block
-            'column_map': column_map_by_text,
-            'column_id_map': column_map_by_id,
-            'num_columns': num_columns
-        }
-
-    except Exception as e:
-        print(f"Error in write_header during layout processing: {e}")
-        traceback.print_exc()
-        return None
 
 def merge_contiguous_cells_by_id(
     worksheet: Worksheet,
