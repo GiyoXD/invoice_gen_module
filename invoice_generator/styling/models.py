@@ -1,6 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 
+def to_camel(string: str) -> str:
+    words = string.split('_')
+    return words[0] + ''.join(word.capitalize() for word in words[1:])
+
 class FontModel(BaseModel):
     name: Optional[str] = None
     size: Optional[float] = None
@@ -32,3 +36,7 @@ class StylingConfigModel(BaseModel):
     force_text_format_ids: Optional[list[str]] = Field(default=None, alias='forceTextFormatIds')
     column_id_widths: Optional[Dict[str, float]] = Field(default=None, alias='columnIdWidths')
     row_heights: Optional[Dict[str, float]] = Field(default=None, alias='rowHeights')
+
+    class Config:
+        alias_generator = to_camel
+        allow_population_by_field_name = True
