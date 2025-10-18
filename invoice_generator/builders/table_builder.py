@@ -24,6 +24,8 @@ FORMAT_TEXT = '@'
 FORMAT_NUMBER_COMMA_SEPARATED1 = '#,##0'
 FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'
 
+from invoice_generator.styling.models import StylingConfigModel
+
 class TableBuilder:
     def __init__(self,
         worksheet: Worksheet,
@@ -34,7 +36,7 @@ class TableBuilder:
         data_source_type: str,
         header_info: Dict[str, Any],
         mapping_rules: Dict[str, Any],
-        sheet_styling_config: Optional[Dict[str, Any]] = None,
+        sheet_styling_config: Optional[StylingConfigModel] = None,
         add_blank_after_header: bool = False,
         static_content_after_header: Optional[Dict[str, Any]] = None,
         add_blank_before_footer: bool = False,
@@ -143,37 +145,10 @@ class TableBuilder:
             effective_header_align = center_alignment # Start with default
 
             if self.sheet_styling_config:
-                self.columns_to_grid = self.sheet_styling_config.get("column_ids_with_full_grid", [])
-                if not isinstance(self.columns_to_grid, list): self.columns_to_grid = []
-
-                force_text_headers = self.sheet_styling_config.get("force_text_format_ids", [])
-                if not isinstance(force_text_headers, list): force_text_headers = []
-
-                header_font_cfg = self.sheet_styling_config.get("header_font")
-                if header_font_cfg and isinstance(header_font_cfg, dict):
-                    font_params = {k: v for k, v in header_font_cfg.items() if v is not None}
-                    if font_params:
-                        try: # Expanded try block
-                            effective_header_font = Font(**font_params)
-                        except TypeError:
-                            print(f"Warning: Invalid parameters in header_font config: {font_params}. Using default.")
-                            pass # Keep default font on error
-                        except Exception as font_err: # Catch other potential errors
-                            print(f"Warning: Error applying header_font config: {font_err}. Using default.")
-                            pass # Keep default font on error
-
-                header_align_cfg = self.sheet_styling_config.get("header_alignment")
-                if header_align_cfg and isinstance(header_align_cfg, dict):
-                    align_params = {k: v for k, v in header_align_cfg.items() if v is not None}
-                    if align_params:
-                        try: # Expanded try block
-                            effective_header_align = Alignment(**align_params)
-                        except TypeError:
-                            print(f"Warning: Invalid parameters in header_alignment config: {align_params}. Using default.")
-                            pass # Keep default alignment on error
-                        except Exception as align_err: # Catch other potential errors
-                            print(f"Warning: Error applying header_alignment config: {align_err}. Using default.")
-                            pass # Keep default alignment on error
+                if self.sheet_styling_config.header_font:
+                    effective_header_font = Font(**self.sheet_styling_config.header_font.dict(exclude_none=True))
+                if self.sheet_styling_config.header_alignment:
+                    effective_header_align = Alignment(**self.sheet_styling_config.header_alignment.dict(exclude_none=True))
             parsed_rules = parse_mapping_rules(
                 mapping_rules=self.mapping_rules,
                 column_id_map=col_id_map,

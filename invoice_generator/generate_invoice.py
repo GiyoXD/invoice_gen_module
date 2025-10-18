@@ -15,6 +15,8 @@ from typing import Optional, Dict, Any, List
 import ast
 import re
 
+from .utils.layout import calculate_header_dimensions
+
 # --- Import utility functions from the new structure ---
 # from . import invoice_utils
 from .utils import merge_utils
@@ -98,11 +100,19 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
         traceback.print_exc()
         return None
 
+from .styling.models import StylingConfigModel
+
 def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
     """Loads and parses the JSON configuration file."""
     print(f"Loading configuration from: {config_path}")
     try:
         with open(config_path, 'r', encoding='utf-8') as f: config_data = json.load(f)
+        
+        if 'data_mapping' in config_data:
+            for sheet_name, sheet_config in config_data['data_mapping'].items():
+                if 'styling' in sheet_config:
+                    sheet_config['styling'] = StylingConfigModel.parse_obj(sheet_config['styling'])
+
         print("Configuration loaded successfully.")
         return config_data
     except Exception as e:
@@ -213,39 +223,46 @@ def main():
                 print(f"Warning: No config for sheet '{sheet_name}'. Skipping.")
                 continue
 
-            # Instantiate TemplateStateBuilder and capture state
-            template_state_builder = TemplateStateBuilder(template_worksheet)
-            header_end_row = sheet_config.get('start_row', 1) - 1
-            template_state_builder.capture_header(header_end_row)
-            # Capture footer from the original template worksheet, starting from where data would end
-            # This assumes data starts at sheet_config['start_row'] and goes until max_row of template
-            footer_start_row_in_template = sheet_config.get('start_row', 1)
-            template_state_builder.capture_footer(footer_start_row_in_template)
-
-            # --- Processor Factory ---
+            # --- Unified "Finish Table First" Orchestration ---
             processor = None
             if data_source_indicator == "processed_tables_multi":
                 processor = MultiTableProcessor(
-                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
                     data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
-            else: # Default to single table processor
+            else:
                 processor = SingleTableProcessor(
-                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
                     data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
-            
-            # --- Execute Processing ---
+
             if processor:
-                processing_successful = processor.process()
-                if not processing_successful:
-                    print(f"--- ERROR occurred while processing sheet '{sheet_name}'. Halting. ---")
-                    break # Stop on first error
+                template_state_builder = TemplateStateBuilder(template_worksheet)
+                header_end_row = sheet_config.get('start_row', 1) - 1
+                template_state_builder.capture_header(header_end_row)
+
+                if processor.process():
+                    # Dynamically find the footer by scanning within the table's column width
+                    _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
+                    max_col_to_check = max(num_header_cols, template_worksheet.max_column)
+
+                    footer_start_row_in_template = -1
+                    for row in range(sheet_config.get('start_row', 1), template_worksheet.max_row + 1):
+                        if any(template_worksheet.cell(row=row, column=col).value for col in range(1, max_col_to_check + 1)):
+                            footer_start_row_in_template = row
+                            break
+                    
+                    data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
+                    template_state_builder.capture_footer(data_end_row_in_template)
+                    template_state_builder.restore_state(output_worksheet, sheet_config.get('start_row', 1))
+                else:
+                    processing_successful = False
             else:
                 print(f"Warning: No suitable processor found for sheet '{sheet_name}'. Skipping.")
 
-            # Restore header and footer to the output worksheet
-            template_state_builder.restore_state(output_worksheet, sheet_config.get('start_row', 1))
+            if not processing_successful:
+                print(f"--- ERROR occurred while processing sheet '{sheet_name}'. Halting. ---")
+                break
 
         # --- End of Loop ---
 

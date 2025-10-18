@@ -104,7 +104,9 @@ def safe_unmerge_block(worksheet: Worksheet, start_row: int, end_row: int, num_c
     return True
 
 
-def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[Dict[str, Any]], header_map: Optional[Dict[str, int]]):
+from ..styling.models import StylingConfigModel
+
+def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_map: Optional[Dict[str, int]]):
     """
     Sets column widths based on the configuration.
 
@@ -114,7 +116,7 @@ def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[Dic
         header_map: Dictionary mapping header text to column index (1-based).
     """
     if not sheet_styling_config or not header_map: return
-    column_widths_cfg = sheet_styling_config.get("column_widths")
+    column_widths_cfg = sheet_styling_config.column_id_widths
     if not column_widths_cfg or not isinstance(column_widths_cfg, dict): return
     for header_text, width in column_widths_cfg.items():
         col_idx = header_map.get(header_text)
@@ -129,7 +131,7 @@ def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[Dic
         else: pass # Header text not found in map
 
 
-def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[Dict[str, Any]], header_info: Dict[str, Any], data_row_indices: List[int], footer_row_index: int, row_after_header_idx: int, row_before_footer_idx: int):
+def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_info: Dict[str, Any], data_row_indices: List[int], footer_row_index: int, row_after_header_idx: int, row_before_footer_idx: int):
     """
     Sets row heights based on the configuration for header, data, footer, and specific rows.
     Footer height can now optionally match the header height.
@@ -144,7 +146,7 @@ def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[Dict[
         row_before_footer_idx: 1-based index of the static/blank row before the footer (-1 if none).
     """
     if not sheet_styling_config: return
-    row_heights_cfg = sheet_styling_config.get("row_heights")
+    row_heights_cfg = sheet_styling_config.row_heights
     if not row_heights_cfg or not isinstance(row_heights_cfg, dict): return
 
     actual_header_height = None # Store the applied header height

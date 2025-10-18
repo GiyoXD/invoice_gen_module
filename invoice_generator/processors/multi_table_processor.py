@@ -1,7 +1,8 @@
 from typing import Any, Dict, List, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..utils.writing import write_header, write_footer_row
+from ..utils.writing import write_header
+from ..builders.footer_builder import FooterBuilder
 from ..utils.layout import apply_row_heights, unmerge_block, safe_unmerge_block
 from ..utils import merge_utils
 from ..styling import style_applier as style_utils
@@ -127,7 +128,17 @@ class MultiTableProcessor:
 
             pallet_count = len(table_data.get('pallet_count', []))
             grand_total_pallets += pallet_count
-            write_footer_row(self.worksheet, write_pointer_row, header_info, [(data_start_row, write_pointer_row - 1)], footer_config, pallet_count, sheet_styling_config=styling_config)
+            
+            footer_builder = FooterBuilder(
+                worksheet=self.worksheet, 
+                footer_row_num=write_pointer_row, 
+                header_info=header_info, 
+                sum_ranges=[(data_start_row, write_pointer_row - 1)], 
+                footer_config=footer_config, 
+                pallet_count=pallet_count, 
+                sheet_styling_config=styling_config
+            )
+            footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
             write_pointer_row += 1
@@ -139,7 +150,17 @@ class MultiTableProcessor:
             last_header_info = all_header_infos[-1]
             num_columns = last_header_info.get('num_columns', 1)
             
-            write_footer_row(self.worksheet, write_pointer_row, last_header_info, all_data_ranges, footer_config, grand_total_pallets, "TOTAL OF:", sheet_styling_config=styling_config)
+            grand_total_footer_builder = FooterBuilder(
+                worksheet=self.worksheet, 
+                footer_row_num=write_pointer_row, 
+                header_info=last_header_info, 
+                sum_ranges=all_data_ranges, 
+                footer_config=footer_config, 
+                pallet_count=grand_total_pallets, 
+                override_total_text="TOTAL OF:", 
+                sheet_styling_config=styling_config
+            )
+            grand_total_footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
 

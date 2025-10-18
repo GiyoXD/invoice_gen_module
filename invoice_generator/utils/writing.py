@@ -298,8 +298,10 @@ def write_grand_total_weight_summary(
         print(f"Error writing grand total weight summary content: {e}")
         return start_row
 
+from ..styling.models import StylingConfigModel
+
 def write_header(worksheet: Worksheet, start_row: int, header_layout_config: List[Dict[str, Any]],
-                 sheet_styling_config: Optional[Dict[str, Any]] = None
+                 sheet_styling_config: Optional[StylingConfigModel] = None
                  ) -> Optional[Dict[str, Any]]:
     if not header_layout_config or start_row <= 0:
         return None
@@ -317,12 +319,10 @@ def write_header(worksheet: Worksheet, start_row: int, header_layout_config: Lis
     header_font = Font(bold=True)
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     if sheet_styling_config:
-        header_font_config = sheet_styling_config.get('header_font')
-        if header_font_config:
-            header_font = Font(**header_font_config)
-        header_alignment_config = sheet_styling_config.get('header_alignment')
-        if header_alignment_config:
-            header_alignment = Alignment(**header_alignment_config)
+        if sheet_styling_config.header_font:
+            header_font = Font(**sheet_styling_config.header_font.dict(exclude_none=True))
+        if sheet_styling_config.header_alignment:
+            header_alignment = Alignment(**sheet_styling_config.header_alignment.dict(exclude_none=True))
 
     for cell_config in header_layout_config:
         row_offset = cell_config.get('row', 0)
@@ -665,7 +665,7 @@ def apply_explicit_data_cell_merges_by_id(
     column_id_map: Dict[str, int],  # Maps column ID to its 1-based column index
     num_total_columns: int,
     merge_rules_data_cells: Dict[str, Dict[str, Any]], # e.g., {'col_item': {'rowspan': 2}}
-    sheet_styling_config: Optional[Dict[str, Any]] = None,
+    sheet_styling_config: Optional[StylingConfigModel] = None,
     DAF_mode: Optional[bool] = False
 ):
     """
@@ -710,9 +710,6 @@ def apply_explicit_data_cell_merges_by_id(
             
             # Style the anchor cell of the new merged range
             anchor_cell = worksheet.cell(row=row_num, column=start_col_idx)
-            
-            # Apply base styling for the column ID
-            _apply_cell_style(anchor_cell, col_id, sheet_styling_config, DAF_mode)
             
             # Ensure the merged cell has the desired border and alignment
             anchor_cell.border = full_thin_border
@@ -855,7 +852,7 @@ def _style_row_before_footer(
     worksheet: Worksheet,
     row_num: int,
     num_columns: int,
-    sheet_styling_config: Optional[Dict[str, Any]],
+    sheet_styling_config: Optional[StylingConfigModel],
     idx_to_id_map: Dict[int, str],
     col1_index: int, # The index of the first column to receive special border handling
     DAF_mode: bool
@@ -870,11 +867,11 @@ def _style_row_before_footer(
 
     # Set the row height using the 'header' value from the styling config.
     try:
-        row_heights = sheet_styling_config.get("row_heights", {})
-        header_height = row_heights.get("header")
+        if sheet_styling_config and sheet_styling_config.row_heights:
+            header_height = sheet_styling_config.row_heights.get("header")
 
-        if header_height:
-            worksheet.row_dimensions[row_num].height = header_height
+            if header_height:
+                worksheet.row_dimensions[row_num].height = header_height
     except Exception as e:
         print(f"Warning: Could not set row height for row {row_num}. Error: {e}")
 
