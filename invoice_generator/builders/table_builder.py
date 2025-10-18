@@ -6,7 +6,9 @@ import traceback
 
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
 from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths, apply_row_heights
-from invoice_generator.utils.writing import _apply_cell_style, fill_static_row, apply_row_merges, write_grand_total_weight_summary, write_header, write_summary_rows, write_footer_row, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
+from invoice_generator.utils.writing import fill_static_row, apply_row_merges, write_grand_total_weight_summary, write_header, write_summary_rows, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
+from invoice_generator.styling.style_applier import apply_cell_style
+from .footer_builder import FooterBuilder
 
 # --- Constants for Styling ---
 thin_side = Side(border_style="thin", color="000000")
@@ -295,7 +297,7 @@ class TableBuilder:
                     if i < self.num_static_labels and self.col1_index != -1:
                         cell = self.worksheet.cell(row=current_row_idx, column=self.col1_index)
                         cell.value = initial_static_col1_values[i]
-                        _apply_cell_style(cell, idx_to_id_map.get(self.col1_index), self.sheet_styling_config, self.DAF_mode)
+                        apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(self.col1_index), "col_idx": self.col1_index, "static_col_idx": self.col1_index})
 
                     # Write dynamic data
                     for col_idx, value in row_data.items():
@@ -303,7 +305,7 @@ class TableBuilder:
                             continue
                         cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
                         cell.value = value
-                        _apply_cell_style(cell, idx_to_id_map.get(col_idx), self.sheet_styling_config, self.DAF_mode)
+                        apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
 
                     # Write formulas
                     for col_idx, formula_info in formula_rules.items():
@@ -321,7 +323,7 @@ class TableBuilder:
                         
                         cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
                         cell.value = f"={formula}"
-                        _apply_cell_style(cell, idx_to_id_map.get(col_idx), self.sheet_styling_config, self.DAF_mode)
+                        apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
 
                     # Apply data cell merging rules
                     if self.data_cell_merging_rules:
@@ -406,7 +408,7 @@ class TableBuilder:
                 else:
                     pallet_count = self.grand_total_pallets
 
-                write_footer_row(
+                footer_builder = FooterBuilder(
                     worksheet=self.worksheet,
                     footer_row_num=self.footer_row_final,
                     header_info=self.header_info,
@@ -416,6 +418,7 @@ class TableBuilder:
                     DAF_mode=self.data_source_type == "DAF_aggregation",
                     sheet_styling_config=self.sheet_styling_config
                 )
+                footer_builder.build()
         # No need to pass font, alignment, num_columns, etc. as the
         # function gets this info from header_info and footer_config.
             # --- Apply Merges ---
