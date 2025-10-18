@@ -20,15 +20,13 @@
         {
           "row": 0,
           "col": 0,
-          "text": "Mark & Nº",
-          "id": "col_static",
-          "rowspan": 1,
+          "text": "Mark & No.",
           "colspan": 1
         },
         {
           "row": 0,
           "col": 1,
-          "text": "P.O. Nº",
+          "text": "P.O. No.",
           "id": "col_po",
           "rowspan": 1,
           "colspan": 1
@@ -297,8 +295,7 @@
         },
         {
           "row": 0,
-          "col": 1,
-          "text": "ITEM Nº",
+          "text": "ITEM No.",
           "id": "col_item",
           "rowspan": 2,
           "colspan": 1

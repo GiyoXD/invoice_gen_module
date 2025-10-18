@@ -145,10 +145,10 @@ class TableBuilder:
             effective_header_align = center_alignment # Start with default
 
             if self.sheet_styling_config:
-                if self.sheet_styling_config.header_font:
-                    effective_header_font = Font(**self.sheet_styling_config.header_font.dict(exclude_none=True))
-                if self.sheet_styling_config.header_alignment:
-                    effective_header_align = Alignment(**self.sheet_styling_config.header_alignment.dict(exclude_none=True))
+                if self.sheet_styling_config.headerFont:
+                    effective_header_font = Font(**self.sheet_styling_config.headerFont.model_dump(exclude_none=True))
+                if self.sheet_styling_config.headerAlignment:
+                    effective_header_align = Alignment(**self.sheet_styling_config.headerAlignment.model_dump(exclude_none=True))
             parsed_rules = parse_mapping_rules(
                 mapping_rules=self.mapping_rules,
                 column_id_map=col_id_map,

@@ -8,7 +8,7 @@ from ..utils import merge_utils
 from ..styling import style_applier as style_utils
 
 class MultiTableProcessor:
-    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int):
+    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int, styling_config: Dict[str, Any]):
         self.workbook = workbook
         self.worksheet = worksheet
         self.sheet_name = sheet_name
@@ -18,6 +18,7 @@ class MultiTableProcessor:
         self.invoice_data = invoice_data
         self.args = args
         self.final_grand_total_pallets = final_grand_total_pallets
+        self.styling_config = styling_config
 
     def process(self) -> bool:
         write_pointer_row = self.sheet_config.get("start_row", 1)
@@ -28,7 +29,7 @@ class MultiTableProcessor:
 
         header_to_write = self.sheet_config.get("header_to_write", [])
         footer_config = self.sheet_config.get("footer_configurations", {})
-        styling_config = self.sheet_config.get("styling", {})
+        styling_config = self.styling_config
         mappings = self.sheet_config.get("mappings", {})
         data_map = mappings.get("data_map", {})
         static_col_values = mappings.get("initial_static", {}).get("values", [])
@@ -41,7 +42,7 @@ class MultiTableProcessor:
             table_data = raw_data[table_key]
             num_data_rows = len(table_data.get('net', []))
             
-            header_info = write_header(self.worksheet, write_pointer_row, header_to_write, styling_config)
+            header_info = write_header(self.worksheet, write_pointer_row, header_to_write, self.styling_config)
             all_header_infos.append(header_info)
             write_pointer_row = header_info.get('second_row_index', write_pointer_row) + 1
             col_map = header_info.get('column_id_map', {})
@@ -82,7 +83,7 @@ class MultiTableProcessor:
                         "static_col_idx": static_col_idx, "row_index": r_idx,
                         "num_data_rows": num_data_rows
                     }
-                    style_utils.apply_cell_style(cell, styling_config, style_context)
+                    style_utils.apply_cell_style(cell, self.styling_config, style_context)
             
             write_pointer_row += num_data_rows
             all_data_ranges.append((data_start_row, write_pointer_row - 1))
@@ -116,12 +117,12 @@ class MultiTableProcessor:
                         "col_id": col_id, "col_idx": c_idx,
                         "static_col_idx": static_col_idx, "is_pre_footer": True
                     }
-                    style_utils.apply_cell_style(cell, styling_config, style_context)
+                    style_utils.apply_cell_style(cell, self.styling_config, style_context)
                 
                 pre_footer_merges = pre_footer_config.get("merge_rules")
                 merge_utils.apply_row_merges(self.worksheet, write_pointer_row, num_columns, pre_footer_merges)
                 
-                if data_row_height := styling_config.get("row_heights", {}).get("data_default"):
+                if data_row_height := self.styling_config.row_heights.get("data_default"):
                     self.worksheet.row_dimensions[write_pointer_row].height = data_row_height
                 
                 write_pointer_row += 1
@@ -136,7 +137,7 @@ class MultiTableProcessor:
                 sum_ranges=[(data_start_row, write_pointer_row - 1)], 
                 footer_config=footer_config, 
                 pallet_count=pallet_count, 
-                sheet_styling_config=styling_config
+                sheet_styling_config=self.styling_config
             )
             footer_builder.build()
             
@@ -158,12 +159,12 @@ class MultiTableProcessor:
                 footer_config=footer_config, 
                 pallet_count=grand_total_pallets, 
                 override_total_text="TOTAL OF:", 
-                sheet_styling_config=styling_config
+                sheet_styling_config=self.styling_config
             )
             grand_total_footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
 
-        style_utils.apply_row_heights(self.worksheet, styling_config, all_header_infos, all_data_ranges, all_footer_rows)
+        style_utils.apply_row_heights(self.worksheet, self.styling_config, all_header_infos, all_data_ranges, all_footer_rows)
         
         return True

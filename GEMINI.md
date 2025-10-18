@@ -59,3 +59,8 @@ python -m unittest tests/test_invoice_generation.py
     *   Template files: `{customer_name}.xlsx`.
     *   Configuration files: `{customer_name}_config.json`.
     The `derive_paths` function in `generate_invoice.py` handles this logic.
+
+## Gemini Specific Rules
+
+*   **No Modification of Config/Template Directories:** Gemini must *not* modify any files within the `config` or `TEMPLATE` directories. Only source code files can be modified.
+*   **Post-Issue Resolution Invoice Generation:** After resolving a GitHub issue, Gemini *must* generate a new invoice using the updated source code before asking the user for confirmation or marking the issue as fully resolved.

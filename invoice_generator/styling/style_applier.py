@@ -26,21 +26,21 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
 
     # --- 1. Apply Font, Alignment, and Number Formats ---
     if col_id and styling_config:
-        col_specific_style = styling_config.column_id_styles.get(col_id)
+        col_specific_style = styling_config.columnIdStyles.get(col_id)
         
         if col_specific_style:
             if col_specific_style.font:
-                cell.font = Font(**col_specific_style.font.dict(exclude_none=True))
-            elif styling_config.default_font:
-                cell.font = Font(**styling_config.default_font.dict(exclude_none=True))
+                cell.font = Font(**col_specific_style.font.model_dump(exclude_none=True))
+            elif styling_config.defaultFont:
+                cell.font = Font(**styling_config.defaultFont.model_dump(exclude_none=True))
 
             if col_specific_style.alignment:
-                cell.alignment = Alignment(**col_specific_style.alignment.dict(exclude_none=True))
-            elif styling_config.default_alignment:
-                cell.alignment = Alignment(**styling_config.default_alignment.dict(exclude_none=True))
+                cell.alignment = Alignment(**col_specific_style.alignment.model_dump(exclude_none=True))
+            elif styling_config.defaultAlignment:
+                cell.alignment = Alignment(**styling_config.defaultAlignment.model_dump(exclude_none=True))
 
-            if col_specific_style.number_format:
-                cell.number_format = col_specific_style.number_format
+            if col_specific_style.numberFormat:
+                cell.number_format = col_specific_style.numberFormat
 
     # --- 2. Apply Conditional Borders ---
     thin_side = Side(border_style="thin", color="000000")
@@ -68,17 +68,17 @@ def apply_row_heights(worksheet: Worksheet, styling_config: StylingConfigModel, 
     """
     print("  Applying all row heights...")
     
-    if styling_config.row_heights:
-        if h := styling_config.row_heights.get('header'):
+    if styling_config.rowHeights:
+        if h := styling_config.rowHeights.get('header'):
             for header_info in headers:
                 for r in range(header_info['first_row_index'], header_info['second_row_index'] + 1):
                     worksheet.row_dimensions[r].height = h
         
-        if h := styling_config.row_heights.get('data_default'):
+        if h := styling_config.rowHeights.get('data_default'):
             for start, end in data_ranges:
                 for r in range(start, end + 1):
                     worksheet.row_dimensions[r].height = h
 
-        if h := styling_config.row_heights.get('footer'):
+        if h := styling_config.rowHeights.get('footer'):
             for r_num in footer_rows:
                 worksheet.row_dimensions[r_num].height = h

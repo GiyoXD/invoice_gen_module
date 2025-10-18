@@ -36,9 +36,9 @@ try:
 except ImportError as e:
     print(f"ImportError for decimal: {e}")
 try:
-    from . import merge_utils
+    from ..styling.models import StylingConfigModel
 except ImportError as e:
-    print(f"ImportError for .merge_utils: {e}")
+    print(f"ImportError for ..styling.models: {e}")
 
 # --- Constants for Styling ---
 thin_side = Side(border_style="thin", color="000000")
@@ -178,7 +178,7 @@ def write_grand_total_weight_summary(
     header_info: Dict[str, Any],
     processed_tables_data: Dict[str, Dict[str, List[Any]]],
     weight_config: Dict[str, Any],
-    styling_config: Optional[Dict[str, Any]] = None
+    styling_config: Optional[StylingConfigModel] = None
 ) -> int:
     """
     Calculates GRAND TOTAL of Net/Gross weights, inserts two new rows,
@@ -319,10 +319,10 @@ def write_header(worksheet: Worksheet, start_row: int, header_layout_config: Lis
     header_font = Font(bold=True)
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     if sheet_styling_config:
-        if sheet_styling_config.header_font:
-            header_font = Font(**sheet_styling_config.header_font.dict(exclude_none=True))
-        if sheet_styling_config.header_alignment:
-            header_alignment = Alignment(**sheet_styling_config.header_alignment.dict(exclude_none=True))
+        if sheet_styling_config.headerFont:
+            header_font = Font(**sheet_styling_config.headerFont.model_dump(exclude_none=True))
+        if sheet_styling_config.headerAlignment:
+            header_alignment = Alignment(**sheet_styling_config.headerAlignment.model_dump(exclude_none=True))
 
     for cell_config in header_layout_config:
         row_offset = cell_config.get('row', 0)
@@ -821,7 +821,7 @@ def write_summary_rows(
 
                 # Step 2: Apply column-specific styles to override if present.
                 if styling_config and current_col_id:
-                    column_id_styles = styling_config.get("column_id_styles", {})
+                    column_id_styles = styling_config.columnIdStyles
                     if current_col_id in column_id_styles:
                         col_style = column_id_styles[current_col_id]
                         if 'alignment' in col_style:
@@ -832,7 +832,7 @@ def write_summary_rows(
         # --- Apply Row Height (remains the same) ---
         footer_height = None
         if styling_config:
-            row_heights_cfg = styling_config.get("row_heights", {})
+            row_heights_cfg = styling_config.rowHeights
             footer_height = row_heights_cfg.get("footer", row_heights_cfg.get("header"))
         if footer_height is not None:
             try:
@@ -867,8 +867,8 @@ def _style_row_before_footer(
 
     # Set the row height using the 'header' value from the styling config.
     try:
-        if sheet_styling_config and sheet_styling_config.row_heights:
-            header_height = sheet_styling_config.row_heights.get("header")
+        if sheet_styling_config and sheet_styling_config.rowHeights:
+            header_height = sheet_styling_config.rowHeights.get("header")
 
             if header_height:
                 worksheet.row_dimensions[row_num].height = header_height
@@ -917,9 +917,9 @@ def _apply_cell_style(cell, column_id: Optional[str], sheet_styling_config: Opti
 
     try:
         # Get styling configurations using ID-based keys
-        default_font_cfg = sheet_styling_config.get("default_font", {})
-        default_align_cfg = sheet_styling_config.get("default_alignment", {})
-        column_styles = sheet_styling_config.get("column_id_styles", {}) # <-- Uses "column_id_styles"
+        default_font_cfg = sheet_styling_config.defaultFont.model_dump(exclude_none=True) if sheet_styling_config.defaultFont else {}
+        default_align_cfg = sheet_styling_config.defaultAlignment.model_dump(exclude_none=True) if sheet_styling_config.defaultAlignment else {}
+        column_styles = sheet_styling_config.columnIdStyles
 
         # Find column-specific style rules if the ID matches
         col_specific_style = column_styles.get(column_id, {})

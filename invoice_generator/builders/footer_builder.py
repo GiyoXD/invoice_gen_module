@@ -147,12 +147,12 @@ class FooterBuilder:
                 for c_idx in range(1, num_columns + 1):
                     cell = self.worksheet.cell(row=self.footer_row_num, column=c_idx)
                     column_id = idx_to_id_map.get(c_idx)
-                    if column_id and column_id in self.sheet_styling_config.column_id_styles:
-                        col_style = self.sheet_styling_config.column_id_styles[column_id]
+                    if column_id and column_id in self.sheet_styling_config.columnIdStyles:
+                        col_style = self.sheet_styling_config.columnIdStyles[column_id]
                         if col_style.alignment:
-                            cell.alignment = Alignment(**col_style.alignment.dict(exclude_none=True))
+                            cell.alignment = Alignment(**col_style.alignment.model_dump(exclude_none=True))
                         if col_style.font:
-                            cell.font = Font(**col_style.font.dict(exclude_none=True))
+                            cell.font = Font(**col_style.font.model_dump(exclude_none=True))
 
             return self.footer_row_num
 

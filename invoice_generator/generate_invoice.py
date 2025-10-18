@@ -25,7 +25,9 @@ from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
 from .builders.template_state_builder import TemplateStateBuilder
 
-# --- Helper Functions (derive_paths, load_config, load_data) ---
+from .config.loader import load_config, load_styling_config
+
+# --- Helper Functions (derive_paths, load_data) ---
 # These functions remain largely the same but are part of the new script.
 def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str: str) -> Optional[Dict[str, Path]]:
     """
@@ -102,21 +104,7 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
 
 from .styling.models import StylingConfigModel
 
-def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
-    """Loads and parses the JSON configuration file."""
-    print(f"Loading configuration from: {config_path}")
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f: config_data = json.load(f)
-        
-        if 'data_mapping' in config_data:
-            for sheet_name, sheet_config in config_data['data_mapping'].items():
-                if 'styling' in sheet_config:
-                    sheet_config['styling'] = StylingConfigModel.parse_obj(sheet_config['styling'])
 
-        print("Configuration loaded successfully.")
-        return config_data
-    except Exception as e:
-        print(f"Error loading configuration file {config_path}: {e}"); traceback.print_exc(); return None
 
 def load_data(data_path: Path) -> Optional[Dict[str, Any]]:
     """ Loads and parses the input data file. Supports .json and .pkl. """
@@ -225,15 +213,17 @@ def main():
 
             # --- Unified "Finish Table First" Orchestration ---
             processor = None
+            styling_config = load_styling_config(sheet_config)
+
             if data_source_indicator == "processed_tables_multi":
                 processor = MultiTableProcessor(
                     output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets
+                    data_source_indicator, invoice_data, args, final_grand_total_pallets, styling_config
                 )
             else:
                 processor = SingleTableProcessor(
                     output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets
+                    data_source_indicator, invoice_data, args, final_grand_total_pallets, styling_config
                 )
 
             if processor:

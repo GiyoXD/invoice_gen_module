@@ -1,10 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 
-def to_camel(string: str) -> str:
-    words = string.split('_')
-    return words[0] + ''.join(word.capitalize() for word in words[1:])
-
 class FontModel(BaseModel):
     name: Optional[str] = None
     size: Optional[float] = None
@@ -15,7 +11,7 @@ class FontModel(BaseModel):
 class AlignmentModel(BaseModel):
     horizontal: Optional[str] = None
     vertical: Optional[str] = None
-    wrap_text: Optional[bool] = Field(default=False, alias='wrapText')
+    wrapText: Optional[bool] = False
 
 class BorderStyleModel(BaseModel):
     style: Optional[str] = None
@@ -24,19 +20,18 @@ class BorderStyleModel(BaseModel):
 class ColumnStyleModel(BaseModel):
     font: Optional[FontModel] = None
     alignment: Optional[AlignmentModel] = None
-    number_format: Optional[str] = Field(default=None, alias='numberFormat')
+    numberFormat: Optional[str] = None
 
 class StylingConfigModel(BaseModel):
-    default_font: Optional[FontModel] = Field(default=None, alias='defaultFont')
-    default_alignment: Optional[AlignmentModel] = Field(default=None, alias='defaultAlignment')
-    header_font: Optional[FontModel] = Field(default=None, alias='headerFont')
-    header_alignment: Optional[AlignmentModel] = Field(default=None, alias='headerAlignment')
-    column_id_styles: Dict[str, ColumnStyleModel] = Field(default={}, alias='columnIdStyles')
-    column_ids_with_full_grid: Optional[list[str]] = Field(default=None, alias='columnIdsWithFullGrid')
-    force_text_format_ids: Optional[list[str]] = Field(default=None, alias='forceTextFormatIds')
-    column_id_widths: Optional[Dict[str, float]] = Field(default=None, alias='columnIdWidths')
-    row_heights: Optional[Dict[str, float]] = Field(default=None, alias='rowHeights')
+    defaultFont: Optional[FontModel] = Field(None, alias='default_font')
+    defaultAlignment: Optional[AlignmentModel] = Field(None, alias='default_alignment')
+    headerFont: Optional[FontModel] = Field(None, alias='header_font')
+    headerAlignment: Optional[AlignmentModel] = Field(None, alias='header_alignment')
+    columnIdStyles: Dict[str, ColumnStyleModel] = Field({}, alias='column_id_styles')
+    columnIdsWithFullGrid: Optional[list[str]] = Field(None, alias='column_ids_with_full_grid')
+    forceTextFormatIds: Optional[list[str]] = Field(None, alias='force_text_format_ids')
+    columnIdWidths: Optional[Dict[str, float]] = Field(None, alias='column_id_widths')
+    rowHeights: Optional[Dict[str, float]] = Field(None, alias='row_heights')
 
     class Config:
-        alias_generator = to_camel
-        allow_population_by_field_name = True
+        populate_by_name = True

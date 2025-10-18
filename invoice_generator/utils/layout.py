@@ -116,7 +116,7 @@ def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[Sty
         header_map: Dictionary mapping header text to column index (1-based).
     """
     if not sheet_styling_config or not header_map: return
-    column_widths_cfg = sheet_styling_config.column_id_widths
+    column_widths_cfg = sheet_styling_config.columnIdWidths
     if not column_widths_cfg or not isinstance(column_widths_cfg, dict): return
     for header_text, width in column_widths_cfg.items():
         col_idx = header_map.get(header_text)
@@ -145,9 +145,8 @@ def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[Styli
         row_after_header_idx: 1-based index of the static/blank row after the header (-1 if none).
         row_before_footer_idx: 1-based index of the static/blank row before the footer (-1 if none).
     """
-    if not sheet_styling_config: return
-    row_heights_cfg = sheet_styling_config.row_heights
-    if not row_heights_cfg or not isinstance(row_heights_cfg, dict): return
+    if not sheet_styling_config.rowHeights: return
+    row_heights_cfg = sheet_styling_config.rowHeights
 
     actual_header_height = None # Store the applied header height
 

@@ -4,7 +4,7 @@ from invoice_generator.utils.writing import write_header
 from invoice_generator.builders.table_builder import TableBuilder
 
 class SingleTableProcessor:
-    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int):
+    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int, styling_config: Dict[str, Any]):
         self.workbook = workbook
         self.worksheet = worksheet
         self.sheet_name = sheet_name
@@ -14,6 +14,7 @@ class SingleTableProcessor:
         self.invoice_data = invoice_data
         self.args = args
         self.final_grand_total_pallets = final_grand_total_pallets
+        self.styling_config = styling_config
 
     def process(self) -> bool:
         # Write the header based on the layout in the config file
@@ -21,7 +22,7 @@ class SingleTableProcessor:
 
         # --- Get flags and rules from the sheet's configuration ---
         sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
-        sheet_styling_config = self.sheet_config.get("styling")
+        sheet_styling_config = self.styling_config
 
         add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
         static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
@@ -96,7 +97,6 @@ class SingleTableProcessor:
 
         print(f"DEBUG: start_row: {start_row}")
         print(f"DEBUG: header_to_write: {header_to_write}")
-        print(f"DEBUG: sheet_styling_config: {sheet_styling_config}")
 
         # Call build method
         fill_success, next_row_after_footer, _, _, _ = table_builder.build()
