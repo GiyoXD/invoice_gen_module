@@ -10,7 +10,7 @@ class TemplateStateBuilder:
     This includes the header, footer, and other static content.
     """
 
-    def __init__(self, worksheet: Worksheet):
+    def __init__(self, worksheet: Worksheet, num_header_cols: int):
         self.worksheet = worksheet
         self.header_state: List[List[Dict[str, Any]]] = []
         self.footer_state: List[List[Dict[str, Any]]] = []
@@ -22,7 +22,8 @@ class TemplateStateBuilder:
         self.min_row = 1
         self.max_row = self.worksheet.max_row
         self.min_col = 1
-        self.max_col = self.worksheet.max_column
+        self.num_header_cols = num_header_cols
+        self.max_col = min(self.worksheet.max_column, self.num_header_cols) if self.num_header_cols > 0 else self.worksheet.max_column
 
     def _get_cell_info(self, worksheet, row, col) -> Dict[str, Any]:
         cell = worksheet.cell(row=row, column=col)
@@ -49,13 +50,13 @@ class TemplateStateBuilder:
         header_start_row = 1
         for r_idx in range(1, end_row + 1):
             if any(self.worksheet.cell(row=r_idx, column=c_idx).value is not None
-                   for c_idx in range(1, self.worksheet.max_column + 1)):
+                   for c_idx in range(1, self.max_col + 1)):
                 header_start_row = r_idx
                 break
 
         for r_idx in range(header_start_row, end_row + 1):
             row_data = []
-            for c_idx in range(1, self.worksheet.max_column + 1):
+            for c_idx in range(1, self.max_col + 1):
                 row_data.append(self._get_cell_info(self.worksheet, r_idx, c_idx))
             self.header_state.append(row_data)
             self.row_heights[r_idx] = self.worksheet.row_dimensions[r_idx].height
@@ -67,7 +68,7 @@ class TemplateStateBuilder:
                 self.header_merged_cells.append(str(merged_cell_range))
 
         # Capture column widths
-        for c_idx in range(1, self.worksheet.max_column + 1):
+        for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
 
     def capture_footer(self, data_end_row: int):
@@ -79,7 +80,7 @@ class TemplateStateBuilder:
         # Find the actual first row with content after data_end_row
         for r_idx in range(data_end_row + 1, self.worksheet.max_row + 1):
             if any(self.worksheet.cell(row=r_idx, column=c_idx).value is not None
-                   for c_idx in range(1, self.worksheet.max_column + 1)):
+                   for c_idx in range(1, self.max_col + 1)):
                 footer_start_row = r_idx
                 break
         else:
@@ -91,13 +92,13 @@ class TemplateStateBuilder:
         footer_end_row = self.worksheet.max_row
         for r_idx in range(self.worksheet.max_row, footer_start_row - 1, -1):
             if any(self.worksheet.cell(row=r_idx, column=c_idx).value is not None
-                   for c_idx in range(1, self.worksheet.max_column + 1)):
+                   for c_idx in range(1, self.max_col + 1)):
                 footer_end_row = r_idx
                 break
 
         for r_idx in range(footer_start_row, footer_end_row + 1):
             row_data = []
-            for c_idx in range(1, self.worksheet.max_column + 1):
+            for c_idx in range(1, self.max_col + 1):
                 row_data.append(self._get_cell_info(self.worksheet, r_idx, c_idx))
             self.footer_state.append(row_data)
             self.row_heights[r_idx] = self.worksheet.row_dimensions[r_idx].height
@@ -110,7 +111,7 @@ class TemplateStateBuilder:
                 self.footer_merged_cells.append(str(merged_cell_range))
 
         # Capture column widths
-        for c_idx in range(1, self.worksheet.max_column + 1):
+        for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
 
     def restore_state(self, target_worksheet: Worksheet, data_start_row: int):

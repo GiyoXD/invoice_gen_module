@@ -227,7 +227,8 @@ def main():
                 )
 
             if processor:
-                template_state_builder = TemplateStateBuilder(template_worksheet)
+                _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
+                template_state_builder = TemplateStateBuilder(template_worksheet, num_header_cols)
                 header_end_row = sheet_config.get('start_row', 1) - 1
                 template_state_builder.capture_header(header_end_row)
 
