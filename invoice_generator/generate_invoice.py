@@ -20,7 +20,7 @@ from .utils.layout import calculate_header_dimensions
 # --- Import utility functions from the new structure ---
 # from . import invoice_utils
 from .utils import merge_utils
-from . import text_replace_utils
+
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
 from .builders.template_state_builder import TemplateStateBuilder
@@ -151,7 +151,7 @@ def main():
     args = parser.parse_args()
 
     print("--- Starting Invoice Generation (Refactored) ---")
-    print(f"🕒 Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+    print(f"Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
 
     paths = derive_paths(args.input_data_file, args.templatedir, args.configdir)
     if not paths: sys.exit(1)
@@ -232,7 +232,10 @@ def main():
                 header_end_row = sheet_config.get('start_row', 1) - 1
                 template_state_builder.capture_header(header_end_row)
 
-                if processor.process():
+                processor_result = processor.process()
+                if processor_result is not False: # Check if processing was successful (not False)
+                    data_end_row_in_new_sheet = processor_result # This is the next_row_after_footer from the processor
+
                     # Dynamically find the footer by scanning within the table's column width
                     _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
                     max_col_to_check = max(num_header_cols, template_worksheet.max_column)
@@ -245,7 +248,7 @@ def main():
                     
                     data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
                     template_state_builder.capture_footer(data_end_row_in_template)
-                    template_state_builder.restore_state(output_worksheet, sheet_config.get('start_row', 1))
+                    template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet - 1) # Pass data_start_row and data_table_end_row
                 else:
                     processing_successful = False
             else:
@@ -257,10 +260,7 @@ def main():
 
         # --- End of Loop ---
 
-        if args.DAF:
-            text_replace_utils.run_DAF_specific_replacement_task(workbook=output_workbook)
-        
-        text_replace_utils.run_invoice_header_replacement_task(output_workbook, invoice_data)
+
 
         print("\n--------------------------------")
         if processing_successful:
