@@ -6,20 +6,9 @@ from ..builders.footer_builder import FooterBuilder
 from ..utils.layout import apply_row_heights, unmerge_block, safe_unmerge_block
 from ..utils import merge_utils
 from ..styling import style_applier as style_utils
+from .base_processor import BaseProcessor
 
-class MultiTableProcessor:
-    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int, styling_config: Dict[str, Any]):
-        self.workbook = workbook
-        self.worksheet = worksheet
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.data_mapping_config = data_mapping_config
-        self.data_source_indicator = data_source_indicator
-        self.invoice_data = invoice_data
-        self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
-        self.styling_config = styling_config
-
+class MultiTableProcessor(BaseProcessor):
     def process(self) -> bool:
         write_pointer_row = self.sheet_config.get("start_row", 1)
         all_data_ranges: List[Tuple[int, int]] = []
@@ -37,6 +26,7 @@ class MultiTableProcessor:
         raw_data = self.invoice_data.get('processed_tables_data', {})
         table_keys = sorted(raw_data.keys())
         num_tables = len(table_keys)
+        last_data_end_row = -1
 
         for i, table_key in enumerate(table_keys):
             table_data = raw_data[table_key]
@@ -89,6 +79,7 @@ class MultiTableProcessor:
             all_data_ranges.append((data_start_row, write_pointer_row - 1))
 
             data_end_row = write_pointer_row - 1
+            last_data_end_row = data_end_row
             vertical_merge_ids = mappings.get("vertical_merge_on_id", [])
             if vertical_merge_ids:
                 print(f"Applying vertical merges for table '{table_key}'...")
@@ -105,7 +96,6 @@ class MultiTableProcessor:
             if pre_footer_config and isinstance(pre_footer_config, dict):
                 cells_to_write = pre_footer_config.get("cells", [])
                 for cell_data in cells_to_write:
-                    col_id = cell_data.get("column_id")
                     value = cell_data.get("value")
                     if col_idx := col_map.get(col_id):
                         self.worksheet.cell(row=write_pointer_row, column=col_idx).value = value
@@ -167,4 +157,6 @@ class MultiTableProcessor:
 
         style_utils.apply_row_heights(self.worksheet, self.styling_config, all_header_infos, all_data_ranges, all_footer_rows)
         
-        return True
+        self.run_text_replacement()
+
+        return write_pointer_row, last_data_end_row

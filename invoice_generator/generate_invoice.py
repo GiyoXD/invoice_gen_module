@@ -233,8 +233,16 @@ def main():
                 template_state_builder.capture_header(header_end_row)
 
                 processor_result = processor.process()
-                if processor_result is not False: # Check if processing was successful (not False)
-                    data_end_row_in_new_sheet = processor_result # This is the next_row_after_footer from the processor
+
+                if processor_result is not False:
+                    data_end_row_in_new_sheet = -1
+                    last_data_end_row = -1
+
+                    if isinstance(processor_result, tuple):
+                        data_end_row_in_new_sheet, last_data_end_row = processor_result
+                    else:
+                        data_end_row_in_new_sheet = processor_result
+                        last_data_end_row = data_end_row_in_new_sheet -1
 
                     # Dynamically find the footer by scanning within the table's column width
                     _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
@@ -248,7 +256,7 @@ def main():
                     
                     data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
                     template_state_builder.capture_footer(data_end_row_in_template, data_end_row_in_new_sheet)
-                    template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet - 1) # Pass data_start_row and data_table_end_row
+                    template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet) # Pass data_start_row and data_table_end_row
                 else:
                     processing_successful = False
             else:
