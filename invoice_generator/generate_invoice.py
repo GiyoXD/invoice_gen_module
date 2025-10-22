@@ -247,7 +247,7 @@ def main():
                             break
                     
                     data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
-                    template_state_builder.capture_footer(data_end_row_in_template)
+                    template_state_builder.capture_footer(data_end_row_in_template, data_end_row_in_new_sheet)
                     template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet - 1) # Pass data_start_row and data_table_end_row
                 else:
                     processing_successful = False

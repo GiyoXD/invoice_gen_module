@@ -1,44 +1,55 @@
 import unittest
-from openpyxl import Workbook
+import openpyxl
+from openpyxl.worksheet.worksheet import Worksheet
+
 from invoice_generator.builders.template_state_builder import TemplateStateBuilder
-from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
 class TestTemplateStateBuilder(unittest.TestCase):
 
     def setUp(self):
-        self.workbook = Workbook()
-        self.worksheet = self.workbook.active
-        self.worksheet.title = "TestSheet"
+        self.workbook = openpyxl.Workbook()
+        self.worksheet: Worksheet = self.workbook.active
 
-        # Create a dummy template with header, data area, and footer
-        # Header (rows 1-3)
-        self.worksheet['A1'] = "Header 1"
-        self.worksheet['A2'] = "Header 2"
-        self.worksheet['B2'].font = Font(bold=True)
-        self.worksheet['A3'] = "Header 3"
+        # Create a dummy template with header, data, footer, and grand total footer
+        # Header
+        self.worksheet['A1'] = 'Header 1'
+        self.worksheet['B1'] = 'Header 2'
 
-        # Data area (implicitly after header, before footer)
-        # For this test, we'll assume data ends at row 5
+        # Data
+        self.worksheet['A2'] = 'Data 1'
+        self.worksheet['B2'] = 'Data 2'
 
-        # Footer (rows 6-7)
-        self.worksheet['A6'] = "Footer 1"
-        self.worksheet['C6'].fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-        self.worksheet['A7'] = "Footer 2"
-        self.worksheet['B7'].border = Border(left=Side(style='thin'))
+        # Footer
+        self.worksheet['A4'] = 'Footer 1'
+        self.worksheet['B4'] = 'Footer 2'
+        self.worksheet.merge_cells('A4:B4')
 
-        self.num_header_cols = 5 # Example value
+        # Grand Total Footer (after a blank row)
+        self.worksheet['A6'] = 'Grand Total'
+        self.worksheet['B6'] = '1000'
 
-    def test_capture_footer_rows(self):
-        builder = TemplateStateBuilder(self.worksheet, self.num_header_cols)
-        
-        # Capture header up to row 3
-        builder.capture_header(end_row=3)
+    def test_capture_and_restore_footer_with_grand_total(self):
+        # 1. Capture the template state
+        template_builder = TemplateStateBuilder(self.worksheet, num_header_cols=2)
+        template_builder.capture_header(end_row=1)
+        template_builder.capture_footer(data_end_row=2, max_possible_footer_row=6)
 
-        # Capture footer, assuming data ends at row 5
-        builder.capture_footer(data_end_row=5)
+        # 2. Assert that the footer and grand total footer are captured correctly
+        self.assertEqual(template_builder.template_footer_start_row, 4)
+        self.assertEqual(template_builder.template_footer_end_row, 6)
+        self.assertEqual(len(template_builder.footer_state), 3) # Footer row, blank row, grand total row
+        self.assertEqual(template_builder.footer_state[0][0]['value'], 'Footer 1')
+        self.assertEqual(template_builder.footer_state[2][0]['value'], 'Grand Total')
 
-        self.assertEqual(builder.template_footer_start_row, 6, "Footer start row should be 6")
-        self.assertEqual(builder.template_footer_end_row, 7, "Footer end row should be 7")
+        # 3. Create a new workbook and restore the state
+        new_workbook = openpyxl.Workbook()
+        new_worksheet = new_workbook.active
+        template_builder.restore_state(new_worksheet, data_start_row=2, data_table_end_row=3)
+
+        # 4. Assert that the footer and grand total footer are restored at the correct positions
+        self.assertEqual(new_worksheet['A4'].value, 'Footer 1')
+        self.assertIn('A4:B4', [str(r) for r in new_worksheet.merged_cells.ranges])
+        self.assertEqual(new_worksheet['A6'].value, 'Grand Total')
 
 if __name__ == '__main__':
     unittest.main()

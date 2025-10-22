@@ -25,24 +25,80 @@ class TemplateStateBuilder:
         self.max_row = self.worksheet.max_row
         self.min_col = 1
         self.num_header_cols = num_header_cols
+
+        # Store default style objects for comparison
+        default_workbook = openpyxl.Workbook()
+        default_cell = default_workbook.active['A1']
+        self.default_font = default_cell.font
+        self.default_fill = default_cell.fill
+        self.default_border = default_cell.border
+        self.default_alignment = default_cell.alignment
+        default_workbook.close() # Close the dummy workbook
+
         # Calculate max_col based on the maximum column with content in the entire worksheet
         max_col_with_content = 0
+        max_row_with_content = 0 # Initialize max_row_with_content
         for r_idx in range(1, self.worksheet.max_row + 1):
             for c_idx in range(1, self.worksheet.max_column + 1):
                 cell = self.worksheet.cell(row=r_idx, column=c_idx)
                 if self._has_content_or_style(cell):
                     max_col_with_content = max(max_col_with_content, c_idx)
+                    max_row_with_content = max(max_row_with_content, r_idx) # Update max_row_with_content
         self.max_col = max(max_col_with_content, self.num_header_cols) # Ensure it's at least num_header_cols
+        self.max_row = max(max_row_with_content, self.max_row) # Update self.max_row with max_row_with_content
 
     def _has_content_or_style(self, cell) -> bool:
-        if cell.value is not None:
+        if cell.value is not None and cell.value != '':
             return True
         # Check if any style is applied (not default)
-        if cell.font and cell.font != Font(): return True
-        if cell.fill and cell.fill != PatternFill(): return True
-        if cell.border and cell.border != Border(): return True
-        if cell.alignment and cell.alignment != Alignment(): return True
+        if cell.font and not self._is_default_style(cell.font, self.default_font): return True
+        if cell.fill and not self._is_default_style(cell.fill, self.default_fill): return True
+        if cell.border and not self._is_default_style(cell.border, self.default_border): return True
+        if cell.alignment and not self._is_default_style(cell.alignment, self.default_alignment): return True
         return False
+
+    def _is_default_style(self, style_obj, default_obj) -> bool:
+        if style_obj is None:
+            return True
+        if default_obj is None: # Should not happen if default_obj is properly initialized
+            return False
+        
+        # Compare relevant attributes for each style type
+        if isinstance(style_obj, Font):
+            return (
+                style_obj.name == default_obj.name and
+                style_obj.size == default_obj.size and
+                style_obj.bold == default_obj.bold and
+                style_obj.italic == default_obj.italic and
+                style_obj.underline == default_obj.underline and
+                style_obj.strike == default_obj.strike and
+                style_obj.color == default_obj.color
+            )
+        elif isinstance(style_obj, PatternFill):
+            return (
+                style_obj.fill_type == default_obj.fill_type and
+                style_obj.start_color == default_obj.start_color and
+                style_obj.end_color == default_obj.end_color
+            )
+        elif isinstance(style_obj, Border):
+            return (
+                style_obj.left == default_obj.left and
+                style_obj.right == default_obj.right and
+                style_obj.top == default_obj.top and
+                style_obj.bottom == default_obj.bottom and
+                style_obj.diagonal == default_obj.diagonal
+            )
+        elif isinstance(style_obj, Alignment):
+            return (
+                style_obj.horizontal == default_obj.horizontal and
+                style_obj.vertical == default_obj.vertical and
+                style_obj.text_rotation == default_obj.text_rotation and
+                style_obj.wrap_text == default_obj.wrap_text and
+                style_obj.shrink_to_fit == default_obj.shrink_to_fit and
+                style_obj.indent == default_obj.indent
+            )
+        
+        return False # If type not recognized, assume not default
 
     def _get_cell_info(self, worksheet, row, col) -> Dict[str, Any]:
         cell = worksheet.cell(row=row, column=col)
@@ -54,10 +110,10 @@ class TemplateStateBuilder:
 
         return {
             'value': cell.value,
-            'font': copy.copy(top_left_cell.font) if top_left_cell.font else None,
-            'fill': copy.copy(top_left_cell.fill) if top_left_cell.fill else None,
-            'border': copy.copy(top_left_cell.border) if top_left_cell.border else None,
-            'alignment': copy.copy(top_left_cell.alignment) if top_left_cell.alignment else None,
+            'font': copy.copy(top_left_cell.font) if top_left_cell.font and not self._is_default_style(top_left_cell.font, self.default_font) else None,
+            'fill': copy.copy(top_left_cell.fill) if top_left_cell.fill and not self._is_default_style(top_left_cell.fill, self.default_fill) else None,
+            'border': copy.copy(top_left_cell.border) if top_left_cell.border and not self._is_default_style(top_left_cell.border, self.default_border) else None,
+            'alignment': copy.copy(top_left_cell.alignment) if top_left_cell.alignment and not self._is_default_style(top_left_cell.alignment, self.default_alignment) else None,
             'number_format': top_left_cell.number_format,
         }
 
@@ -90,14 +146,14 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
 
-    def capture_footer(self, data_end_row: int):
+    def capture_footer(self, data_end_row: int, max_possible_footer_row: int):
         """
         Captures the state of the footer section.
         The footer is assumed to start after the data_end_row.
         """
         footer_start_row = data_end_row + 1
         # Find the actual first row with content after data_end_row
-        for r_idx in range(data_end_row + 1, self.worksheet.max_row + 1):
+        for r_idx in range(data_end_row + 1, max_possible_footer_row + 1):
             if any(self._has_content_or_style(self.worksheet.cell(row=r_idx, column=c_idx))
                    for c_idx in range(1, self.max_col + 1)):
                 footer_start_row = r_idx
@@ -110,7 +166,7 @@ class TemplateStateBuilder:
 
         # Find the true max row with content within the expected footer region
         true_max_row_with_content_in_footer = 0
-        for r_idx in range(self.worksheet.max_row, footer_start_row - 1, -1): # Iterate from max_row down to footer_start_row
+        for r_idx in range(max_possible_footer_row, footer_start_row - 1, -1): # Iterate from max_possible_footer_row down to footer_start_row
             if any(self._has_content_or_style(self.worksheet.cell(row=r_idx, column=c_idx))
                    for c_idx in range(1, self.max_col + 1)):
                 true_max_row_with_content_in_footer = r_idx
@@ -182,21 +238,16 @@ class TemplateStateBuilder:
             r_idx = footer_start_row_in_new_sheet + r_offset
             for c_idx, cell_info in enumerate(row_data, 1):
                 cell = target_worksheet.cell(row=r_idx, column=c_idx)
-                
-                # Find the top-left cell of the merged region if the cell is merged
-                top_left_cell = cell
-                for merged_cell_range in target_worksheet.merged_cells.ranges:
-                    if cell.coordinate in merged_cell_range:
-                        top_left_cell = target_worksheet.cell(row=merged_cell_range.min_row, column=merged_cell_range.min_col)
-                        break
+                if isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    continue
                 
                 # Apply value and styles to the top-left cell
-                top_left_cell.value = cell_info['value']
-                if cell_info['font']: top_left_cell.font = cell_info['font']
-                if cell_info['fill']: top_left_cell.fill = cell_info['fill']
-                if cell_info['border']: top_left_cell.border = cell_info['border']
-                if cell_info['alignment']: top_left_cell.alignment = cell_info['alignment']
-                if cell_info['number_format']: top_left_cell.number_format = cell_info['number_format']
+                cell.value = cell_info['value']
+                if cell_info['font']: cell.font = cell_info['font']
+                if cell_info['fill']: cell.fill = cell_info['fill']
+                if cell_info['border']: cell.border = cell_info['border']
+                if cell_info['alignment']: cell.alignment = cell_info['alignment']
+                if cell_info['number_format']: cell.number_format = cell_info['number_format']
             
             # Fix row height lookup
             original_footer_row_idx = self.template_footer_start_row + r_offset
