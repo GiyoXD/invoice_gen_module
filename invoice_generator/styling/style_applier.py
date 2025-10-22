@@ -11,6 +11,12 @@ center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=T
 left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
 bold_font = Font(bold=True)
 
+# --- Constants for Number Formats ---
+FORMAT_GENERAL = 'General'
+FORMAT_TEXT = '@'
+FORMAT_NUMBER_COMMA_SEPARATED1 = '#,##0'
+FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'
+
 from .models import StylingConfigModel
 
 def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, context: dict):
@@ -23,6 +29,7 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
     col_idx = context.get("col_idx")
     static_col_idx = context.get("static_col_idx")
     is_pre_footer = context.get("is_pre_footer", False)
+    DAF_mode = context.get("DAF_mode", False)
 
     # --- 1. Apply Font, Alignment, and Number Formats ---
     if col_id and styling_config:
@@ -39,8 +46,22 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
             elif styling_config.defaultAlignment:
                 cell.alignment = Alignment(**styling_config.defaultAlignment.model_dump(exclude_none=True))
 
-            if col_specific_style.numberFormat:
-                cell.number_format = col_specific_style.numberFormat
+            # --- Apply Number Format ---
+            number_format = col_specific_style.numberFormat
+            
+            # PCS always uses config format, never forced format
+            if col_id in ['col_pcs', 'col_qty_pcs']:
+                if number_format and cell.number_format != FORMAT_TEXT:
+                    cell.number_format = number_format
+            else:
+                # Non-PCS columns follow DAF mode logic
+                if number_format and cell.number_format != FORMAT_TEXT and not DAF_mode:
+                    cell.number_format = number_format
+                elif number_format and cell.number_format != FORMAT_TEXT and DAF_mode:
+                    cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2
+                elif cell.number_format != FORMAT_TEXT and (cell.number_format == FORMAT_GENERAL or cell.number_format is None):
+                    if isinstance(cell.value, float): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2
+                    elif isinstance(cell.value, int): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED1
 
     # --- 2. Apply Conditional Borders ---
     thin_side = Side(border_style="thin", color="000000")

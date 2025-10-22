@@ -10,6 +10,7 @@ from decimal import Decimal
 from decimal import Decimal, InvalidOperation
 
 from .data.data_preparer import prepare_data_rows, parse_mapping_rules
+from .styling.style_applier import apply_cell_style
 from .utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths, apply_row_heights, calculate_header_dimensions
 
 # --- Constants for Styling ---
@@ -391,65 +392,7 @@ def write_footer_row(
         return -1
 
 
-def _style_row_before_footer(
-    worksheet: Worksheet,
-    row_num: int,
-    num_columns: int,
-    sheet_styling_config: Optional[Dict[str, Any]],
-    idx_to_id_map: Dict[int, str],
-    col1_index: int, # The index of the first column to receive special border handling
-    DAF_mode: bool
-):
-    """
-    Applies column-specific styles, a full border, and a specific height
-    to the static row before the footer. The first column will only have
-    side borders.
-    """
-    if not sheet_styling_config or row_num <= 0:
-        return
 
-    # Set the row height using the 'header' value from the styling config.
-    try:
-        row_heights = sheet_styling_config.get("row_heights", {})
-        header_height = row_heights.get("header")
-
-        if header_height:
-            worksheet.row_dimensions[row_num].height = header_height
-    except Exception as e:
-        print(f"Warning: Could not set row height for row {row_num}. Error: {e}")
-
-    # --- START: Refactored Logic ---
-    # Define the two border styles needed for this row
-    thin_side = Side(border_style="thin", color="000000")
-    
-    # Style 1: Full border for all columns except the first
-    full_thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-    
-    # Style 2: Side-only border for the first column
-    side_only_border = Border(left=thin_side, right=thin_side)
-    # --- END: Refactored Logic ---
-
-    # Iterate through each column of the row to apply cell-level styles
-    for c_idx in range(1, num_columns + 1):
-        try:
-            cell = worksheet.cell(row=row_num, column=c_idx)
-            current_col_id = idx_to_id_map.get(c_idx)
-
-            # 1. Apply font, alignment, and number formats based on the column ID.
-            _apply_cell_style(cell, current_col_id, sheet_styling_config, DAF_mode)
-
-            # --- START: Refactored Logic ---
-            # 2. Apply a conditional border based on the column index.
-            if c_idx == col1_index:
-                # First column gets a border on the sides only
-                cell.border = side_only_border
-            else:
-                # All other columns get a full border
-                cell.border = full_thin_border
-            # --- END: Refactored Logic ---
-
-        except Exception as e:
-            print(f"Warning: Could not style cell at ({row_num}, {c_idx}). Error: {e}")
 
 
 
@@ -740,14 +683,17 @@ def fill_invoice_data(
                 fill_static_row(worksheet, row_before_footer_idx, num_columns, static_content_before_footer)
                 
                 # Step 2: Apply the special styling and borders for this specific row
-                _style_row_before_footer(
-                    worksheet=worksheet,
-                    row_num=row_before_footer_idx,
-                    num_columns=num_columns,
-                    sheet_styling_config=sheet_styling_config,
-                    idx_to_id_map=idx_to_id_map, # Pass the ID map here
-                    col1_index=col1_index,
-                    DAF_mode=DAF_mode)
+                for c_idx in range(1, num_columns + 1):
+                    cell = worksheet.cell(row=row_before_footer_idx, column=c_idx)
+                    current_col_id = idx_to_id_map.get(c_idx)
+                    context = {
+                        "col_id": current_col_id,
+                        "col_idx": c_idx,
+                        "static_col_idx": col1_index,
+                        "is_pre_footer": True,
+                        "DAF_mode": DAF_mode
+                    }
+                    apply_cell_style(cell, sheet_styling_config, context)
             except Exception as fill_bf_err:
                 print(f"Warning: Error filling/styling row before footer: {fill_bf_err}")
         

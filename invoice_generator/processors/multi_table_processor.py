@@ -32,6 +32,8 @@ class MultiTableProcessor(BaseProcessor):
             table_data = raw_data[table_key]
             num_data_rows = len(table_data.get('net', []))
             
+            is_last_table = (i == num_tables - 1) # Calculate is_last_table
+
             header_info = write_header(self.worksheet, write_pointer_row, header_to_write, self.styling_config)
             all_header_infos.append(header_info)
             write_pointer_row = header_info.get('second_row_index', write_pointer_row) + 1
@@ -120,19 +122,26 @@ class MultiTableProcessor(BaseProcessor):
             pallet_count = len(table_data.get('pallet_count', []))
             grand_total_pallets += pallet_count
             
+            print(f"DEBUG: MultiTableProcessor - self.args.DAF: {self.args.DAF}") # NEW DEBUG PRINT
             footer_builder = FooterBuilder(
-                worksheet=self.worksheet, 
-                footer_row_num=write_pointer_row, 
-                header_info=header_info, 
-                sum_ranges=[(data_start_row, write_pointer_row - 1)], 
-                footer_config=footer_config, 
-                pallet_count=pallet_count, 
-                sheet_styling_config=self.styling_config
+                worksheet=self.worksheet,
+                footer_row_num=write_pointer_row,
+                header_info=header_info,
+                sum_ranges=[(data_start_row, write_pointer_row - 1)],
+                footer_config={**footer_config, "type": "regular"},
+                pallet_count=pallet_count,
+                sheet_styling_config=self.styling_config,
+                all_tables_data=self.invoice_data.get('processed_tables_data', {}),
+                table_keys=table_keys,
+                mapping_rules=mappings,
+                sheet_name=self.sheet_name,
+                DAF_mode=self.args.DAF,
+                is_last_table=is_last_table,
             )
-            footer_builder.build()
+            write_pointer_row = footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
-            write_pointer_row += 1
+            # write_pointer_row += 1 # This is now handled by footer_builder.build()
 
             if i < num_tables - 1:
                 write_pointer_row += 1
@@ -141,17 +150,26 @@ class MultiTableProcessor(BaseProcessor):
             last_header_info = all_header_infos[-1]
             num_columns = last_header_info.get('num_columns', 1)
             
+            # For the grand total footer, it is always the last table in the context of the sheet
+            is_last_table_grand_total = True 
+
             grand_total_footer_builder = FooterBuilder(
-                worksheet=self.worksheet, 
-                footer_row_num=write_pointer_row, 
-                header_info=last_header_info, 
-                sum_ranges=all_data_ranges, 
-                footer_config=footer_config, 
-                pallet_count=grand_total_pallets, 
-                override_total_text="TOTAL OF:", 
-                sheet_styling_config=self.styling_config
+                worksheet=self.worksheet,
+                footer_row_num=write_pointer_row,
+                header_info=last_header_info,
+                sum_ranges=all_data_ranges,
+                footer_config={**footer_config, "type": "grand_total", "add_ons": ["summary"] if self.args.DAF and self.sheet_name == "Packing list" else []},
+                pallet_count=grand_total_pallets,
+                override_total_text="TOTAL OF:",
+                sheet_styling_config=self.styling_config,
+                all_tables_data=self.invoice_data.get('processed_tables_data', {}),
+                table_keys=table_keys,
+                mapping_rules=mappings,
+                sheet_name=self.sheet_name,
+                DAF_mode=self.args.DAF,
+                is_last_table=is_last_table_grand_total,
             )
-            grand_total_footer_builder.build()
+            write_pointer_row = grand_total_footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
 

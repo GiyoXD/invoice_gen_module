@@ -49,6 +49,9 @@ class TableBuilder:
         custom_flag: bool = False,
         data_cell_merging_rules: Optional[Dict[str, Any]] = None,
         DAF_mode: Optional[bool] = False,
+        all_tables_data: Optional[Dict[str, Any]] = None,
+        table_keys: Optional[List[str]] = None,
+        is_last_table: bool = False,
     ):
         self.worksheet = worksheet
         self.sheet_name = sheet_name
@@ -71,6 +74,9 @@ class TableBuilder:
         self.custom_flag = custom_flag
         self.data_cell_merging_rules = data_cell_merging_rules
         self.DAF_mode = DAF_mode
+        self.all_tables_data = all_tables_data
+        self.table_keys = table_keys
+        self.is_last_table = is_last_table
 
         # Initialize variables that were previously in fill_invoice_data
         self.actual_rows_to_process = 0
@@ -357,14 +363,17 @@ class TableBuilder:
                     fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, self.static_content_before_footer)
                     
                     # Step 2: Apply the special styling and borders for this specific row
-                    # _style_row_before_footer(
-                    #     worksheet=self.worksheet,
-                    #     row_num=self.row_before_footer_idx,
-                    #     num_columns=num_columns,
-                    #     sheet_styling_config=self.sheet_styling_config,
-                    #     idx_to_id_map=idx_to_id_map, # Pass the ID map here
-                    #     col1_index=self.col1_index,
-                    #     DAF_mode=self.DAF_mode)
+                    for c_idx in range(1, num_columns + 1):
+                        cell = self.worksheet.cell(row=self.row_before_footer_idx, column=c_idx)
+                        current_col_id = idx_to_id_map.get(c_idx)
+                        context = {
+                            "col_id": current_col_id,
+                            "col_idx": c_idx,
+                            "static_col_idx": self.col1_index,
+                            "is_pre_footer": True,
+                            "DAF_mode": self.DAF_mode
+                        }
+                        apply_cell_style(cell, self.sheet_styling_config, context)
                 except Exception as fill_bf_err:
                     print(f"Warning: Error filling/styling row before footer: {fill_bf_err}")
             
@@ -391,7 +400,12 @@ class TableBuilder:
                     footer_config=footer_config,
                     pallet_count=pallet_count,
                     DAF_mode=self.data_source_type == "DAF_aggregation",
-                    sheet_styling_config=self.sheet_styling_config
+                    sheet_styling_config=self.sheet_styling_config,
+                    all_tables_data=self.all_tables_data,
+                    table_keys=self.table_keys,
+                    mapping_rules=self.mapping_rules,
+                    sheet_name=self.sheet_name,
+                    is_last_table=self.is_last_table,
                 )
                 footer_builder.build()
         # No need to pass font, alignment, num_columns, etc. as the

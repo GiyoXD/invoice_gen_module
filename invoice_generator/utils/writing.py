@@ -37,6 +37,7 @@ except ImportError as e:
     print(f"ImportError for decimal: {e}")
 try:
     from ..styling.models import StylingConfigModel
+    from ..styling.style_applier import apply_cell_style
 except ImportError as e:
     print(f"ImportError for ..styling.models: {e}")
 
@@ -674,10 +675,6 @@ def apply_explicit_data_cell_merges_by_id(
     if not merge_rules_data_cells or row_num <= 0:
         return
 
-    thin_side = Side(border_style="thin", color="000000")
-    full_thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-    center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-
     # Loop through rules where the key is now the column ID
     for col_id, rule_details in merge_rules_data_cells.items():
         colspan_to_apply = rule_details.get("rowspan")
@@ -710,10 +707,12 @@ def apply_explicit_data_cell_merges_by_id(
             
             # Style the anchor cell of the new merged range
             anchor_cell = worksheet.cell(row=row_num, column=start_col_idx)
-            
-            # Ensure the merged cell has the desired border and alignment
-            anchor_cell.border = full_thin_border
-            anchor_cell.alignment = center_alignment
+            context = {
+                "col_id": col_id,
+                "col_idx": start_col_idx,
+                "DAF_mode": DAF_mode
+            }
+            apply_cell_style(anchor_cell, sheet_styling_config, context)
 
         except Exception as e:
             print(f"Error applying explicit data cell merge for ID '{col_id}' on row {row_num}: {e}")
@@ -847,111 +846,3 @@ def write_summary_rows(
         print(f"Warning: Failed processing summary rows: {summary_err}")
         traceback.print_exc()
         return start_row + 2
-
-def _style_row_before_footer(
-    worksheet: Worksheet,
-    row_num: int,
-    num_columns: int,
-    sheet_styling_config: Optional[StylingConfigModel],
-    idx_to_id_map: Dict[int, str],
-    col1_index: int, # The index of the first column to receive special border handling
-    DAF_mode: bool
-):
-    """
-    Applies column-specific styles, a full border, and a specific height
-    to the static row before the footer. The first column will only have
-    side borders.
-    """
-    if not sheet_styling_config or row_num <= 0:
-        return
-
-    # Set the row height using the 'header' value from the styling config.
-    try:
-        if sheet_styling_config and sheet_styling_config.rowHeights:
-            header_height = sheet_styling_config.rowHeights.get("header")
-
-            if header_height:
-                worksheet.row_dimensions[row_num].height = header_height
-    except Exception as e:
-        print(f"Warning: Could not set row height for row {row_num}. Error: {e}")
-
-    # --- START: Refactored Logic ---
-    # Define the two border styles needed for this row
-    thin_side = Side(border_style="thin", color="000000")
-    
-    # Style 1: Full border for all columns except the first
-    full_thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-    
-    # Style 2: Side-only border for the first column
-    side_only_border = Border(left=thin_side, right=thin_side)
-    # --- END: Refactored Logic ---
-
-    # Iterate through each column of the row to apply cell-level styles
-    for c_idx in range(1, num_columns + 1):
-        try:
-            cell = worksheet.cell(row=row_num, column=c_idx)
-            current_col_id = idx_to_id_map.get(c_idx)
-
-            # 1. Apply font, alignment, and number formats based on the column ID.
-            _apply_cell_style(cell, current_col_id, sheet_styling_config, DAF_mode)
-
-            # --- START: Refactored Logic ---
-            # 2. Apply a conditional border based on the column index.
-            if c_idx == col1_index:
-                # First column gets a border on the sides only
-                cell.border = side_only_border
-            else:
-                # All other columns get a full border
-                cell.border = full_thin_border
-            # --- END: Refactored Logic ---
-
-        except Exception as e:
-            print(f"Warning: Could not style cell at ({row_num}, {c_idx}). Error: {e}")
-
-def _apply_cell_style(cell, column_id: Optional[str], sheet_styling_config: Optional[Dict[str, Any]] = None, DAF_mode: Optional[bool] = False):
-    """
-    Applies font, alignment, and number format to a cell based on a column ID.
-    """
-    if not sheet_styling_config or not cell or not column_id:
-        return
-
-    try:
-        # Get styling configurations using ID-based keys
-        default_font_cfg = sheet_styling_config.defaultFont.model_dump(exclude_none=True) if sheet_styling_config.defaultFont else {}
-        default_align_cfg = sheet_styling_config.defaultAlignment.model_dump(exclude_none=True) if sheet_styling_config.defaultAlignment else {}
-        column_styles = sheet_styling_config.columnIdStyles
-
-        # Find column-specific style rules if the ID matches
-        col_specific_style = column_styles.get(column_id, {})
-
-        # --- Apply Font ---
-        final_font_cfg = default_font_cfg.copy()
-        final_font_cfg.update(col_specific_style.get("font", {}))
-        if final_font_cfg:
-            cell.font = Font(**{k: v for k, v in final_font_cfg.items() if v is not None})
-
-        # --- Apply Alignment ---
-        final_align_cfg = default_align_cfg.copy()
-        final_align_cfg.update(col_specific_style.get("alignment", {}))
-        if final_align_cfg:
-            cell.alignment = Alignment(**{k: v for k, v in final_align_cfg.items() if v is not None})
-            
-        # --- Apply Number Format ---
-        number_format = col_specific_style.get("number_format")
-        
-        # PCS always uses config format, never forced format
-        if column_id in ['col_pcs', 'col_qty_pcs']:
-            if number_format and cell.number_format != FORMAT_TEXT:
-                cell.number_format = number_format
-        else:
-            # Non-PCS columns follow DAF mode logic
-            if number_format and cell.number_format != FORMAT_TEXT and not DAF_mode:
-                cell.number_format = number_format
-            elif number_format and cell.number_format != FORMAT_TEXT and DAF_mode:
-                cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2
-            elif cell.number_format != FORMAT_TEXT and (cell.number_format == FORMAT_GENERAL or cell.number_format is None):
-                if isinstance(cell.value, float): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2
-                elif isinstance(cell.value, int): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED1
-
-    except Exception as style_err:
-        print(f"Error applying cell style for ID {column_id}: {style_err}")

@@ -2,20 +2,9 @@ print(f"Loading module: {__file__}")
 from typing import Any, Dict
 from invoice_generator.utils.writing import write_header
 from invoice_generator.builders.table_builder import TableBuilder
+from .base_processor import BaseProcessor
 
-class SingleTableProcessor:
-    def __init__(self, workbook: Any, worksheet: Any, sheet_name: str, sheet_config: Dict[str, Any], data_mapping_config: Dict[str, Any], data_source_indicator: str, invoice_data: Dict[str, Any], args: Any, final_grand_total_pallets: int, styling_config: Dict[str, Any]):
-        self.workbook = workbook
-        self.worksheet = worksheet
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.data_mapping_config = data_mapping_config
-        self.data_source_indicator = data_source_indicator
-        self.invoice_data = invoice_data
-        self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
-        self.styling_config = styling_config
-
+class SingleTableProcessor(BaseProcessor):
     def process(self) -> bool:
         # Write the header based on the layout in the config file
         # print(f
@@ -93,6 +82,9 @@ class SingleTableProcessor:
             custom_flag=self.args.custom,
             data_cell_merging_rules=data_cell_merging_rules,
             DAF_mode=self.args.DAF,
+            all_tables_data=None,
+            table_keys=None,
+            is_last_table=True,
         )
 
         print(f"DEBUG: start_row: {start_row}")
@@ -106,5 +98,7 @@ class SingleTableProcessor:
             return False
         print(f"Successfully filled table data/footer for sheet '{self.sheet_name}'.")
 
+        self.run_text_replacement()
+
         # Placeholder for other post-table processing (e.g., weight summary, column widths, final spacers)
-        return True
+        return next_row_after_footer

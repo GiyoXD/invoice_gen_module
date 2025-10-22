@@ -17,7 +17,8 @@ command = [
     data_file,
     "--output", output_file,
     "--templatedir", template_dir,
-    "--configdir", config_dir
+    "--configdir", config_dir,
+    "--DAF"
 ]
 
 print(f"Running command: {' '.join(command)}")
