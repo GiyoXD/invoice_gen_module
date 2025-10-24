@@ -1,3 +1,6 @@
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+
 # invoice_generator/generate_invoice.py
 # Main script to orchestrate invoice generation using a processor-based pattern.
 
@@ -20,6 +23,7 @@ from .utils.layout import calculate_header_dimensions
 # --- Import utility functions from the new structure ---
 # from . import invoice_utils
 from .utils import merge_utils
+from .utils.writing import write_summary_rows # Import statement
 
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
@@ -257,6 +261,24 @@ def main():
                     data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
                     template_state_builder.capture_footer(data_end_row_in_template, data_end_row_in_new_sheet)
                     template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet) # Pass data_start_row and data_table_end_row
+
+                    if sheet_config.get("summary_rows_config"):
+                        summary_rows_config = sheet_config["summary_rows_config"]
+                        # The next_row here is data_end_row_in_new_sheet + 1
+                        next_row_for_summary = data_end_row_in_new_sheet + 1
+                        next_row_after_summary = write_summary_rows(
+                            worksheet=output_worksheet,
+                            start_row=next_row_for_summary,
+                            header_info=header_info,
+                            all_tables_data=invoice_data.get("processed_tables_data", {}),
+                            table_keys=list(invoice_data.get("processed_tables_data", {}).keys()),
+                            footer_config=sheet_config.get("footer_configurations", {}),
+                            mapping_rules=sheet_config.get("data_mapping", {}),
+                            styling_config=styling_config,
+                            DAF_mode=args.DAF
+                        )
+                        # Update data_end_row_in_new_sheet to reflect the new end after summary rows
+                        data_end_row_in_new_sheet = next_row_after_summary - 1
                 else:
                     processing_successful = False
             else:

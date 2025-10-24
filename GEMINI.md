@@ -64,3 +64,11 @@ python -m unittest tests/test_invoice_generation.py
 
 *   **No Modification of Config/Template Directories:** Gemini must *not* modify any files within the `config` or `TEMPLATE` directories. Only source code files can be modified.
 *   **Post-Issue Resolution Invoice Generation:** After resolving a GitHub issue, Gemini *must* generate a new invoice using the updated source code before asking the user for confirmation or marking the issue as fully resolved.
+
+
+### most important note
+    * never ever close an issue, if user ask to close issue, then you allow to do it, otherwise, dont ever close the issue
+    * avoid using anyprint for logging or debug, use log instead
+
+
+user repo: https://github.com/GiyoXD/invoice_gen_module

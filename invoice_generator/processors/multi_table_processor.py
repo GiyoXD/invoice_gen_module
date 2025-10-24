@@ -3,7 +3,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from ..utils.writing import write_header
 from ..builders.footer_builder import FooterBuilder
-from ..utils.layout import apply_row_heights, unmerge_block, safe_unmerge_block
+from ..utils.layout import unmerge_block, safe_unmerge_block
 from ..utils import merge_utils
 from ..styling import style_applier as style_utils
 from .base_processor import BaseProcessor
@@ -119,7 +119,7 @@ class MultiTableProcessor(BaseProcessor):
                 
                 write_pointer_row += 1
 
-            pallet_count = len(table_data.get('pallet_count', []))
+            pallet_count = sum(table_data.get('pallet_count', []))
             grand_total_pallets += pallet_count
             
             print(f"DEBUG: MultiTableProcessor - self.args.DAF: {self.args.DAF}") # NEW DEBUG PRINT
@@ -137,6 +137,7 @@ class MultiTableProcessor(BaseProcessor):
                 sheet_name=self.sheet_name,
                 DAF_mode=self.args.DAF,
                 is_last_table=is_last_table,
+                dynamic_desc_used=self.dynamic_desc_used,
             )
             write_pointer_row = footer_builder.build()
             
@@ -168,13 +169,24 @@ class MultiTableProcessor(BaseProcessor):
                 sheet_name=self.sheet_name,
                 DAF_mode=self.args.DAF,
                 is_last_table=is_last_table_grand_total,
+                dynamic_desc_used=self.dynamic_desc_used,
             )
             write_pointer_row = grand_total_footer_builder.build()
             
             all_footer_rows.append(write_pointer_row)
 
-        style_utils.apply_row_heights(self.worksheet, self.styling_config, all_header_infos, all_data_ranges, all_footer_rows)
-        
+        for i, header_info in enumerate(all_header_infos):
+            data_range = all_data_ranges[i]
+            data_row_indices = list(range(data_range[0], data_range[1] + 1))
+            footer_row = all_footer_rows[i]
+            style_utils.apply_row_heights(
+                worksheet=self.worksheet,
+                sheet_styling_config=self.styling_config,
+                header_info=header_info,
+                data_row_indices=data_row_indices,
+                footer_row_index=footer_row,
+            )
+
         self.run_text_replacement()
 
         return write_pointer_row, last_data_end_row

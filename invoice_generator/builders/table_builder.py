@@ -5,18 +5,13 @@ from openpyxl.utils import get_column_letter
 import traceback
 
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
-from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths, apply_row_heights
-from invoice_generator.utils.writing import fill_static_row, apply_row_merges, write_grand_total_weight_summary, write_header, write_summary_rows, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
+from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths
+from invoice_generator.styling.style_applier import apply_row_heights
+from invoice_generator.utils.writing import fill_static_row, apply_row_merges, write_grand_total_weight_summary, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
 from .footer_builder import FooterBuilder
+from invoice_generator.styling.style_applier import thin_border, no_border, center_alignment, left_alignment, bold_font
 
-# --- Constants for Styling ---
-thin_side = Side(border_style="thin", color="000000")
-thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side) # Full grid border
-no_border = Border(left=None, right=None, top=None, bottom=None)
-center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-bold_font = Font(bold=True)
 
 # --- Constants for Number Formats ---
 FORMAT_GENERAL = 'General'
@@ -406,6 +401,7 @@ class TableBuilder:
                     mapping_rules=self.mapping_rules,
                     sheet_name=self.sheet_name,
                     is_last_table=self.is_last_table,
+                    dynamic_desc_used=self.dynamic_desc_used,
                 )
                 footer_builder.build()
         # No need to pass font, alignment, num_columns, etc. as the

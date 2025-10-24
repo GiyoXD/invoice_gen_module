@@ -131,72 +131,7 @@ def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[Sty
         else: pass # Header text not found in map
 
 
-def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_info: Dict[str, Any], data_row_indices: List[int], footer_row_index: int, row_after_header_idx: int, row_before_footer_idx: int):
-    """
-    Sets row heights based on the configuration for header, data, footer, and specific rows.
-    Footer height can now optionally match the header height.
 
-    Args:
-        worksheet: The openpyxl Worksheet object.
-        sheet_styling_config: Styling configuration containing the 'row_heights' dictionary.
-        header_info: Dictionary with header row indices.
-        data_row_indices: List of 1-based indices for the actual data rows written.
-        footer_row_index: 1-based index of the footer row.
-        row_after_header_idx: 1-based index of the static/blank row after the header (-1 if none).
-        row_before_footer_idx: 1-based index of the static/blank row before the footer (-1 if none).
-    """
-    if not sheet_styling_config.rowHeights: return
-    row_heights_cfg = sheet_styling_config.rowHeights
-
-    actual_header_height = None # Store the applied header height
-
-    def set_height(r_idx, height_val, desc): # Helper function
-        nonlocal actual_header_height # Ensure actual_header_height is modified
-        if r_idx <= 0: return
-        try:
-            h_val = float(height_val)
-            if h_val > 0:
-                worksheet.row_dimensions[r_idx].height = h_val
-                if desc == "header": # Store the height applied to the header
-                    actual_header_height = h_val
-            else: pass # Ignore non-positive heights
-        except (ValueError, TypeError): pass # Ignore invalid height values
-        except Exception as height_err: pass # Log other errors?
-
-    # Apply Heights Based on Config
-    header_height = row_heights_cfg.get("header")
-    if header_height is not None and header_info:
-        h_start = header_info.get('first_row_index', -1); h_end = header_info.get('second_row_index', -1)
-        if h_start > 0 and h_end >= h_start:
-            for r in range(h_start, h_end + 1): set_height(r, header_height, "header")
-
-    after_header_height = row_heights_cfg.get("after_header")
-    if after_header_height is not None and row_after_header_idx > 0: set_height(row_after_header_idx, after_header_height, "after_header")
-    data_default_height = row_heights_cfg.get("data_default")
-    if data_default_height is not None and data_row_indices:
-        for r in data_row_indices: set_height(r, data_default_height, "data_default")
-    before_footer_height = row_heights_cfg.get("before_footer")
-    if before_footer_height is not None and row_before_footer_idx > 0: set_height(row_before_footer_idx, before_footer_height, "before_footer")
-
-    # --- Footer Height Logic ---
-    footer_height_config = row_heights_cfg.get("footer")
-    match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True) # Default to True
-
-    final_footer_height = None
-    if match_header_height_flag and actual_header_height is not None:
-        final_footer_height = actual_header_height # Use header height if flag is true and header height was set
-    elif footer_height_config is not None:
-        final_footer_height = footer_height_config # Otherwise, use specific footer height if defined
-
-    if final_footer_height is not None and footer_row_index > 0:
-        set_height(footer_row_index, final_footer_height, "footer")
-    # --- End Footer Height Logic ---
-
-    specific_heights = row_heights_cfg.get("specific_rows")
-    if isinstance(specific_heights, dict):
-        for row_str, height_val in specific_heights.items():
-            try: row_num = int(row_str); set_height(row_num, height_val, f"specific_row_{row_num}")
-            except ValueError: pass # Ignore invalid row numbers
 
 def calculate_header_dimensions(header_layout: List[Dict[str, Any]]) -> Tuple[int, int]:
     """

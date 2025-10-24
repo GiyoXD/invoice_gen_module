@@ -1,3 +1,4 @@
+import logging
 try:
     import sys
 except ImportError as e:
@@ -37,7 +38,7 @@ except ImportError as e:
     print(f"ImportError for decimal: {e}")
 try:
     from ..styling.models import StylingConfigModel
-    from ..styling.style_applier import apply_cell_style
+    from ..styling.style_applier import apply_cell_style, apply_header_style
 except ImportError as e:
     print(f"ImportError for ..styling.models: {e}")
 
@@ -317,14 +318,6 @@ def write_header(worksheet: Worksheet, start_row: int, header_layout_config: Lis
     column_map = {}
     column_id_map = {}
 
-    header_font = Font(bold=True)
-    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    if sheet_styling_config:
-        if sheet_styling_config.headerFont:
-            header_font = Font(**sheet_styling_config.headerFont.model_dump(exclude_none=True))
-        if sheet_styling_config.headerAlignment:
-            header_alignment = Alignment(**sheet_styling_config.headerAlignment.model_dump(exclude_none=True))
-
     for cell_config in header_layout_config:
         row_offset = cell_config.get('row', 0)
         col_offset = cell_config.get('col', 0)
@@ -340,8 +333,7 @@ def write_header(worksheet: Worksheet, start_row: int, header_layout_config: Lis
         max_col = max(max_col, cell_col + colspan - 1)
 
         cell = worksheet.cell(row=cell_row, column=cell_col, value=text)
-        cell.font = header_font
-        cell.alignment = header_alignment
+        apply_header_style(cell, sheet_styling_config)
         cell.border = thin_border
 
         if cell_id:
@@ -725,68 +717,97 @@ def write_summary_rows(
     table_keys: List[str],
     footer_config: Dict[str, Any],
     mapping_rules: Dict[str, Any],
-    styling_config: Optional[Dict[str, Any]] = None,
-    DAF_mode: Optional[bool] = False
+    styling_config: Optional[StylingConfigModel] = None,
+    DAF_mode: Optional[bool] = False,
+    grand_total_pallets: int = 0
 ) -> int:
     """
-    Calculates and writes ID-driven summary rows, ensuring text cells are
-    formatted as text and the final bold font style is applied correctly.
+    Calculates and writes ID-driven summary rows for different leather types.
+    This function is specifically designed to handle "BUFFALO LEATHER" and "COW LEATHER"
+    summaries, calculating totals for specified numeric columns and pallet counts.
+    It applies styling based on the provided styling configuration.
     """
     buffalo_summary_row = start_row
     leather_summary_row = start_row + 1
     next_available_row = start_row + 2
 
     try:
-        # --- Get Styles from Footer Config ---
-        style_config = footer_config.get('style', {})
-        font_to_apply = Font(**style_config.get('font', {'bold': True}))
-        align_to_apply = Alignment(**style_config.get('alignment', {'horizontal': 'center', 'vertical': 'center'}))
-
-        # --- Calculation and Writing Logic (remains the same) ---
-        # ... (all the calculation and cell writing logic is unchanged) ...
+        # --- Configuration and Data Extraction ---
         column_id_map = header_info.get('column_id_map', {})
         idx_to_id_map = {v: k for k, v in column_id_map.items()}
         data_map = mapping_rules.get('data_map', {})
+        
+        # Define which column IDs should be summed up
         numeric_ids_to_sum = ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
         id_to_data_key_map = {v['id']: k for k, v in data_map.items() if v.get('id') in numeric_ids_to_sum}
         ids_to_sum = list(id_to_data_key_map.keys())
+
+        # --- Totals Initialization ---
+        grand_totals = {col_id: 0 for col_id in ids_to_sum}
         buffalo_totals = {col_id: 0 for col_id in ids_to_sum}
         cow_totals = {col_id: 0 for col_id in ids_to_sum}
+        grand_pallet_total = grand_total_pallets # Initialize with the passed parameter
         buffalo_pallet_total = 0
         cow_pallet_total = 0
+
         for table_key in table_keys:
             table_data = all_tables_data.get(str(table_key), {})
             descriptions = table_data.get("description", [])
             pallet_counts = table_data.get("pallet_count", [])
+
             for i in range(len(descriptions)):
                 raw_val = descriptions[i]
-                desc_val = raw_val
-                if isinstance(raw_val, list) and raw_val:
-                    desc_val = raw_val[0]
-                is_buffalo = desc_val and "BUFFALO" in str(desc_val).upper()
-                target_dict = buffalo_totals if is_buffalo else cow_totals
+                desc_val = str(raw_val)
+                is_buffalo = "BUFFALO" in desc_val.upper()
+
+                logging.debug(f"DEBUG: desc_val: {desc_val}, is_buffalo: {is_buffalo}")
+
                 try:
                     pallet_val = int(pallet_counts[i]) if i < len(pallet_counts) else 0
+                    # REMOVED: grand_pallet_total += pallet_val
                     if is_buffalo:
                         buffalo_pallet_total += pallet_val
-                    else:
+                    else: # If not buffalo, it's cow leather
                         cow_pallet_total += pallet_val
-                except (ValueError, TypeError): pass
+                    logging.debug(f"DEBUG: Pallet - grand: {grand_pallet_total}, buffalo: {buffalo_pallet_total}, cow: {cow_pallet_total}")
+                except (ValueError, TypeError):
+                    logging.debug(f"DEBUG: Error processing pallet_val for desc_val: {desc_val}")
+                    pass
+
                 for col_id in ids_to_sum:
                     data_key = id_to_data_key_map.get(col_id)
                     if not data_key: continue
+                    
                     data_list = table_data.get(data_key, [])
                     if i < len(data_list):
                         try:
                             value_to_add = data_list[i]
+                            numeric_value = 0
                             if isinstance(value_to_add, (int, float)):
-                                target_dict[col_id] += float(value_to_add)
+                                numeric_value = float(value_to_add)
                             elif isinstance(value_to_add, str) and value_to_add.strip():
-                                target_dict[col_id] += float(value_to_add.replace(',', ''))
-                        except (ValueError, TypeError, IndexError): pass
+                                numeric_value = float(value_to_add.replace(',', ''))
+                            
+                            grand_totals[col_id] += numeric_value
+                            if is_buffalo:
+                                buffalo_totals[col_id] += numeric_value
+                            else: # If not buffalo, it's cow leather
+                                cow_totals[col_id] += numeric_value
+                            logging.debug(f"DEBUG: {col_id} - grand: {grand_totals[col_id]}, buffalo: {buffalo_totals[col_id]}, cow: {cow_totals[col_id]}") # Changed to logging.debug
+                        except (ValueError, TypeError, IndexError):
+                            logging.debug(f"DEBUG: Error processing numeric_value for {col_id} and desc_val: {desc_val}") # Changed to logging.debug
+                            pass
+
+        # cow_totals and cow_pallet_total are now calculated directly
+        # cow_totals = {col_id: grand_totals[col_id] - buffalo_totals[col_id] for col_id in ids_to_sum}
+        # cow_pallet_total = grand_pallet_total - buffalo_pallet_total
+
+        # --- Writing to Worksheet ---
         num_columns = header_info['num_columns']
         desc_col_idx = column_id_map.get("col_desc")
         label_col_idx = column_id_map.get("col_pallet") or 2
+
+        # Write Buffalo Summary Row
         unmerge_row(worksheet, buffalo_summary_row, num_columns)
         worksheet.cell(row=buffalo_summary_row, column=label_col_idx, value="TOTAL OF:").number_format = FORMAT_TEXT
         worksheet.cell(row=buffalo_summary_row, column=label_col_idx + 1, value="BUFFALO LEATHER").number_format = FORMAT_TEXT
@@ -796,6 +817,8 @@ def write_summary_rows(
             col_idx = column_id_map.get(col_id)
             if col_idx:
                 worksheet.cell(row=buffalo_summary_row, column=col_idx, value=total_value)
+
+        # Write Cow Leather Summary Row
         unmerge_row(worksheet, leather_summary_row, num_columns)
         worksheet.cell(row=leather_summary_row, column=label_col_idx, value="TOTAL OF:").number_format = FORMAT_TEXT
         worksheet.cell(row=leather_summary_row, column=label_col_idx + 1, value="COW LEATHER").number_format = FORMAT_TEXT
@@ -806,43 +829,21 @@ def write_summary_rows(
             if col_idx:
                 worksheet.cell(row=leather_summary_row, column=col_idx, value=total_value)
 
-
-        # --- Apply Styles to Both Rows with Correct Order ---
+        # --- Apply Styling ---
         for row_num in [buffalo_summary_row, leather_summary_row]:
             for c_idx in range(1, num_columns + 1):
                 cell = worksheet.cell(row=row_num, column=c_idx)
-                current_col_id = idx_to_id_map.get(c_idx)
-
-                # Step 1: Apply general footer style first.
-                cell.font = font_to_apply
-                cell.alignment = align_to_apply
-                cell.border = no_border
-
-                # Step 2: Apply column-specific styles to override if present.
-                if styling_config and current_col_id:
-                    column_id_styles = styling_config.columnIdStyles
-                    if current_col_id in column_id_styles:
-                        col_style = column_id_styles[current_col_id]
-                        if 'alignment' in col_style:
-                            cell.alignment = Alignment(**{k: v for k, v in col_style['alignment'].items() if v is not None})
-                        if 'font' in col_style:
-                            cell.font = Font(**{k: v for k, v in col_style['font'].items() if v is not None})
-        
-        # --- Apply Row Height (remains the same) ---
-        footer_height = None
-        if styling_config:
-            row_heights_cfg = styling_config.rowHeights
-            footer_height = row_heights_cfg.get("footer", row_heights_cfg.get("header"))
-        if footer_height is not None:
-            try:
-                h_val = float(footer_height)
-                worksheet.row_dimensions[buffalo_summary_row].height = h_val
-                worksheet.row_dimensions[leather_summary_row].height = h_val
-            except (ValueError, TypeError): pass
+                col_id = idx_to_id_map.get(c_idx)
+                context = {
+                    "col_id": col_id,
+                    "col_idx": c_idx,
+                    "is_footer": True
+                }
+                apply_cell_style(cell, styling_config, context)
 
         return next_available_row
 
     except Exception as summary_err:
-        print(f"Warning: Failed processing summary rows: {summary_err}")
+        logging.error(f"Warning: Failed processing summary rows: {summary_err}") # Changed to logging.error
         traceback.print_exc()
         return start_row + 2
