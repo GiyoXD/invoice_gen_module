@@ -121,6 +121,7 @@ class TemplateStateBuilder:
         """
         Captures the state of the header section.
         """
+        print(f"[TemplateStateBuilder] Capturing header up to row {end_row}")
         # Determine the actual start row of the header by finding the first row with content
         header_start_row = 1
         for r_idx in range(1, end_row + 1):
@@ -145,12 +146,15 @@ class TemplateStateBuilder:
         # Capture column widths
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
+        
+        print(f"[TemplateStateBuilder] Header captured: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
 
     def capture_footer(self, data_end_row: int, max_possible_footer_row: int):
         """
         Captures the state of the footer section.
         The footer is assumed to start after the data_end_row.
         """
+        print(f"[TemplateStateBuilder] Capturing footer from row {data_end_row + 1} to {max_possible_footer_row}")
         footer_start_row = data_end_row + 1
         # Find the actual first row with content after data_end_row
         for r_idx in range(data_end_row + 1, max_possible_footer_row + 1):
@@ -191,11 +195,21 @@ class TemplateStateBuilder:
         # Capture column widths
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
+        
+        print(f"[TemplateStateBuilder] Footer captured: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, start row: {self.template_footer_start_row}")
 
     def restore_state(self, target_worksheet: Worksheet, data_start_row: int, data_table_end_row: int):
         """
         Restores the captured state to a new worksheet.
         """
+        print(f"[TemplateStateBuilder] Restoring state:")
+        print(f"  Header merges: {len(self.header_merged_cells)}")
+        print(f"  Footer merges: {len(self.footer_merged_cells)}")
+        print(f"  Header rows: {len(self.header_state)}")
+        print(f"  Footer rows: {len(self.footer_state)}")
+        print(f"  Template footer start row: {self.template_footer_start_row}")
+        print(f"  Data table end row: {data_table_end_row}")
+        
         # Restore header merged cells without offset
         for merged_cell_range_str in self.header_merged_cells:
             target_worksheet.merge_cells(merged_cell_range_str)

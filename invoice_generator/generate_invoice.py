@@ -1,6 +1,3 @@
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-
 # invoice_generator/generate_invoice.py
 # Main script to orchestrate invoice generation using a processor-based pattern.
 
@@ -18,20 +15,13 @@ from typing import Optional, Dict, Any, List
 import ast
 import re
 
-from .utils.layout import calculate_header_dimensions
-
 # --- Import utility functions from the new structure ---
-# from . import invoice_utils
-from .utils import merge_utils
-from .utils.layout import write_summary_rows # Import statement
-
+from . import invoice_utils
+from .builders.text_replacement_builder import TextReplacementBuilder
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
-from .builders.template_state_builder import TemplateStateBuilder
 
-from .config.loader import load_config, load_styling_config
-
-# --- Helper Functions (derive_paths, load_data) ---
+# --- Helper Functions (derive_paths, load_config, load_data) ---
 # These functions remain largely the same but are part of the new script.
 def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str: str) -> Optional[Dict[str, Path]]:
     """
@@ -106,9 +96,15 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
         traceback.print_exc()
         return None
 
-from .styling.models import StylingConfigModel
-
-
+def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
+    """Loads and parses the JSON configuration file."""
+    print(f"Loading configuration from: {config_path}")
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f: config_data = json.load(f)
+        print("Configuration loaded successfully.")
+        return config_data
+    except Exception as e:
+        print(f"Error loading configuration file {config_path}: {e}"); traceback.print_exc(); return None
 
 def load_data(data_path: Path) -> Optional[Dict[str, Any]]:
     """ Loads and parses the input data file. Supports .json and .pkl. """
@@ -155,7 +151,7 @@ def main():
     args = parser.parse_args()
 
     print("--- Starting Invoice Generation (Refactored) ---")
-    print(f"Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+    print(f"🕒 Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
 
     paths = derive_paths(args.input_data_file, args.templatedir, args.configdir)
     if not paths: sys.exit(1)
@@ -165,27 +161,37 @@ def main():
     if not config or not invoice_data: sys.exit(1)
 
     output_path = Path(args.output).resolve()
-    template_workbook = None
-    output_workbook = None
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        template_workbook = openpyxl.load_workbook(paths['template'])
-        output_workbook = openpyxl.Workbook()
-        # Remove the default sheet created by openpyxl.Workbook()
-        if "Sheet" in output_workbook.sheetnames: output_workbook.remove(output_workbook["Sheet"])
+        shutil.copy(paths['template'], output_path)
     except Exception as e:
-        print(f"Error preparing workbooks: {e}"); sys.exit(1)
-    print(f"Template workbook loaded and new output workbook created.")
+        print(f"Error copying template: {e}"); sys.exit(1)
+    print(f"Template copied successfully to {output_path}")
 
     print("\n4. Processing workbook...")
+    workbook = None
     processing_successful = True
 
     try:
+        workbook = openpyxl.load_workbook(output_path)
+
         sheets_to_process_config = config.get('sheets_to_process', [])
-        sheets_to_process = [s for s in sheets_to_process_config if s in template_workbook.sheetnames]
+        sheets_to_process = [s for s in sheets_to_process_config if s in workbook.sheetnames]
 
         if not sheets_to_process:
             print("Error: No valid sheets to process."); sys.exit(1)
+
+        # Use TextReplacementBuilder instead of old utils
+        if args.DAF:
+            text_replacer = TextReplacementBuilder(workbook=workbook, invoice_data=invoice_data)
+            text_replacer.build()
+        else:
+            # Still run header replacement for non-DAF mode
+            text_replacer = TextReplacementBuilder(workbook=workbook, invoice_data=invoice_data)
+            text_replacer._replace_placeholders()  # Only run placeholder replacement
+
+        sheet_data_map = config.get('sheet_data_map', {})
+        data_mapping_config = config.get('data_mapping', {})
 
         # Global pallet calculation remains the same
         final_grand_total_pallets = 0
@@ -195,115 +201,59 @@ def main():
             final_grand_total_pallets = sum(int(c) for t in processed_tables_data_for_calc.values() for c in t.get("pallet_count", []) if str(c).isdigit())
         print(f"DEBUG: Globally calculated final grand total pallets: {final_grand_total_pallets}")
 
-        sheet_data_source = config.get('sheet_data_map', {})
-        data_mapping_config = config.get('data_mapping', {})
-
         # --- REFACTORED Main Processing Loop ---
         for sheet_name in sheets_to_process:
             print(f"\n--- Processing Sheet: '{sheet_name}' ---")
-            if sheet_name not in template_workbook.sheetnames:
-                print(f"Warning: Sheet '{sheet_name}' not found in template. Skipping.")
+            if sheet_name not in workbook.sheetnames:
+                print(f"Warning: Sheet '{sheet_name}' not found. Skipping.")
                 continue
             
-            template_worksheet = template_workbook[sheet_name]
-            output_worksheet = output_workbook.create_sheet(title=sheet_name)
-
+            worksheet = workbook[sheet_name]
             sheet_config = data_mapping_config.get(sheet_name, {})
-            data_source_indicator = sheet_data_source.get(sheet_name)
+            data_source_indicator = sheet_data_map.get(sheet_name)
 
             if not sheet_config or not data_source_indicator:
                 print(f"Warning: No config for sheet '{sheet_name}'. Skipping.")
                 continue
 
-            # --- Unified "Finish Table First" Orchestration ---
+            # --- Processor Factory ---
             processor = None
-            styling_config = load_styling_config(sheet_config)
-
-            if data_source_indicator == "processed_tables_multi":
+            if data_source_indicator in ["processed_tables_multi", "processed_tables"]:
                 processor = MultiTableProcessor(
-                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets, styling_config
+                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
-            else:
+            else: # Default to single table processor
                 processor = SingleTableProcessor(
-                    output_workbook, output_worksheet, sheet_name, sheet_config, data_mapping_config,
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets, styling_config
+                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
+                    data_source_indicator, invoice_data, args, final_grand_total_pallets
                 )
-
+            
+            # --- Execute Processing ---
             if processor:
-                _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
-                template_state_builder = TemplateStateBuilder(template_worksheet, num_header_cols)
-                header_end_row = sheet_config.get('start_row', 1) - 1
-                template_state_builder.capture_header(header_end_row)
-
-                processor_result = processor.process()
-
-                if processor_result is not False:
-                    data_end_row_in_new_sheet = -1
-                    last_data_end_row = -1
-
-                    if isinstance(processor_result, tuple):
-                        data_end_row_in_new_sheet, last_data_end_row = processor_result
-                    else:
-                        data_end_row_in_new_sheet = processor_result
-                        last_data_end_row = data_end_row_in_new_sheet -1
-
-                    # Dynamically find the footer by scanning within the table's column width
-                    _, num_header_cols = calculate_header_dimensions(sheet_config.get('header_to_write', []))
-                    max_col_to_check = max(num_header_cols, template_worksheet.max_column)
-
-                    footer_start_row_in_template = -1
-                    for row in range(sheet_config.get('start_row', 1), template_worksheet.max_row + 1):
-                        if any(template_worksheet.cell(row=row, column=col).value for col in range(1, max_col_to_check + 1)):
-                            footer_start_row_in_template = row
-                            break
-                    
-                    data_end_row_in_template = footer_start_row_in_template - 1 if footer_start_row_in_template != -1 else template_worksheet.max_row
-                    template_state_builder.capture_footer(data_end_row_in_template, data_end_row_in_new_sheet)
-                    template_state_builder.restore_state(output_worksheet, data_end_row_in_new_sheet, data_end_row_in_new_sheet) # Pass data_start_row and data_table_end_row
-
-                    if sheet_config.get("summary_rows_config"):
-                        summary_rows_config = sheet_config["summary_rows_config"]
-                        # The next_row here is data_end_row_in_new_sheet + 1
-                        next_row_for_summary = data_end_row_in_new_sheet + 1
-                        next_row_after_summary = write_summary_rows(
-                            worksheet=output_worksheet,
-                            start_row=next_row_for_summary,
-                            header_info=header_info,
-                            all_tables_data=invoice_data.get("processed_tables_data", {}),
-                            table_keys=list(invoice_data.get("processed_tables_data", {}).keys()),
-                            footer_config=sheet_config.get("footer_configurations", {}),
-                            mapping_rules=sheet_config.get("data_mapping", {}),
-                            styling_config=styling_config,
-                            DAF_mode=args.DAF
-                        )
-                        # Update data_end_row_in_new_sheet to reflect the new end after summary rows
-                        data_end_row_in_new_sheet = next_row_after_summary - 1
-                else:
-                    processing_successful = False
+                processing_successful = processor.process()
+                if not processing_successful:
+                    print(f"--- ERROR occurred while processing sheet '{sheet_name}'. Halting. ---")
+                    break # Stop on first error
             else:
                 print(f"Warning: No suitable processor found for sheet '{sheet_name}'. Skipping.")
 
-            if not processing_successful:
-                print(f"--- ERROR occurred while processing sheet '{sheet_name}'. Halting. ---")
-                break
-
         # --- End of Loop ---
-
-
 
         print("\n--------------------------------")
         if processing_successful:
             print("5. Saving final workbook...")
-            output_workbook.save(output_path)
+            workbook.save(output_path)
             print(f"--- Workbook saved successfully: '{output_path}' ---")
+        else:
+            print("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
+            workbook.save(output_path)
 
     except Exception as e:
         print(f"\n--- UNHANDLED ERROR: {e} ---"); traceback.print_exc()
     finally:
-        if template_workbook: template_workbook.close()
-        if output_workbook:
-            try: output_workbook.close(); print("Output workbook closed.")
+        if workbook:
+            try: workbook.close(); print("Workbook closed.")
             except Exception: pass
 
     total_time = time.time() - start_time

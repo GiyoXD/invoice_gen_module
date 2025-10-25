@@ -1,6 +1,6 @@
 import unittest
 from openpyxl import Workbook
-from invoice_generator.utils.excel_operations import unmerge_row
+from invoice_generator.utils.layout import unmerge_row
 
 class TestExcelOperations(unittest.TestCase):
 

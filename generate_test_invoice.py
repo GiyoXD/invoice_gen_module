@@ -5,9 +5,9 @@ import os
 # Define the paths relative to the script's location
 script_dir = os.path.dirname(__file__)
 data_file = os.path.join(script_dir, "CLW.json")
-output_file = os.path.join(script_dir, "result_test.xlsx")
-template_dir = os.path.join(script_dir, "invoice_gen", "TEMPLATE")
-config_dir = os.path.join(script_dir, "invoice_gen", "config")
+output_file = os.path.join(script_dir, "result_test2.xlsx")
+template_dir = os.path.join(script_dir, "invoice_generator", "template")
+config_dir = os.path.join(script_dir, "invoice_generator", "config")
 orchestrator_path = os.path.join(script_dir, "invoice_generator", "generate_invoice.py")
 
 command = [

@@ -54,6 +54,34 @@ class FooterBuilder:
         }
         apply_cell_style(cell, self.sheet_styling_config, context)
 
+    def _apply_footer_row_height(self, footer_row: int):
+        """Apply footer height to a single footer row."""
+        if not self.sheet_styling_config or not self.sheet_styling_config.rowHeights:
+            return
+        
+        row_heights_cfg = self.sheet_styling_config.rowHeights
+        footer_height_config = row_heights_cfg.get("footer")
+        match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
+        
+        # Determine the footer height
+        final_footer_height = None
+        if match_header_height_flag:
+            # Get header height from config
+            header_height = row_heights_cfg.get("header")
+            if header_height is not None:
+                final_footer_height = header_height
+        if final_footer_height is None and footer_height_config is not None:
+            final_footer_height = footer_height_config
+        
+        # Apply the height
+        if final_footer_height is not None and footer_row > 0:
+            try:
+                h_val = float(final_footer_height)
+                if h_val > 0:
+                    self.worksheet.row_dimensions[footer_row].height = h_val
+            except (ValueError, TypeError):
+                pass
+
     def build(self) -> int:
         if not self.footer_config or self.footer_row_num <= 0:
             return -1
@@ -68,6 +96,9 @@ class FooterBuilder:
             elif footer_type == "grand_total":
                 self._build_grand_total_footer(current_footer_row)
 
+            # Apply row height to the footer row
+            self._apply_footer_row_height(current_footer_row)
+            
             current_footer_row += 1
 
             # Handle add-ons
@@ -75,12 +106,7 @@ class FooterBuilder:
             if "summary" in add_ons:
                 current_footer_row = self._build_summary_add_on(current_footer_row)
 
-            from ..styling.style_applier import apply_row_heights
-            apply_row_heights(
-                worksheet=self.worksheet,
-                sheet_styling_config=self.sheet_styling_config,
-                footer_row_index=current_footer_row
-            )
+
 
             return current_footer_row
 

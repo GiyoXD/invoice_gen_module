@@ -1,6 +1,6 @@
-import invoice_utils
-import style_utils
-import merge_utils
+from . import invoice_utils
+from .utils import style_utils
+from .utils import merge_utils
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from typing import Dict, List, Tuple

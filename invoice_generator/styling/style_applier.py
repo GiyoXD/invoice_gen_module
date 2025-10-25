@@ -95,20 +95,10 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
 
 
 def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_info: Optional[Dict[str, Any]] = None, data_row_indices: Optional[List[int]] = None, footer_row_index: Optional[int] = None, row_after_header_idx: int = -1, row_before_footer_idx: int = -1):
-    """
-    Sets row heights based on the configuration for header, data, footer, and specific rows.
-    Footer height can now optionally match the header height.
-
-    Args:
-        worksheet: The openpyxl Worksheet object.
-        sheet_styling_config: Styling configuration containing the 'row_heights' dictionary.
-        header_info: Dictionary with header row indices.
-        data_row_indices: List of 1-based indices for the actual data rows written.
-        footer_row_index: 1-based index of the footer row.
-        row_after_header_idx: 1-based index of the static/blank row after the header (-1 if none).
-        row_before_footer_idx: 1-based index of the static/blank row before the footer (-1 if none).
-    """
-    if not sheet_styling_config.rowHeights: return
+    import logging
+    logging.debug(f"sheet_styling_config: {sheet_styling_config}")
+    if not sheet_styling_config or not sheet_styling_config.rowHeights:
+        return
     row_heights_cfg = sheet_styling_config.rowHeights
 
     actual_header_height = None # Store the applied header height
@@ -120,6 +110,8 @@ def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[Styli
             h_val = float(height_val)
             if h_val > 0:
                 worksheet.row_dimensions[r_idx].height = h_val
+                import logging
+                logging.debug(f"Setting row {r_idx} height to {h_val}")
                 if desc == "header": # Store the height applied to the header
                     actual_header_height = h_val
             else: pass # Ignore non-positive heights

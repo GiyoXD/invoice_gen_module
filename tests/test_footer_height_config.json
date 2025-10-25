@@ -1,0 +1,43 @@
+{
+    "sheets_to_process": ["Invoice"],
+    "sheet_data_map": {
+        "Invoice": "aggregation"
+    },
+    "data_mapping": {
+        "Invoice": {
+            "start_row": 1,
+            "header_to_write": [
+                {
+                    "row": 0,
+                    "col": 0,
+                    "text": "Header 1",
+                    "id": "col_1"
+                },
+                {
+                    "row": 0,
+                    "col": 1,
+                    "text": "Header 2",
+                    "id": "col_2"
+                },
+                {
+                    "row": 0,
+                    "col": 2,
+                    "text": "Header 3",
+                    "id": "col_3"
+                }
+            ],
+            "styling": {
+                "row_heights": {
+                    "header": 20,
+                    "footer": 10,
+                    "footer_matches_header_height": true
+                }
+            },
+            "footer_configurations": {
+                "type": "regular",
+                "total_text": "Total",
+                "total_text_column_id": "col_1"
+            }
+        }
+    }
+}

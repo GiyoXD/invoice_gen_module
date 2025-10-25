@@ -21,6 +21,7 @@
           "row": 0,
           "col": 0,
           "text": "Mark & No.",
+          "id": "col_static",
           "colspan": 1
         },
         {

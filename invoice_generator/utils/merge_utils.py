@@ -221,6 +221,11 @@ def force_unmerge_from_row_down(worksheet: Worksheet, start_row: int):
             try:
                 worksheet.unmerge_cells(str(merged_range))
                 unmerged_count += 1
+            except KeyError as e:
+                # This can happen when openpyxl tries to delete cells that don't exist
+                # during unmerge. It's safe to ignore this error.
+                print(f"Warning: KeyError when unmerging {merged_range}: {e} (ignoring)")
+                unmerged_count += 1
             except Exception as e:
                 print(f"Error unmerging cells: {e}")
                 traceback.print_exc(file=sys.stdout) # Print to stdout

@@ -1,13 +1,21 @@
 from typing import Any, Dict, Optional
 from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl import Workbook
 
 from ..styling.models import StylingConfigModel
 from .header_builder import HeaderBuilder
-from .table_builder import TableBuilder
+from .data_table_builder import DataTableBuilder
+from .text_replacement_builder import TextReplacementBuilder
+from .template_state_builder import TemplateStateBuilder
 
 class LayoutBuilder:
+    """
+    The Director in the Builder pattern.
+    Coordinates all builders to construct the complete document layout.
+    """
     def __init__(
         self,
+        workbook: Workbook,
         worksheet: Worksheet,
         sheet_name: str,
         sheet_config: Dict[str, Any],
@@ -16,7 +24,9 @@ class LayoutBuilder:
         styling_config: Optional[StylingConfigModel] = None,
         args: Optional[Any] = None,
         final_grand_total_pallets: int = 0,
+        enable_text_replacement: bool = False,
     ):
+        self.workbook = workbook
         self.worksheet = worksheet
         self.sheet_name = sheet_name
         self.sheet_config = sheet_config
@@ -25,23 +35,65 @@ class LayoutBuilder:
         self.styling_config = styling_config
         self.args = args
         self.final_grand_total_pallets = final_grand_total_pallets
+        self.enable_text_replacement = enable_text_replacement
+        
+        # Store results after build
+        self.header_info = None
+        self.next_row_after_footer = -1
+        self.template_state_builder = None
 
     def build(self) -> bool:
+        """
+        Orchestrates all builders in the correct sequence.
+        """
+        # 1. Text Replacement (if enabled) - Pre-processing
+        if self.enable_text_replacement:
+            text_replacer = TextReplacementBuilder(
+                workbook=self.workbook,
+                invoice_data=self.invoice_data
+            )
+            if self.args and self.args.DAF:
+                text_replacer.build()  # Run both placeholder and DAF replacements
+            else:
+                text_replacer._replace_placeholders()  # Only placeholders
+        
+        # 2. Template State Capture - Capture header state first
+        num_header_cols = len(self.sheet_config.get('header_to_write', []))
+        self.template_state_builder = TemplateStateBuilder(
+            worksheet=self.worksheet,
+            num_header_cols=num_header_cols
+        )
+        
+        # 3. Header Builder
         start_row = self.sheet_config.get('start_row', 1)
         header_to_write = self.sheet_config.get('header_to_write')
+        
+        # Convert styling_config dict to StylingConfigModel if needed
+        styling_model = self.styling_config
+        if styling_model and not isinstance(styling_model, StylingConfigModel):
+            try:
+                styling_model = StylingConfigModel(**styling_model)
+            except Exception as e:
+                print(f"Warning: Could not create StylingConfigModel: {e}")
+                styling_model = None
 
         header_builder = HeaderBuilder(
             worksheet=self.worksheet,
             start_row=start_row,
             header_layout_config=header_to_write,
-            sheet_styling_config=self.styling_config,
+            sheet_styling_config=styling_model,
         )
-        header_info = header_builder.build()
+        self.header_info = header_builder.build()
 
-        if not header_info or not header_info.get('column_map'):
+        if not self.header_info or not self.header_info.get('column_map'):
             print(f"Error: Cannot fill data for '{self.sheet_name}' because header_info or column_map is missing.")
             return False
+        
+        # Capture header state after header is written
+        header_end_row = self.header_info['second_row_index']
+        self.template_state_builder.capture_header(end_row=header_end_row)
 
+        # 4. Data Table Builder (handles data rows + footer internally)
         sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
         add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
         static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
@@ -78,16 +130,16 @@ class LayoutBuilder:
             print(f"Warning: Data source '{data_source_indicator}' unknown or data empty. Skipping fill.")
             return True
 
-        table_builder = TableBuilder(
+        data_table_builder = DataTableBuilder(
             worksheet=self.worksheet,
             sheet_name=self.sheet_name,
             sheet_config=self.sheet_config,
             all_sheet_configs=self.all_sheet_configs,
             data_source=data_to_fill,
             data_source_type=data_source_type,
-            header_info=header_info,
+            header_info=self.header_info,
             mapping_rules=sheet_inner_mapping_rules_dict,
-            sheet_styling_config=self.styling_config,
+            sheet_styling_config=styling_model,
             add_blank_after_header=add_blank_after_hdr_flag,
             static_content_after_header=static_content_after_hdr_dict,
             add_blank_before_footer=add_blank_before_ftr_flag,
@@ -105,10 +157,28 @@ class LayoutBuilder:
             is_last_table=True,
         )
 
-        fill_success, _, _, _, _ = table_builder.build()
+        fill_success, self.next_row_after_footer, _, _, _ = data_table_builder.build()
 
         if not fill_success:
             print(f"Failed to fill table data/footer for sheet '{self.sheet_name}'.")
             return False
-            
+        
+        # 5. Template State Capture & Restore - Capture footer, then restore entire template state
+        data_start_row = self.header_info['second_row_index'] + 1
+        data_table_end_row = self.next_row_after_footer - 1
+        
+        # Capture footer state (calculate max possible footer row from template)
+        max_possible_footer_row = self.worksheet.max_row
+        self.template_state_builder.capture_footer(
+            data_end_row=data_table_end_row,
+            max_possible_footer_row=max_possible_footer_row
+        )
+        
+        # Restore template state (merges, heights, etc.)
+        self.template_state_builder.restore_state(
+            target_worksheet=self.worksheet,
+            data_start_row=data_start_row,
+            data_table_end_row=data_table_end_row
+        )
+        
         return True
