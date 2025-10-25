@@ -551,7 +551,7 @@ def fill_invoice_data(
         if add_blank_before_footer and row_before_footer_idx > 0:
             try:
                 # Step 1: Fill the row with content (this applies default styles)
-                fill_static_row(worksheet, row_before_footer_idx, num_columns, static_content_before_footer)
+                fill_static_row(worksheet, row_before_footer_idx, num_columns, static_content_before_footer, sheet_styling_config)
                 
                 # Step 2: Apply the special styling and borders for this specific row
                 for c_idx in range(1, num_columns + 1):

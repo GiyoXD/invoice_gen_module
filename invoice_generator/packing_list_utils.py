@@ -5,6 +5,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from typing import Dict, List, Tuple
 from openpyxl.styles import Font, Alignment, Border, Side
+from .builders.header_builder import HeaderBuilder
+from .styling.models import StylingConfigModel
 
 
 
@@ -62,7 +64,14 @@ def generate_full_packing_list(worksheet: Worksheet, start_row: int, packing_lis
         table_data = raw_data[table_key]
         num_data_rows = len(table_data.get('net', []))
         
-        header_info = invoice_utils.write_header(worksheet, write_pointer_row, header_to_write, styling_config)
+        styling_config_model = StylingConfigModel(**styling_config)
+        header_builder = HeaderBuilder(
+            worksheet=worksheet, 
+            start_row=write_pointer_row, 
+            header_layout_config=header_to_write, 
+            sheet_styling_config=styling_config_model
+        )
+        header_info = header_builder.build()
         all_header_infos.append(header_info)
         write_pointer_row = header_info.get('second_row_index', write_pointer_row) + 1
         col_map = header_info.get('column_id_map', {})

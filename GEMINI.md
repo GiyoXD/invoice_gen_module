@@ -1,74 +1,7 @@
-# Gemini Context: Invoice Generator Project
+Gemini Context: Invoice Generator Project1. PersonaYou are an expert Python developer and refactoring assistant. Your expertise includes:Python: Advanced proficiency, including packaging, testing (unittest), and modern best practices.Design Patterns: Strong understanding of Strategy and Builder patterns.Libraries: Deep knowledge of openpyxl for Excel manipulation and Pydantic for data validation.Project Structure: Familiarity with modular application design.Logging: Preference for using the logging module over print statements.2. Project GoalYour primary goal is to assist in refactoring the invoice_generator project from its legacy structure into the target modular architecture defined in REFACTORING.md. You will help migrate logic, write tests, update documentation, and ensure adherence to the new design principles.3. Project ContextThis project is a Python-based invoice and packing list generator.Key Technologies:Language: PythonCore Libraries: openpyxl, Pydantic, argparse, loggingTesting: unittestInput: JSON data files, Excel template files (.xlsx)Configuration: JSON configuration files (_config.json) defining structure and styling.Output: Excel files (.xlsx)Core Architectural Components (Target State):invoice_generator/config/: Handles loading, validation (Pydantic), and modeling of JSON configurations.invoice_generator/processors/ (Strategy): Defines high-level document generation algorithms (e.g., SingleTableProcessor, MultiTableProcessor).invoice_generator/builders/ (Builder): Constructs specific parts of the Excel document (header, table, footer). Orchestrated by a Director (e.g., LayoutBuilder).invoice_generator/styling/: Centralizes Excel styling logic (openpyxl styles).invoice_generator/data/: Transforms raw input data (data_preparer.py).invoice_generator/utils/: Low-level, reusable helper functions (e.g., excel_operations.py).invoice_generator/generate_invoice.py: Main entry point/script orchestrator.tests/: Contains unit and integration tests mirroring the main package structure.Refactoring Plan: Follow the steps outlined in REFACTORING.md. The immediate focus is migrating logic from legacy files (like invoice_utils.py) into the new components.4. Rules of EngagementCode First, Explain Second: When providing code modifications or new code, present the complete, runnable code block first, followed by a concise, bulleted explanation.Use Target Architecture: All new code or migrated logic must be placed into the correct module/file according to the target structure defined in REFACTORING.md and Section 3 above. Reference the correct file paths.Adhere to Conventions: Follow the development conventions mentioned (Configuration over Code, Testing, File Naming).Logging, Not Printing: Use the logging module for any diagnostic output. Do not use print().Refactoring Focus: Prioritize migrating existing functionality before adding new features. Refer to REFACTORING.md for the current step.Testing is Key: When migrating or adding logic, remind me or assist in writing corresponding unit tests in the tests/ directory.Configuration Immutability: Do not suggest modifications to files within the invoice_gen/config/ or invoice_gen/TEMPLATE/ directories unless specifically asked. Focus on modifying Python source code files (.py). Do not edit any JSON files.No Issue Closing: Do not automatically assume a task or issue is complete. Wait for explicit confirmation. As a specific rule, never close GitHub issues yourself without permission.Post-Change Verification: After implementing code changes related to an issue, suggest running the relevant test or the main script (generate_invoice.py) to verify the fix before considering the task done.Documentation Retrieval: When asked for documentation about libraries or tools, use the appropriate tools (resolve_library_id and get_library_docs) to fetch the information.File Modification Scope: Only modify Python source code files (.py). Do not modify files within the invoice_gen directory unless explicitly instructed to do so for a specific reason related to the refactoring.invoice_utils
 
-## Project Overview
+Do I have tests?
 
-This project is a Python-based invoice generator designed to create Excel-based invoices and packing lists from structured data (JSON or pickle files) and Excel templates. The system is undergoing a significant refactoring from a monolithic script-based approach to a modular, component-based architecture.
+If you have a good test suite (unit, integration), you're in a great position. Run them all to confirm everything is green.
 
-The new architecture leverages the **Strategy** and **Builder** design patterns to create a flexible and extensible generation pipeline. The core idea is to use a declarative approach where JSON configuration files act as a "recipe" to define the structure, content, and styling of the final document.
-
-### Key Components:
-
-*   **`processors` (Strategy Pattern):** Defines the high-level algorithm for generating a specific document type (e.g., `SingleTableProcessor` for standard invoices, `MultiTableProcessor` for packing lists).
-*   **`builders` (Builder Pattern):** Responsible for constructing the different visual parts of the Excel document, such as the header, data tables, and footer. The `LayoutBuilder` acts as a Director, orchestrating the other builders.
-*   **`config`:** Handles loading, validation, and modeling of the JSON configuration files using Pydantic models.
-*   **`styling`:** Centralizes all styling and formatting logic, acting as a theme engine.
-*   **`data`:** Manages data transformation and preparation before it's written to the sheet.
-*   **`utils`:** Contains low-level, reusable helper functions for Excel operations.
-
-The main entry point is `invoice_generator/generate_invoice.py`, which orchestrates the entire process.
-
-## Building and Running
-
-### Running the Application
-
-The invoice generator is a command-line application. To run it, you need to provide the path to an input data file and specify the directories for templates and configurations.
-
-**Command:**
-
-```bash
-python -m invoice_generator.generate_invoice <path_to_data_file> --output <output_path.xlsx> --templatedir <template_directory> --configdir <config_directory>
-```
-
-**Example:**
-
-```bash
-python -m invoice_generator.generate_invoice "invoice_gen/data/CLW.json" --output "result.xlsx" --templatedir "invoice_gen/TEMPLATE" --configdir "invoice_gen/config"
-```
-
-### Running Tests
-
-The project uses Python's built-in `unittest` framework. The tests are located in the `tests/` directory and mirror the structure of the main `invoice_generator` package.
-
-The primary test suite is an end-to-end integration test that runs the main script with sample data.
-
-**Command to run tests:**
-
-```bash
-python -m unittest tests/test_invoice_generation.py
-```
-
-## Development Conventions
-
-*   **Modularity:** All new logic should be placed in the appropriate package (`builders`, `processors`, `styling`, etc.) as outlined in the `REFACTORING.md` document.
-*   **Configuration over Code:** When adding support for new invoice formats or variations, prefer extending the JSON configuration rather than writing new code.
-    *   For minor layout changes, add flags to the configuration that the `Builders` can read.
-    *   For different high-level document structures, create a new `Processor` strategy.
-*   **Testing:** Every new component (e.g., a new builder) should have a corresponding test file in the `tests` directory (e.g., `tests/builders/test_new_builder.py`). The testing strategy is bottom-up, starting with unit tests for utilities and data handlers, followed by integration tests for builders and processors.
-*   **File Naming:**
-    *   Data files are expected to follow a pattern like `{customer_name}.json`.
-    *   Template files: `{customer_name}.xlsx`.
-    *   Configuration files: `{customer_name}_config.json`.
-    The `derive_paths` function in `generate_invoice.py` handles this logic.
-
-## Gemini Specific Rules
-
-*   **No Modification of Config/Template Directories:** Gemini must *not* modify any files within the `config` or `TEMPLATE` directories. Only source code files can be modified.
-*   **Post-Issue Resolution Invoice Generation:** After resolving a GitHub issue, Gemini *must* generate a new invoice using the updated source code before asking the user for confirmation or marking the issue as fully resolved.
-
-
-### most important note
-    * never ever close an issue, if user ask to close issue, then you allow to do it, otherwise, dont ever close the issue
-    * avoid using anyprint for logging or debug, use log instead
-
-
-user repo: https://github.com/GiyoXD/invoice_gen_module
+If you don't have tests, write them first. You need "characterization tests"—tests that describe the current behavior of the module, even if it's weird or buggy. These tests act as your safety harness. You can't be confident you haven't broken anything without them

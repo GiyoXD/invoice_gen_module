@@ -23,7 +23,7 @@ from .utils.layout import calculate_header_dimensions
 # --- Import utility functions from the new structure ---
 # from . import invoice_utils
 from .utils import merge_utils
-from .utils.writing import write_summary_rows # Import statement
+from .utils.layout import write_summary_rows # Import statement
 
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor

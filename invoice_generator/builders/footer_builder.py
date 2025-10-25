@@ -109,7 +109,8 @@ class FooterBuilder:
                     total_text_col_idx = column_map_by_id.get(total_text_col_id)
         
         if total_text_col_idx:
-            self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
+            cell = self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
+            self._apply_footer_cell_style(cell, total_text_col_id)
 
         pallet_col_id = self.footer_config.get("pallet_count_column_id")
         
@@ -126,7 +127,8 @@ class FooterBuilder:
         
         if pallet_col_idx:
             pallet_text = f"{self.pallet_count} PALLET{'S' if self.pallet_count != 1 else ''}"
-            self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
+            cell = self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
+            self._apply_footer_cell_style(cell, pallet_col_id)
 
         sum_column_ids = self.footer_config.get("sum_column_ids", [])
         if self.sum_ranges:
@@ -136,7 +138,8 @@ class FooterBuilder:
                     col_letter = get_column_letter(col_idx)
                     sum_parts = [f"{col_letter}{start}:{col_letter}{end}" for start, end in self.sum_ranges]
                     formula = f"=SUM({','.join(sum_parts)})"
-                    self.worksheet.cell(row=current_footer_row, column=col_idx, value=formula)
+                    cell = self.worksheet.cell(row=current_footer_row, column=col_idx, value=formula)
+                    self._apply_footer_cell_style(cell, col_id)
         
         idx_to_id_map = {v: k for k, v in column_map_by_id.items()}
         for c_idx in range(1, num_columns + 1):
@@ -184,7 +187,8 @@ class FooterBuilder:
                     total_text_col_idx = column_map_by_id.get(total_text_col_id)
         
         if total_text_col_idx:
-            self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
+            cell = self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
+            self._apply_footer_cell_style(cell, total_text_col_id)
 
         pallet_col_id = self.footer_config.get("pallet_count_column_id")
         
@@ -201,7 +205,8 @@ class FooterBuilder:
         
         if pallet_col_idx:
             pallet_text = f"{self.pallet_count} PALLET{'S' if self.pallet_count != 1 else ''}"
-            self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
+            cell = self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
+            self._apply_footer_cell_style(cell, pallet_col_id)
 
         sum_column_ids = self.footer_config.get("sum_column_ids", [])
         if self.sum_ranges:
@@ -211,7 +216,8 @@ class FooterBuilder:
                     col_letter = get_column_letter(col_idx)
                     sum_parts = [f"{col_letter}{start}:{col_letter}{end}" for start, end in self.sum_ranges]
                     formula = f"=SUM({','.join(sum_parts)})"
-                    self.worksheet.cell(row=current_footer_row, column=col_idx, value=formula)
+                    cell = self.worksheet.cell(row=current_footer_row, column=col_idx, value=formula)
+                    self._apply_footer_cell_style(cell, col_id)
 
         idx_to_id_map = {v: k for k, v in column_map_by_id.items()}
         for c_idx in range(1, num_columns + 1):
@@ -241,7 +247,7 @@ class FooterBuilder:
                 self.worksheet.merge_cells(start_row=current_footer_row, start_column=resolved_start_col, end_row=current_footer_row, end_column=end_col)
 
     def _build_summary_add_on(self, current_footer_row: int) -> int:
-        from ..utils.writing import write_summary_rows # NEW IMPORT
+        from ..utils.layout import write_summary_rows # NEW IMPORT
         if self.DAF_mode and self.dynamic_desc_used and self.sheet_name == "Packing list" and self.is_last_table and self.all_tables_data and self.table_keys and self.mapping_rules:
             return write_summary_rows(
                 worksheet=self.worksheet,

@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..utils.writing import write_header
+from ..builders.header_builder import HeaderBuilder
 from ..builders.footer_builder import FooterBuilder
 from ..utils.layout import unmerge_block, safe_unmerge_block
 from ..utils import merge_utils
@@ -34,7 +34,13 @@ class MultiTableProcessor(BaseProcessor):
             
             is_last_table = (i == num_tables - 1) # Calculate is_last_table
 
-            header_info = write_header(self.worksheet, write_pointer_row, header_to_write, self.styling_config)
+            header_builder = HeaderBuilder(
+                worksheet=self.worksheet, 
+                start_row=write_pointer_row, 
+                header_layout_config=header_to_write, 
+                sheet_styling_config=self.styling_config
+            )
+            header_info = header_builder.build()
             all_header_infos.append(header_info)
             write_pointer_row = header_info.get('second_row_index', write_pointer_row) + 1
             col_map = header_info.get('column_id_map', {})

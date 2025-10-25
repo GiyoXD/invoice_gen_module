@@ -3,13 +3,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Border, Side, Font
 from typing import Dict, Any, Optional, List, Tuple
 
-# --- Style Constants ---
-thin_side = Side(border_style="thin", color="000000")
-thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-no_border = Border(left=None, right=None, top=None, bottom=None)
-center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-bold_font = Font(bold=True)
+# Import centralized style constants
+from .style_config import (
+    THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, SIDE_BORDER
+)
 
 # --- Constants for Number Formats ---
 FORMAT_GENERAL = 'General'
@@ -29,7 +26,23 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
     col_idx = context.get("col_idx")
     static_col_idx = context.get("static_col_idx")
     is_pre_footer = context.get("is_pre_footer", False)
+    is_static_row = context.get("is_static_row", False)
+    is_header = context.get("is_header", False)
     DAF_mode = context.get("DAF_mode", False)
+
+    # Handle static rows first
+    if is_static_row:
+        cell.alignment = CENTER_ALIGNMENT
+        cell.border = NO_BORDER
+        if isinstance(cell.value, (int, float)):
+            cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2 if isinstance(cell.value, float) else FORMAT_NUMBER_COMMA_SEPARATED1
+        else:
+            cell.number_format = FORMAT_TEXT
+        return
+        
+    if is_header:
+        cell.border = THIN_BORDER
+        return
 
     # --- 1. Apply Font, Alignment, and Number Formats ---
     if col_id and styling_config:
@@ -64,23 +77,21 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
                     elif isinstance(cell.value, int): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED1
 
     # --- 2. Apply Conditional Borders ---
-    thin_side = Side(border_style="thin", color="000000")
-    
     # Special handling for the pre-footer row
     if is_pre_footer:
         if col_idx == static_col_idx:
-            cell.border = Border(left=thin_side, right=thin_side)
+            cell.border = SIDE_BORDER
         else:
-            cell.border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+            cell.border = THIN_BORDER
         return
 
     # UPDATED: Simplified logic for main data rows
     if col_idx == static_col_idx:
         # The static column ONLY ever gets side borders.
-        cell.border = Border(left=thin_side, right=thin_side)
+        cell.border = SIDE_BORDER
     elif col_idx: 
         # All other columns get a full grid.
-        cell.border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+        cell.border = THIN_BORDER
 
 
 def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_info: Optional[Dict[str, Any]] = None, data_row_indices: Optional[List[int]] = None, footer_row_index: Optional[int] = None, row_after_header_idx: int = -1, row_before_footer_idx: int = -1):
@@ -154,8 +165,8 @@ def apply_header_style(cell: Worksheet.cell, styling_config: StylingConfigModel)
     """
     Applies styling to a header cell, using config values with fallbacks.
     """
-    effective_header_font = bold_font
-    effective_header_align = center_alignment
+    effective_header_font = BOLD_FONT
+    effective_header_align = CENTER_ALIGNMENT
 
     if styling_config:
         if styling_config.headerFont:

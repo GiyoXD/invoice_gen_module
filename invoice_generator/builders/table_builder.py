@@ -7,10 +7,10 @@ import traceback
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
 from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
-from invoice_generator.utils.writing import fill_static_row, apply_row_merges, write_grand_total_weight_summary, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
+from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
 from .footer_builder import FooterBuilder
-from invoice_generator.styling.style_applier import thin_border, no_border, center_alignment, left_alignment, bold_font
+from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT
 
 
 # --- Constants for Number Formats ---
@@ -142,8 +142,8 @@ class TableBuilder:
 
             # --- Get Styling Config --- (Keep existing)
             force_text_headers = []
-            effective_header_font = bold_font # Start with default
-            effective_header_align = center_alignment # Start with default
+            effective_header_font = BOLD_FONT # Start with default
+            effective_header_align = CENTER_ALIGNMENT # Start with default
 
             if self.sheet_styling_config:
                 if self.sheet_styling_config.headerFont:
@@ -355,7 +355,7 @@ class TableBuilder:
             if self.add_blank_before_footer and self.row_before_footer_idx > 0:
                 try:
                     # Step 1: Fill the row with content (this applies default styles)
-                    fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, self.static_content_before_footer)
+                    fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, self.static_content_before_footer, self.sheet_styling_config)
                     
                     # Step 2: Apply the special styling and borders for this specific row
                     for c_idx in range(1, num_columns + 1):
