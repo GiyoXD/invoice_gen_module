@@ -9,7 +9,7 @@ from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unme
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
-from .footer_builder import FooterBuilder
+# FooterBuilder is now called by LayoutBuilder (proper Director pattern)
 from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT
 
 
@@ -408,38 +408,10 @@ class DataTableBuilder:
             footer_config = self.sheet_config.get("footer_configurations", {})
             data_range_to_sum = [(self.data_start_row, self.data_end_row)]
 
-            pallet_count = 0
-            if self.data_source_type == "processed_tables":
-                pallet_count = self.local_chunk_pallets
-            else:
-                pallet_count = self.grand_total_pallets
-
-            footer_builder = FooterBuilder(
-                worksheet=self.worksheet,
-                footer_row_num=self.footer_row_final,
-                header_info=self.header_info,
-                sum_ranges=data_range_to_sum,
-                footer_config=footer_config,
-                pallet_count=pallet_count,
-                DAF_mode=self.data_source_type == "DAF_aggregation",
-                sheet_styling_config=self.sheet_styling_config,
-                all_tables_data=self.all_tables_data,
-                table_keys=self.table_keys,
-                mapping_rules=self.mapping_rules,
-                sheet_name=self.sheet_name,
-                is_last_table=self.is_last_table,
-                dynamic_desc_used=self.dynamic_desc_used,
-            )
-            next_row_after_footer = footer_builder.build()
-            
-            # Apply footer height to all footer rows (including add-ons like grand total)
-            if next_row_after_footer > self.footer_row_final:
-                # Multiple footer rows were created (e.g., regular footer + grand total)
-                for footer_row in range(self.footer_row_final, next_row_after_footer):
-                    self._apply_footer_row_height(footer_row)
-            else:
-                # Single footer row
-                self._apply_footer_row_height(self.footer_row_final)
+            # FooterBuilder is now called by LayoutBuilder (Director pattern)
+            # DataTableBuilder only prepares the data and returns the position
+            # Apply footer height to the initial footer row position
+            self._apply_footer_row_height(self.footer_row_final)
     # No need to pass font, alignment, num_columns, etc. as the
     # function gets this info from header_info and footer_config.
         # --- Apply Merges ---
@@ -462,8 +434,8 @@ class DataTableBuilder:
 
         import logging
         logging.debug("Reached end of try block in DataTableBuilder.build()")
-        # --- Finalization --- (Keep existing)
-        next_available_row_final = self.footer_row_final + 1
+        # --- Finalization ---
+        # Return footer_row_final so LayoutBuilder can call FooterBuilder at this position
         if self.actual_rows_to_process == 0: self.data_start_row = -1; self.data_end_row = -1
         
         # --- Apply Row Heights --- (Moved outside of try-catch to ensure it runs)
@@ -477,4 +449,5 @@ class DataTableBuilder:
             row_before_footer_idx=self.row_before_footer_idx
         )
         
-        return True, next_available_row_final, self.data_start_row, self.data_end_row, self.local_chunk_pallets
+        # Return: success, footer_row_position, data_start, data_end, pallets
+        return True, self.footer_row_final, self.data_start_row, self.data_end_row, self.local_chunk_pallets

@@ -5,6 +5,7 @@ from openpyxl import Workbook
 from ..styling.models import StylingConfigModel
 from .header_builder import HeaderBuilder
 from .data_table_builder import DataTableBuilder
+from .footer_builder import FooterBuilder
 from .text_replacement_builder import TextReplacementBuilder
 from .template_state_builder import TemplateStateBuilder
 
@@ -102,7 +103,7 @@ class LayoutBuilder:
             print(f"Error: Cannot fill data for '{self.sheet_name}' because header_info or column_map is missing.")
             return False
 
-        # 5. Data Table Builder (handles data rows + footer internally)
+        # 5. Data Table Builder (writes data rows, returns footer position)
         sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
         add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
         static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
@@ -166,17 +167,58 @@ class LayoutBuilder:
             is_last_table=True,
         )
 
-        fill_success, self.next_row_after_footer, _, _, _ = data_table_builder.build()
+        fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
 
         if not fill_success:
-            print(f"Failed to fill table data/footer for sheet '{self.sheet_name}'.")
+            print(f"Failed to fill table data for sheet '{self.sheet_name}'.")
             return False
         
-        # 6. Template State Restoration
+        # 6. Footer Builder (proper Director pattern - called explicitly by LayoutBuilder)
+        # Prepare footer parameters
+        pallet_count = 0
+        if data_source_type == "processed_tables":
+            pallet_count = local_chunk_pallets
+        else:
+            pallet_count = self.final_grand_total_pallets
+
+        # Get footer config and sum ranges
+        footer_config = self.sheet_config.get('footer_configurations', {})
+        data_range_to_sum = []
+        if data_start_row > 0 and data_end_row >= data_start_row:
+            data_range_to_sum = [(data_start_row, data_end_row)]
+
+        footer_builder = FooterBuilder(
+            worksheet=self.worksheet,
+            footer_row_num=footer_row_position,
+            header_info=self.header_info,
+            sum_ranges=data_range_to_sum,
+            footer_config=footer_config,
+            pallet_count=pallet_count,
+            DAF_mode=data_source_type == "DAF_aggregation",
+            sheet_styling_config=styling_model,
+            all_tables_data=None,  # TODO: Pass if multi-table support needed
+            table_keys=None,
+            mapping_rules=sheet_inner_mapping_rules_dict,
+            sheet_name=self.sheet_name,
+            is_last_table=True,
+            dynamic_desc_used=False,  # TODO: Track this if needed
+        )
+        self.next_row_after_footer = footer_builder.build()
+        
+        # Apply footer height to all footer rows (including add-ons like grand total)
+        if self.next_row_after_footer > footer_row_position:
+            # Multiple footer rows were created (e.g., regular footer + grand total)
+            for footer_row in range(footer_row_position, self.next_row_after_footer):
+                self._apply_footer_row_height(footer_row, styling_model)
+        else:
+            # Single footer row
+            self._apply_footer_row_height(footer_row_position, styling_model)
+        
+        # 7. Template State Restoration (restores merges, heights, widths)
         # According to issue #18: BOTH data_start_row and data_table_end_row should be set
         # to write_pointer_row (the row AFTER all dynamically generated content including footer).
         # This places the template's static footer AFTER everything, not overwriting our footer.
-        write_pointer_row = self.next_row_after_footer - 1  # Last row with content
+        write_pointer_row = self.next_row_after_footer  # Next available row (after footer)
         
         # Restore template state (merges, heights, etc.)
         self.template_state_builder.restore_state(
@@ -186,3 +228,31 @@ class LayoutBuilder:
         )
         
         return True
+    
+    def _apply_footer_row_height(self, footer_row: int, styling_config):
+        """Helper method to apply footer height to a single footer row."""
+        if not styling_config or not styling_config.rowHeights:
+            return
+        
+        row_heights_cfg = styling_config.rowHeights
+        footer_height_config = row_heights_cfg.get("footer")
+        match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
+        
+        # Determine the footer height
+        final_footer_height = None
+        if match_header_height_flag:
+            # Get header height from config
+            header_height = row_heights_cfg.get("header")
+            if header_height is not None:
+                final_footer_height = header_height
+        if final_footer_height is None and footer_height_config is not None:
+            final_footer_height = footer_height_config
+        
+        # Apply the height
+        if final_footer_height is not None and footer_row > 0:
+            try:
+                h_val = float(final_footer_height)
+                if h_val > 0:
+                    self.worksheet.row_dimensions[footer_row].height = h_val
+            except (ValueError, TypeError):
+                pass
