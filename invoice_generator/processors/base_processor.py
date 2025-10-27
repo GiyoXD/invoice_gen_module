@@ -12,12 +12,14 @@ class SheetProcessor(ABC):
     """
     def __init__(
         self,
-        workbook: Workbook,
-        worksheet: Worksheet,
+        template_workbook: Workbook,
+        output_workbook: Workbook,
+        template_worksheet: Worksheet,
+        output_worksheet: Worksheet,
         sheet_name: str,
         sheet_config: Dict[str, Any],
         data_mapping_config: Dict[str, Any],
-        data_source_indicator: str, # <-- ADDED
+        data_source_indicator: str,
         invoice_data: Dict[str, Any],
         cli_args: argparse.Namespace,
         final_grand_total_pallets: int
@@ -26,8 +28,10 @@ class SheetProcessor(ABC):
         Initializes the processor with all necessary data and configurations.
 
         Args:
-            workbook: The openpyxl Workbook object.
-            worksheet: The openpyxl Worksheet object to be processed.
+            template_workbook: The template workbook (READ-ONLY usage for state capture)
+            output_workbook: The output workbook (WRITABLE for final output)
+            template_worksheet: The template worksheet to read state from
+            output_worksheet: The output worksheet to write to
             sheet_name: The name of the worksheet.
             sheet_config: The specific configuration section for this sheet.
             data_mapping_config: The entire 'data_mapping' section from the config.
@@ -36,12 +40,19 @@ class SheetProcessor(ABC):
             cli_args: The command-line arguments.
             final_grand_total_pallets: The pre-calculated total number of pallets.
         """
-        self.workbook = workbook
-        self.worksheet = worksheet
+        self.template_workbook = template_workbook
+        self.output_workbook = output_workbook
+        self.template_worksheet = template_worksheet
+        self.output_worksheet = output_worksheet
+        
+        # Keep old names for backward compatibility during transition
+        self.workbook = output_workbook
+        self.worksheet = output_worksheet
+        
         self.sheet_name = sheet_name
         self.sheet_config = sheet_config
         self.data_mapping_config = data_mapping_config
-        self.data_source_indicator = data_source_indicator # <-- ADDED
+        self.data_source_indicator = data_source_indicator
         self.invoice_data = invoice_data
         self.args = cli_args
         self.final_grand_total_pallets = final_grand_total_pallets

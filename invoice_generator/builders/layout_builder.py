@@ -18,6 +18,7 @@ class LayoutBuilder:
         self,
         workbook: Workbook,
         worksheet: Worksheet,
+        template_worksheet: Worksheet,
         sheet_name: str,
         sheet_config: Dict[str, Any],
         all_sheet_configs: Dict[str, Any],
@@ -27,8 +28,9 @@ class LayoutBuilder:
         final_grand_total_pallets: int = 0,
         enable_text_replacement: bool = False,
     ):
-        self.workbook = workbook
-        self.worksheet = worksheet
+        self.workbook = workbook  # Output workbook (writable)
+        self.worksheet = worksheet  # Output worksheet (writable)
+        self.template_worksheet = template_worksheet  # Template worksheet (read-only usage)
         self.sheet_name = sheet_name
         self.sheet_config = sheet_config
         self.all_sheet_configs = all_sheet_configs
@@ -46,31 +48,11 @@ class LayoutBuilder:
     def build(self) -> bool:
         """
         Orchestrates all builders in the correct sequence.
-        Creates a NEW WORKBOOK with a clean worksheet and restores template state to it.
-        This completely avoids merge conflicts since we never touch the original template.
+        Reads template state from template_worksheet, writes to self.worksheet (output).
+        This completely avoids merge conflicts since template and output are separate.
         """
-        # 0. Create a NEW workbook (separate from template) to avoid any template footer conflicts
-        from openpyxl import Workbook as NewWorkbook
-        
-        new_workbook = NewWorkbook()
-        
-        # Remove the default sheet created by openpyxl
-        if 'Sheet' in new_workbook.sheetnames:
-            del new_workbook['Sheet']
-        
-        # Create a fresh worksheet with the same name as the template sheet
-        new_worksheet = new_workbook.create_sheet(title=self.sheet_name)
-        
-        # Store reference to old template worksheet for state capture
-        template_worksheet = self.worksheet
-        
-        print(f"[LayoutBuilder] Created NEW workbook with sheet '{self.sheet_name}' for clean build")
-        
-        # Store the new workbook reference for later use
-        self.new_workbook = new_workbook
-        
-        # Switch to working on the new worksheet
-        self.worksheet = new_worksheet
+        print(f"[LayoutBuilder] Building layout for sheet '{self.sheet_name}'")
+        print(f"[LayoutBuilder] Reading from template, writing to output worksheet")
         
         # 1. Text Replacement (if enabled) - Pre-processing
         # Note: This was already done at workbook level, skip here
@@ -84,32 +66,30 @@ class LayoutBuilder:
             else:
                 text_replacer._replace_placeholders()  # Only placeholders
         
-        # 2. Calculate header boundaries for template state capture FROM OLD TEMPLATE
+        # 2. Calculate header boundaries for template state capture
         start_row = self.sheet_config.get('start_row', 1)
         header_to_write = self.sheet_config.get('header_to_write')
         num_header_cols = len(header_to_write) if header_to_write else 0
         
         # Calculate header_end_row (typically start_row + 1 for 2-row headers)
-        # This needs to be calculated before HeaderBuilder to know template boundaries
         header_end_row = start_row + 1  # Assumption: 2-row header (row 0 and row 1)
         
         # Calculate footer_start_row from template
         # In templates, footer typically starts right after minimal data area
-        # For Invoice/Contract: usually 3-4 rows after header
-        # We'll use start_row + 2 + 1 as a reasonable estimate (header takes 2 rows, then 1+ data rows)
         footer_start_row_template = start_row + 3  # Conservative estimate
         
-        # 3. Template State Capture - Capture BEFORE any modifications FROM OLD TEMPLATE
+        # 3. Template State Capture - Capture from template_worksheet
+        print(f"[LayoutBuilder] Capturing template state from template worksheet")
         self.template_state_builder = TemplateStateBuilder(
-            worksheet=template_worksheet,  # Capture from OLD template worksheet
+            worksheet=self.template_worksheet,  # Read from template
             num_header_cols=num_header_cols,
             header_end_row=header_end_row,
             footer_start_row=footer_start_row_template
         )
         
-        # 3b. Restore ONLY header to the NEW clean worksheet
-        print(f"[LayoutBuilder] Restoring header from template to new worksheet")
-        self.template_state_builder.restore_header_only(target_worksheet=new_worksheet)
+        # 3b. Restore ONLY header to output worksheet
+        print(f"[LayoutBuilder] Restoring header from template to output worksheet")
+        self.template_state_builder.restore_header_only(target_worksheet=self.worksheet)
         
         # 4. Header Builder - writes header data to NEW worksheet
         # Convert styling_config dict to StylingConfigModel if needed
@@ -251,26 +231,11 @@ class LayoutBuilder:
         
         print(f"[LayoutBuilder] Restoring template footer after row {write_pointer_row}")
         self.template_state_builder.restore_footer_only(
-            target_worksheet=new_worksheet,
+            target_worksheet=self.worksheet,  # Write to output worksheet
             footer_start_row=write_pointer_row
         )
         
-        # 8. Clean up - Remove old template worksheet and rename new one
-        print(f"[LayoutBuilder] Cleaning up: removing old template sheet and renaming new sheet")
-        
-        # Get the index of the old sheet to maintain order
-        old_sheet_index = self.workbook.index(template_worksheet)
-        
-        # Remove the old template worksheet
-        self.workbook.remove(template_worksheet)
-        
-        # Rename the new worksheet to the original name
-        new_worksheet.title = old_sheet_name
-        
-        # Move the sheet to the original position
-        self.workbook.move_sheet(new_worksheet, offset=(old_sheet_index - self.workbook.index(new_worksheet)))
-        
-        print(f"[LayoutBuilder] Worksheet '{old_sheet_name}' rebuilt successfully")
+        print(f"[LayoutBuilder] Layout built successfully for sheet '{self.sheet_name}'")
         
         return True
     

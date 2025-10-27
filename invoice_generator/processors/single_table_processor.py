@@ -21,8 +21,9 @@ class SingleTableProcessor(SheetProcessor):
         
         # Use LayoutBuilder to orchestrate the entire layout construction
         layout_builder = LayoutBuilder(
-            workbook=self.workbook,
-            worksheet=self.worksheet,
+            workbook=self.output_workbook,
+            worksheet=self.output_worksheet,
+            template_worksheet=self.template_worksheet,
             sheet_name=self.sheet_name,
             sheet_config=self.sheet_config,
             all_sheet_configs=self.data_mapping_config,

@@ -177,16 +177,15 @@ def main():
     processing_successful = True
 
     try:
-        # Step 1: Load template workbook as read_only=False, data_only=True
+        # Step 1: Load template workbook as read_only=False
         # - read_only=False: Allows access to merged_cells for state capture
-        # - data_only=True: Reads formula results instead of formula strings
+        # - data_only=False (default): Preserves formulas and text with '=' signs
         print(f"Loading template from: {paths['template']}")
         template_workbook = openpyxl.load_workbook(
             paths['template'], 
-            read_only=False, 
-            data_only=True
+            read_only=False
         )
-        print(f"✅ Template loaded successfully (read_only=False, data_only=True)")
+        print(f"✅ Template loaded successfully (read_only=False)")
         print(f"   Template sheets: {template_workbook.sheetnames}")
         
         # Step 2: Collect all sheet names from template
@@ -240,7 +239,10 @@ def main():
                 print(f"Warning: Sheet '{sheet_name}' not found. Skipping.")
                 continue
             
-            worksheet = workbook[sheet_name]
+            # Get both template and output worksheets
+            template_worksheet = template_workbook[sheet_name]
+            output_worksheet = workbook[sheet_name]
+            
             sheet_config = data_mapping_config.get(sheet_name, {})
             data_source_indicator = sheet_data_map.get(sheet_name)
 
@@ -252,13 +254,31 @@ def main():
             processor = None
             if data_source_indicator in ["processed_tables_multi", "processed_tables"]:
                 processor = MultiTableProcessor(
-                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets
+                    template_workbook=template_workbook,
+                    output_workbook=output_workbook,
+                    template_worksheet=template_worksheet,
+                    output_worksheet=output_worksheet,
+                    sheet_name=sheet_name,
+                    sheet_config=sheet_config,
+                    data_mapping_config=data_mapping_config,
+                    data_source_indicator=data_source_indicator,
+                    invoice_data=invoice_data,
+                    cli_args=args,
+                    final_grand_total_pallets=final_grand_total_pallets
                 )
             else: # Default to single table processor
                 processor = SingleTableProcessor(
-                    workbook, worksheet, sheet_name, sheet_config, data_mapping_config, 
-                    data_source_indicator, invoice_data, args, final_grand_total_pallets
+                    template_workbook=template_workbook,
+                    output_workbook=output_workbook,
+                    template_worksheet=template_worksheet,
+                    output_worksheet=output_worksheet,
+                    sheet_name=sheet_name,
+                    sheet_config=sheet_config,
+                    data_mapping_config=data_mapping_config,
+                    data_source_indicator=data_source_indicator,
+                    invoice_data=invoice_data,
+                    cli_args=args,
+                    final_grand_total_pallets=final_grand_total_pallets
                 )
             
             # --- Execute Processing ---
