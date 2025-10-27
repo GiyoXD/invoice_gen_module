@@ -57,17 +57,30 @@ class LayoutBuilder:
             else:
                 text_replacer._replace_placeholders()  # Only placeholders
         
-        # 2. Template State Capture - Capture header state first
-        num_header_cols = len(self.sheet_config.get('header_to_write', []))
-        self.template_state_builder = TemplateStateBuilder(
-            worksheet=self.worksheet,
-            num_header_cols=num_header_cols
-        )
-        
-        # 3. Header Builder
+        # 2. Calculate header boundaries for template state capture
         start_row = self.sheet_config.get('start_row', 1)
         header_to_write = self.sheet_config.get('header_to_write')
+        num_header_cols = len(header_to_write) if header_to_write else 0
         
+        # Calculate header_end_row (typically start_row + 1 for 2-row headers)
+        # This needs to be calculated before HeaderBuilder to know template boundaries
+        header_end_row = start_row + 1  # Assumption: 2-row header (row 0 and row 1)
+        
+        # Calculate footer_start_row from template
+        # In templates, footer typically starts right after minimal data area
+        # For Invoice/Contract: usually 3-4 rows after header
+        # We'll use start_row + 2 + 1 as a reasonable estimate (header takes 2 rows, then 1+ data rows)
+        footer_start_row_template = start_row + 3  # Conservative estimate
+        
+        # 3. Template State Capture - Capture BEFORE any modifications
+        self.template_state_builder = TemplateStateBuilder(
+            worksheet=self.worksheet,
+            num_header_cols=num_header_cols,
+            header_end_row=header_end_row,
+            footer_start_row=footer_start_row_template
+        )
+        
+        # 4. Header Builder
         # Convert styling_config dict to StylingConfigModel if needed
         styling_model = self.styling_config
         if styling_model and not isinstance(styling_model, StylingConfigModel):
@@ -88,12 +101,8 @@ class LayoutBuilder:
         if not self.header_info or not self.header_info.get('column_map'):
             print(f"Error: Cannot fill data for '{self.sheet_name}' because header_info or column_map is missing.")
             return False
-        
-        # Capture header state after header is written
-        header_end_row = self.header_info['second_row_index']
-        self.template_state_builder.capture_header(end_row=header_end_row)
 
-        # 4. Data Table Builder (handles data rows + footer internally)
+        # 5. Data Table Builder (handles data rows + footer internally)
         sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
         add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
         static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
@@ -163,22 +172,17 @@ class LayoutBuilder:
             print(f"Failed to fill table data/footer for sheet '{self.sheet_name}'.")
             return False
         
-        # 5. Template State Capture & Restore - Capture footer, then restore entire template state
-        data_start_row = self.header_info['second_row_index'] + 1
-        data_table_end_row = self.next_row_after_footer - 1
-        
-        # Capture footer state (calculate max possible footer row from template)
-        max_possible_footer_row = self.worksheet.max_row
-        self.template_state_builder.capture_footer(
-            data_end_row=data_table_end_row,
-            max_possible_footer_row=max_possible_footer_row
-        )
+        # 6. Template State Restoration
+        # According to issue #18: BOTH data_start_row and data_table_end_row should be set
+        # to write_pointer_row (the row AFTER all dynamically generated content including footer).
+        # This places the template's static footer AFTER everything, not overwriting our footer.
+        write_pointer_row = self.next_row_after_footer - 1  # Last row with content
         
         # Restore template state (merges, heights, etc.)
         self.template_state_builder.restore_state(
             target_worksheet=self.worksheet,
-            data_start_row=data_start_row,
-            data_table_end_row=data_table_end_row
+            data_start_row=write_pointer_row,
+            data_table_end_row=write_pointer_row  # Same as data_start_row per issue #18
         )
         
         return True

@@ -4,6 +4,7 @@ from .base_processor import SheetProcessor
 from .. import invoice_utils
 import traceback
 from openpyxl.utils import get_column_letter
+from ..builders.template_state_builder import TemplateStateBuilder
 
 class MultiTableProcessor(SheetProcessor):
     """
@@ -17,13 +18,30 @@ class MultiTableProcessor(SheetProcessor):
         """
         print(f"Processing sheet '{self.sheet_name}' as multi-table (write header mode).")
         
+        # 1. Initialize TemplateStateBuilder to capture template state BEFORE modifications
+        header_to_write = self.sheet_config.get('header_to_write')
+        start_row = self.sheet_config.get('start_row')
+        if not start_row or not header_to_write:
+            print(f"Error: Config for multi-table '{self.sheet_name}' missing 'start_row' or 'header_to_write'. Skipping.")
+            return False
+        
+        # Calculate header end row (assuming 2-row header for packing list)
+        header_end_row = start_row + 1  # start_row is first header row, +1 for second row
+        footer_start_row = header_end_row + 2  # Small buffer for data area
+        
+        num_header_cols = len(header_to_write)
+        template_state_builder = TemplateStateBuilder(
+            worksheet=self.worksheet,
+            num_header_cols=num_header_cols,
+            header_end_row=header_end_row,
+            footer_start_row=footer_start_row
+        )
+        
         all_tables_data = self.invoice_data.get('processed_tables_data', {})
         if not all_tables_data or not isinstance(all_tables_data, dict):
             print(f"Warning: 'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'.")
             return True # Not a failure, just nothing to do
 
-        header_to_write = self.sheet_config.get('header_to_write')
-        start_row = self.sheet_config.get('start_row')
         if not start_row or not header_to_write:
             print(f"Error: Config for multi-table '{self.sheet_name}' missing 'start_row' or 'header_to_write'. Skipping.")
             return False
@@ -139,6 +157,16 @@ class MultiTableProcessor(SheetProcessor):
         if final_row_spacing > 0 and num_tables > 0:
             # Just advance pointer, rows are already inserted
             write_pointer_row += final_row_spacing
+
+        # 2. Restore template state (merges, heights, widths) after all content is written
+        # Per issue #18: Set both parameters to write_pointer_row to place template footer
+        # AFTER all dynamically generated content (data + footers + grand total)
+        print(f"[MultiTableProcessor] Restoring template state after row {write_pointer_row}")
+        template_state_builder.restore_state(
+            target_worksheet=self.worksheet,
+            data_start_row=write_pointer_row,
+            data_table_end_row=write_pointer_row  # Same value per issue #18
+        )
 
         return True
 
