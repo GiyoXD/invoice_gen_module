@@ -18,6 +18,7 @@ import re
 # --- Import utility functions from the new structure ---
 from . import invoice_utils
 from .builders.text_replacement_builder import TextReplacementBuilder
+from .builders.workbook_builder import WorkbookBuilder
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
 
@@ -163,17 +164,48 @@ def main():
     output_path = Path(args.output).resolve()
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(paths['template'], output_path)
     except Exception as e:
-        print(f"Error copying template: {e}"); sys.exit(1)
-    print(f"Template copied successfully to {output_path}")
+        print(f"Error creating output directory: {e}"); sys.exit(1)
+    
+    # NOTE: We no longer copy the template file directly.
+    # Instead, we'll load it as read-only and create a new workbook separately.
+    print("Template will be loaded as read-only for state capture")
 
-    print("\n4. Processing workbook...")
-    workbook = None
+    print("\n4. Loading template and creating new workbook...")
+    template_workbook = None
+    output_workbook = None
     processing_successful = True
 
     try:
-        workbook = openpyxl.load_workbook(output_path)
+        # Step 1: Load template workbook as read_only=False, data_only=True
+        # - read_only=False: Allows access to merged_cells for state capture
+        # - data_only=True: Reads formula results instead of formula strings
+        print(f"Loading template from: {paths['template']}")
+        template_workbook = openpyxl.load_workbook(
+            paths['template'], 
+            read_only=False, 
+            data_only=True
+        )
+        print(f"✅ Template loaded successfully (read_only=False, data_only=True)")
+        print(f"   Template sheets: {template_workbook.sheetnames}")
+        
+        # Step 2: Collect all sheet names from template
+        template_sheet_names = template_workbook.sheetnames
+        print(f"Found {len(template_sheet_names)} sheets in template")
+        
+        # Step 3: Create WorkbookBuilder with template sheet names
+        print("Creating new output workbook using WorkbookBuilder...")
+        workbook_builder = WorkbookBuilder(sheet_names=template_sheet_names)
+        
+        # Step 4: Build the new clean workbook
+        output_workbook = workbook_builder.build()
+        print(f"✅ New output workbook created with {len(output_workbook.sheetnames)} sheets")
+        
+        # Step 5: Store references to both workbooks
+        # - template_workbook: Used for reading template state (READ-ONLY usage)
+        # - output_workbook: Used for writing final output (WRITABLE)
+        workbook = output_workbook  # Keep 'workbook' name for compatibility with rest of code
+        print("Both template (read) and output (write) workbooks ready")
 
         sheets_to_process_config = config.get('sheets_to_process', [])
         sheets_to_process = [s for s in sheets_to_process_config if s in workbook.sheetnames]
@@ -243,17 +275,21 @@ def main():
         print("\n--------------------------------")
         if processing_successful:
             print("5. Saving final workbook...")
-            workbook.save(output_path)
+            output_workbook.save(output_path)
             print(f"--- Workbook saved successfully: '{output_path}' ---")
         else:
             print("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
-            workbook.save(output_path)
+            output_workbook.save(output_path)
 
     except Exception as e:
         print(f"\n--- UNHANDLED ERROR: {e} ---"); traceback.print_exc()
     finally:
-        if workbook:
-            try: workbook.close(); print("Workbook closed.")
+        # Close both workbooks
+        if template_workbook:
+            try: template_workbook.close(); print("Template workbook closed.")
+            except Exception: pass
+        if output_workbook:
+            try: output_workbook.close(); print("Output workbook closed.")
             except Exception: pass
 
     total_time = time.time() - start_time

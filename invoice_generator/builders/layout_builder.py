@@ -46,8 +46,34 @@ class LayoutBuilder:
     def build(self) -> bool:
         """
         Orchestrates all builders in the correct sequence.
+        Creates a NEW WORKBOOK with a clean worksheet and restores template state to it.
+        This completely avoids merge conflicts since we never touch the original template.
         """
+        # 0. Create a NEW workbook (separate from template) to avoid any template footer conflicts
+        from openpyxl import Workbook as NewWorkbook
+        
+        new_workbook = NewWorkbook()
+        
+        # Remove the default sheet created by openpyxl
+        if 'Sheet' in new_workbook.sheetnames:
+            del new_workbook['Sheet']
+        
+        # Create a fresh worksheet with the same name as the template sheet
+        new_worksheet = new_workbook.create_sheet(title=self.sheet_name)
+        
+        # Store reference to old template worksheet for state capture
+        template_worksheet = self.worksheet
+        
+        print(f"[LayoutBuilder] Created NEW workbook with sheet '{self.sheet_name}' for clean build")
+        
+        # Store the new workbook reference for later use
+        self.new_workbook = new_workbook
+        
+        # Switch to working on the new worksheet
+        self.worksheet = new_worksheet
+        
         # 1. Text Replacement (if enabled) - Pre-processing
+        # Note: This was already done at workbook level, skip here
         if self.enable_text_replacement:
             text_replacer = TextReplacementBuilder(
                 workbook=self.workbook,
@@ -58,7 +84,7 @@ class LayoutBuilder:
             else:
                 text_replacer._replace_placeholders()  # Only placeholders
         
-        # 2. Calculate header boundaries for template state capture
+        # 2. Calculate header boundaries for template state capture FROM OLD TEMPLATE
         start_row = self.sheet_config.get('start_row', 1)
         header_to_write = self.sheet_config.get('header_to_write')
         num_header_cols = len(header_to_write) if header_to_write else 0
@@ -73,15 +99,19 @@ class LayoutBuilder:
         # We'll use start_row + 2 + 1 as a reasonable estimate (header takes 2 rows, then 1+ data rows)
         footer_start_row_template = start_row + 3  # Conservative estimate
         
-        # 3. Template State Capture - Capture BEFORE any modifications
+        # 3. Template State Capture - Capture BEFORE any modifications FROM OLD TEMPLATE
         self.template_state_builder = TemplateStateBuilder(
-            worksheet=self.worksheet,
+            worksheet=template_worksheet,  # Capture from OLD template worksheet
             num_header_cols=num_header_cols,
             header_end_row=header_end_row,
             footer_start_row=footer_start_row_template
         )
         
-        # 4. Header Builder
+        # 3b. Restore ONLY header to the NEW clean worksheet
+        print(f"[LayoutBuilder] Restoring header from template to new worksheet")
+        self.template_state_builder.restore_header_only(target_worksheet=new_worksheet)
+        
+        # 4. Header Builder - writes header data to NEW worksheet
         # Convert styling_config dict to StylingConfigModel if needed
         styling_model = self.styling_config
         if styling_model and not isinstance(styling_model, StylingConfigModel):
@@ -214,18 +244,33 @@ class LayoutBuilder:
             # Single footer row
             self._apply_footer_row_height(footer_row_position, styling_model)
         
-        # 7. Template State Restoration (restores merges, heights, widths)
-        # According to issue #18: BOTH data_start_row and data_table_end_row should be set
-        # to write_pointer_row (the row AFTER all dynamically generated content including footer).
-        # This places the template's static footer AFTER everything, not overwriting our footer.
-        write_pointer_row = self.next_row_after_footer  # Next available row (after footer)
+        # 7. Template Footer Restoration
+        # Restore the template footer (static content like "Manufacture:", etc.) AFTER the dynamic footer
+        # This places the template footer below the data footer
+        write_pointer_row = self.next_row_after_footer  # Next available row after dynamic footer
         
-        # Restore template state (merges, heights, etc.)
-        self.template_state_builder.restore_state(
-            target_worksheet=self.worksheet,
-            data_start_row=write_pointer_row,
-            data_table_end_row=write_pointer_row  # Same as data_start_row per issue #18
+        print(f"[LayoutBuilder] Restoring template footer after row {write_pointer_row}")
+        self.template_state_builder.restore_footer_only(
+            target_worksheet=new_worksheet,
+            footer_start_row=write_pointer_row
         )
+        
+        # 8. Clean up - Remove old template worksheet and rename new one
+        print(f"[LayoutBuilder] Cleaning up: removing old template sheet and renaming new sheet")
+        
+        # Get the index of the old sheet to maintain order
+        old_sheet_index = self.workbook.index(template_worksheet)
+        
+        # Remove the old template worksheet
+        self.workbook.remove(template_worksheet)
+        
+        # Rename the new worksheet to the original name
+        new_worksheet.title = old_sheet_name
+        
+        # Move the sheet to the original position
+        self.workbook.move_sheet(new_worksheet, offset=(old_sheet_index - self.workbook.index(new_worksheet)))
+        
+        print(f"[LayoutBuilder] Worksheet '{old_sheet_name}' rebuilt successfully")
         
         return True
     

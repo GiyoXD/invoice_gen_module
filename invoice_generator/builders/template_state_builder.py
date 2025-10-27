@@ -66,6 +66,7 @@ class TemplateStateBuilder:
         self._capture_footer(footer_start_row, self.max_row)
         print(f"[TemplateStateBuilder] State captured: {len(self.header_state)} header rows, {len(self.footer_state)} footer rows")
 
+
     def _has_content_or_style(self, cell) -> bool:
         if cell.value is not None and cell.value != '':
             return True
@@ -237,14 +238,131 @@ class TemplateStateBuilder:
         if self.footer_merged_cells:
             print(f"  Footer merges: {self.footer_merged_cells[:5]}")  # First 5 merges
 
-    def restore_state(self, target_worksheet: Worksheet, data_start_row: int, data_table_end_row: int):
+    def restore_header_only(self, target_worksheet: Worksheet):
+        """
+        Restores ONLY the header (structure, values, merges, formatting) to a new clean worksheet.
+        This is used when creating a fresh worksheet to avoid template footer conflicts.
+        """
+        print(f"[TemplateStateBuilder] Restoring header to new worksheet")
+        print(f"  Header rows: {len(self.header_state)}, Header merges: {len(self.header_merged_cells)}")
+        
+        # Restore header cell values and formatting
+        for row_idx, row_data in enumerate(self.header_state):
+            actual_row = row_idx + self.min_row
+            for col_idx, cell_info in enumerate(row_data):
+                actual_col = col_idx + self.min_col
+                target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                
+                # Restore value
+                if cell_info['value'] is not None:
+                    target_cell.value = cell_info['value']
+                
+                # Restore formatting
+                if cell_info['font']:
+                    target_cell.font = copy.copy(cell_info['font'])
+                if cell_info['fill']:
+                    target_cell.fill = copy.copy(cell_info['fill'])
+                if cell_info['border']:
+                    target_cell.border = copy.copy(cell_info['border'])
+                if cell_info['alignment']:
+                    target_cell.alignment = copy.copy(cell_info['alignment'])
+                if cell_info['number_format']:
+                    target_cell.number_format = cell_info['number_format']
+        
+        # Restore header merged cells
+        for merged_cell_range_str in self.header_merged_cells:
+            try:
+                target_worksheet.merge_cells(merged_cell_range_str)
+                print(f"  Merged: {merged_cell_range_str}")
+            except Exception as e:
+                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+        
+        # Restore row heights
+        for row_num, height in self.row_heights.items():
+            if row_num <= self.header_end_row and height:
+                target_worksheet.row_dimensions[row_num].height = height
+        
+        # Restore column widths
+        for col_num, width in self.column_widths.items():
+            if width:
+                target_worksheet.column_dimensions[get_column_letter(col_num)].width = width
+        
+        print(f"[TemplateStateBuilder] Header restoration complete")
+
+    def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int):
+        """
+        Restores ONLY the footer (structure, values, merges, formatting) to the new worksheet.
+        This places the template footer (static content) AFTER the dynamically created data footer.
+        
+        Args:
+            target_worksheet: The worksheet to restore footer to
+            footer_start_row: The row where the template footer should start (after data footer)
+        """
+        print(f"[TemplateStateBuilder] Restoring template footer starting at row {footer_start_row}")
+        print(f"  Template footer rows: {len(self.footer_state)}, Footer merges: {len(self.footer_merged_cells)}")
+        
+        # Calculate offset: template footer was at self.template_footer_start_row, now goes to footer_start_row
+        offset = footer_start_row - self.template_footer_start_row if self.template_footer_start_row > 0 else 0
+        
+        # Restore footer cell values and formatting with offset
+        for row_idx, row_data in enumerate(self.footer_state):
+            actual_row = self.template_footer_start_row + row_idx + offset
+            for col_idx, cell_info in enumerate(row_data):
+                actual_col = col_idx + self.min_col
+                target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                
+                # Restore value
+                if cell_info['value'] is not None:
+                    target_cell.value = cell_info['value']
+                
+                # Restore formatting
+                if cell_info['font']:
+                    target_cell.font = copy.copy(cell_info['font'])
+                if cell_info['fill']:
+                    target_cell.fill = copy.copy(cell_info['fill'])
+                if cell_info['border']:
+                    target_cell.border = copy.copy(cell_info['border'])
+                if cell_info['alignment']:
+                    target_cell.alignment = copy.copy(cell_info['alignment'])
+                if cell_info['number_format']:
+                    target_cell.number_format = cell_info['number_format']
+        
+        # Restore footer merged cells with offset
+        for merged_cell_range_str in self.footer_merged_cells:
+            try:
+                from openpyxl.utils.cell import range_boundaries
+                min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
+                
+                # Adjust row numbers with offset
+                min_row += offset
+                max_row += offset
+                adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
+                target_worksheet.merge_cells(adjusted_range_str)
+                print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+            except Exception as e:
+                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+        
+        # Restore row heights for footer rows
+        for row_num, height in self.row_heights.items():
+            if self.template_footer_start_row <= row_num <= self.template_footer_end_row and height:
+                target_worksheet.row_dimensions[row_num + offset].height = height
+        
+        print(f"[TemplateStateBuilder] Template footer restoration complete ({len(self.footer_state)} rows restored)")
+
+    def restore_state(self, target_worksheet: Worksheet, data_start_row: int, data_table_end_row: int, restore_footer_merges: bool = True):
         """
         Restores the captured FORMATTING (not values) to preserve template structure.
         Only restores merges, heights, widths - does NOT overwrite cell values.
+        
+        Args:
+            target_worksheet: The worksheet to restore state to
+            data_start_row: Starting row of data
+            data_table_end_row: Ending row of data table
+            restore_footer_merges: Whether to restore footer merges (False when FooterBuilder creates its own merges)
         """
         print(f"[TemplateStateBuilder] Restoring formatting (merges, heights, widths):")
         print(f"  Header merges: {len(self.header_merged_cells)}")
-        print(f"  Footer merges: {len(self.footer_merged_cells)}")
+        print(f"  Footer merges: {len(self.footer_merged_cells)} (restore: {restore_footer_merges})")
         print(f"  Template footer start row: {self.template_footer_start_row}")
         print(f"  Data table end row: {data_table_end_row}")
         
@@ -263,21 +381,24 @@ class TemplateStateBuilder:
         
         print(f"[TemplateStateBuilder] Footer offset: {offset} (template row {self.template_footer_start_row} -> new row {footer_start_row_in_new_sheet})")
 
-        # Restore footer merged cells with offset
-        print(f"[TemplateStateBuilder] Restoring {len(self.footer_merged_cells)} footer merges with offset {offset}...")
-        for merged_cell_range_str in self.footer_merged_cells:
-            try:
-                from openpyxl.utils.cell import range_boundaries
-                min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
-                
-                # Adjust row numbers for all footer merged cells
-                min_row += offset
-                max_row += offset
-                adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
-                target_worksheet.merge_cells(adjusted_range_str)
-                print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
-            except Exception as e:
-                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+        # Restore footer merged cells with offset (only if requested)
+        if restore_footer_merges:
+            print(f"[TemplateStateBuilder] Restoring {len(self.footer_merged_cells)} footer merges with offset {offset}...")
+            for merged_cell_range_str in self.footer_merged_cells:
+                try:
+                    from openpyxl.utils.cell import range_boundaries
+                    min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
+                    
+                    # Adjust row numbers for all footer merged cells
+                    min_row += offset
+                    max_row += offset
+                    adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
+                    target_worksheet.merge_cells(adjusted_range_str)
+                    print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+                except Exception as e:
+                    print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+        else:
+            print(f"[TemplateStateBuilder] Skipping footer merge restoration (FooterBuilder creates its own merges)")
 
         # Restore row heights for header
         print(f"[TemplateStateBuilder] Restoring row heights...")
