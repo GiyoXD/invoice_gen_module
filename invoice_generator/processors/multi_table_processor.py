@@ -37,6 +37,7 @@ class MultiTableProcessor(SheetProcessor):
         grand_total_pallets = 0
         last_header_info = None
         template_state_builder = None  # Save from first table for final footer restoration
+        dynamic_desc_used = False  # Track if any table used dynamic description (for summary add-on)
         
         # Process each table using LayoutBuilder
         # IMPORTANT: For multi-table, skip template restoration after first table
@@ -93,6 +94,18 @@ class MultiTableProcessor(SheetProcessor):
             last_header_info = layout_builder.header_info
             current_row = layout_builder.next_row_after_footer
             
+            # Add 1 blank row spacing after each table footer (except the last one)
+            if not is_last_table:
+                current_row += 1
+            
+            # Collect data range for grand total sum formulas
+            if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
+                all_data_ranges.append((layout_builder.data_start_row, layout_builder.data_end_row))
+            
+            # Track if dynamic description was used (needed for summary add-on)
+            if layout_builder.dynamic_desc_used:
+                dynamic_desc_used = True
+            
             # Track pallet count for grand total
             table_data = all_tables_data.get(str(table_key), {})
             pallet_counts = table_data.get('pallet_count', [])
@@ -128,7 +141,7 @@ class MultiTableProcessor(SheetProcessor):
                 worksheet=self.output_worksheet,
                 footer_row_num=grand_total_row,
                 header_info=last_header_info,
-                sum_ranges=[],  # Grand total doesn't sum ranges
+                sum_ranges=all_data_ranges,  # Pass ALL table data ranges for sum formulas
                 footer_config=footer_config_copy,
                 pallet_count=grand_total_pallets,
                 DAF_mode=self.args.DAF,
@@ -138,7 +151,7 @@ class MultiTableProcessor(SheetProcessor):
                 mapping_rules=self.sheet_config.get('mappings', {}),
                 sheet_name=self.sheet_name,
                 is_last_table=True,  # This is the last footer (after all tables)
-                dynamic_desc_used=False  # TODO: Track if dynamic description was used
+                dynamic_desc_used=dynamic_desc_used  # Pass tracked dynamic_desc_used flag
             )
             next_row = footer_builder.build()
             

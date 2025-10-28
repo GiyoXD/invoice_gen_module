@@ -56,6 +56,9 @@ class LayoutBuilder:
         # Store results after build
         self.header_info = None
         self.next_row_after_footer = -1
+        self.data_start_row = -1  # Expose data range for multi-table sum calculation
+        self.data_end_row = -1    # Expose data range for multi-table sum calculation
+        self.dynamic_desc_used = False  # Expose for summary add-on condition
         self.template_state_builder = None
 
     def build(self) -> bool:
@@ -209,6 +212,11 @@ class LayoutBuilder:
             )
 
             fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
+
+            # Store data range for multi-table processors to access
+            self.data_start_row = data_start_row
+            self.data_end_row = data_end_row
+            self.dynamic_desc_used = data_table_builder.dynamic_desc_used  # Track for summary add-on
 
             if not fill_success:
                 print(f"Failed to fill table data for sheet '{self.sheet_name}'.")
