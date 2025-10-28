@@ -1,8 +1,9 @@
 # invoice_generator/processors/multi_table_processor.py
 import sys
 from .base_processor import SheetProcessor
-from .. import invoice_utils
 from ..builders.layout_builder import LayoutBuilder
+from ..builders.footer_builder import FooterBuilder
+from ..styling.models import StylingConfigModel
 import traceback
 from openpyxl.utils import get_column_letter
 
@@ -35,9 +36,13 @@ class MultiTableProcessor(SheetProcessor):
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
+        template_state_builder = None  # Save from first table for final footer restoration
         
         # Process each table using LayoutBuilder
+        # IMPORTANT: For multi-table, skip template restoration after first table
+        # to avoid capturing template state from wrong row positions
         for i, table_key in enumerate(table_keys):
+            is_first_table = (i == 0)
             is_last_table = (i == len(table_keys) - 1)
             print(f"\n--- Processing table '{table_key}' ({i+1}/{len(table_keys)}) ---")
             
@@ -52,6 +57,8 @@ class MultiTableProcessor(SheetProcessor):
             # For multi-table, we use a modified sheet_config that points to the current row
             table_sheet_config = self.sheet_config.copy()
             table_sheet_config['start_row'] = current_row
+            # IMPORTANT: Set data_source to the table key so LayoutBuilder can find the data
+            table_sheet_config['data_source'] = str(table_key)
             
             layout_builder = LayoutBuilder(
                 workbook=self.output_workbook,
@@ -64,11 +71,19 @@ class MultiTableProcessor(SheetProcessor):
                 styling_config=sheet_styling_config,
                 args=self.args,
                 final_grand_total_pallets=0,  # Per-table, not grand total
-                enable_text_replacement=False  # Already done at main level
+                enable_text_replacement=False,  # Already done at main level
+                # For multi-table: Only restore template header/footer for FIRST table
+                # Subsequent tables should skip to avoid wrong row capture
+                skip_template_header_restoration=(not is_first_table),
+                skip_template_footer_restoration=True  # Never restore footer mid-document
             )
             
             # Build this table's layout
             success = layout_builder.build()
+            
+            # Save template state builder from first table for final footer restoration
+            if is_first_table:
+                template_state_builder = layout_builder.template_state_builder
             
             if not success:
                 print(f"Failed to build layout for table '{table_key}'.")
@@ -91,16 +106,54 @@ class MultiTableProcessor(SheetProcessor):
             print(f"\n--- Adding Grand Total Row ---")
             grand_total_row = current_row
             
-            # Write grand total using invoice_utils
-            invoice_utils.write_grand_total_pallet_summary(
+            # Get styling configuration
+            styling_model = sheet_styling_config
+            if styling_model and not isinstance(styling_model, StylingConfigModel):
+                try:
+                    styling_model = StylingConfigModel(**styling_model)
+                except Exception as e:
+                    print(f"Warning: Could not create StylingConfigModel: {e}")
+                    styling_model = None
+            
+            # Use FooterBuilder to create grand total footer (proper builder pattern)
+            footer_config = self.sheet_config.get('footer_configurations', {})
+            footer_config_copy = footer_config.copy()
+            footer_config_copy["type"] = "grand_total"  # Mark as grand total type
+            
+            # Add summary add-on if enabled in sheet config
+            if self.sheet_config.get("summary", False) and self.args.DAF:
+                footer_config_copy["add_ons"] = ["summary"]
+            
+            footer_builder = FooterBuilder(
                 worksheet=self.output_worksheet,
-                start_row=grand_total_row,
+                footer_row_num=grand_total_row,
                 header_info=last_header_info,
-                total_pallets=grand_total_pallets,
-                sheet_styling_config=self.sheet_config
+                sum_ranges=[],  # Grand total doesn't sum ranges
+                footer_config=footer_config_copy,
+                pallet_count=grand_total_pallets,
+                DAF_mode=self.args.DAF,
+                sheet_styling_config=styling_model,
+                all_tables_data=all_tables_data,  # Pass full table data for summary add-on
+                table_keys=table_keys,  # Pass table keys for summary add-on
+                mapping_rules=self.sheet_config.get('mappings', {}),
+                sheet_name=self.sheet_name,
+                is_last_table=True,  # This is the last footer (after all tables)
+                dynamic_desc_used=False  # TODO: Track if dynamic description was used
             )
+            next_row = footer_builder.build()
             
             print(f"Grand Total Row added at row {grand_total_row}: {grand_total_pallets} pallets")
+            current_row = next_row  # Update current_row for template footer restoration
+        
+        # Restore template footer at the very end after all tables and grand total
+        if template_state_builder:
+            print(f"\n--- Restoring Template Footer ---")
+            print(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+            template_state_builder.restore_footer_only(
+                target_worksheet=self.output_worksheet,
+                footer_start_row=current_row
+            )
+            print(f"[MultiTableProcessor] Template footer restored successfully")
         
         print(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True

@@ -12,8 +12,10 @@ class TemplateStateBuilder:
     
     Captures the original template state during initialization, before any modifications.
     """
+    
+    DEBUG = False  # Set to True to enable debug printing
 
-    def __init__(self, worksheet: Worksheet, num_header_cols: int, header_end_row: int, footer_start_row: int):
+    def __init__(self, worksheet: Worksheet, num_header_cols: int, header_end_row: int, footer_start_row: int, debug: bool = False):
         """
         Initialize and immediately capture template state.
         
@@ -22,6 +24,7 @@ class TemplateStateBuilder:
             num_header_cols: Number of header columns
             header_end_row: Last row of the header section
             footer_start_row: First row of the footer section (from template)
+            debug: Enable debug printing (default: False)
         """
         self.worksheet = worksheet
         self.header_state: List[List[Dict[str, Any]]] = []
@@ -37,6 +40,7 @@ class TemplateStateBuilder:
         self.max_row = self.worksheet.max_row
         self.min_col = 1
         self.num_header_cols = num_header_cols
+        self.debug = debug or TemplateStateBuilder.DEBUG  # Use instance or class-level debug flag
 
         # Store default style objects for comparison
         default_workbook = openpyxl.Workbook()
@@ -60,11 +64,13 @@ class TemplateStateBuilder:
         self.max_row = max(max_row_with_content, self.max_row) # Update self.max_row with max_row_with_content
         
         # Capture template state immediately during initialization
-        print(f"[TemplateStateBuilder] Capturing template state during init")
-        print(f"  Header: rows 1-{header_end_row}, Footer: rows {footer_start_row}-{self.max_row}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Capturing template state during init")
+            print(f"  Header: rows 1-{header_end_row}, Footer: rows {footer_start_row}-{self.max_row}")
         self._capture_header(header_end_row)
         self._capture_footer(footer_start_row, self.max_row)
-        print(f"[TemplateStateBuilder] State captured: {len(self.header_state)} header rows, {len(self.footer_state)} footer rows")
+        if self.debug:
+            print(f"[TemplateStateBuilder] State captured: {len(self.header_state)} header rows, {len(self.footer_state)} footer rows")
 
 
     def _has_content_or_style(self, cell) -> bool:
@@ -141,7 +147,8 @@ class TemplateStateBuilder:
         """
         Captures the state of the header section.
         """
-        print(f"[TemplateStateBuilder] Capturing header up to row {end_row}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Capturing header up to row {end_row}")
         # Determine the actual start row of the header by finding the first row with content
         header_start_row = 1
         for r_idx in range(1, end_row + 1):
@@ -167,7 +174,8 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        print(f"[TemplateStateBuilder] Header captured: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Header captured: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
 
     def _capture_footer(self, footer_start_row: int, max_possible_footer_row: int):
         """
@@ -177,7 +185,8 @@ class TemplateStateBuilder:
             footer_start_row: First row of footer in the template
             max_possible_footer_row: Last row to check for footer content
         """
-        print(f"[TemplateStateBuilder] Capturing footer from row {footer_start_row} to {max_possible_footer_row}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Capturing footer from row {footer_start_row} to {max_possible_footer_row}")
         
         # Footer start is already known from parameter
         self.template_footer_start_row = footer_start_row
@@ -209,7 +218,8 @@ class TemplateStateBuilder:
 
         self.template_footer_end_row = footer_end_row
 
-        print(f"[TemplateStateBuilder] Footer ends at row {footer_end_row} (found {footer_end_row - footer_start_row + 1} footer rows)")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Footer ends at row {footer_end_row} (found {footer_end_row - footer_start_row + 1} footer rows)")
 
         for r_idx in range(footer_start_row, footer_end_row + 1):
             row_data = []
@@ -228,23 +238,25 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        print(f"[TemplateStateBuilder] Footer captured: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, start row: {self.template_footer_start_row}")
-        
-        # Debug: Show first few footer cells
-        if self.footer_state and len(self.footer_state) > 0:
-            print(f"  First footer row sample:")
-            for i, cell_info in enumerate(self.footer_state[0][:3]):  # First 3 cells
-                print(f"    Cell {i+1}: value={cell_info['value']}, font={cell_info['font'] is not None}, fill={cell_info['fill'] is not None}, border={cell_info['border'] is not None}")
-        if self.footer_merged_cells:
-            print(f"  Footer merges: {self.footer_merged_cells[:5]}")  # First 5 merges
+        if self.debug:
+            print(f"[TemplateStateBuilder] Footer captured: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, start row: {self.template_footer_start_row}")
+            
+            # Debug: Show first few footer cells
+            if self.footer_state and len(self.footer_state) > 0:
+                print(f"  First footer row sample:")
+                for i, cell_info in enumerate(self.footer_state[0][:3]):  # First 3 cells
+                    print(f"    Cell {i+1}: value={cell_info['value']}, font={cell_info['font'] is not None}, fill={cell_info['fill'] is not None}, border={cell_info['border'] is not None}")
+            if self.footer_merged_cells:
+                print(f"  Footer merges: {self.footer_merged_cells[:5]}")  # First 5 merges
 
     def restore_header_only(self, target_worksheet: Worksheet):
         """
         Restores ONLY the header (structure, values, merges, formatting) to a new clean worksheet.
         This is used when creating a fresh worksheet to avoid template footer conflicts.
         """
-        print(f"[TemplateStateBuilder] Restoring header to new worksheet")
-        print(f"  Header rows: {len(self.header_state)}, Header merges: {len(self.header_merged_cells)}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring header to new worksheet")
+            print(f"  Header rows: {len(self.header_state)}, Header merges: {len(self.header_merged_cells)}")
         
         # Restore header cell values and formatting
         for row_idx, row_data in enumerate(self.header_state):
@@ -273,9 +285,11 @@ class TemplateStateBuilder:
         for merged_cell_range_str in self.header_merged_cells:
             try:
                 target_worksheet.merge_cells(merged_cell_range_str)
-                print(f"  Merged: {merged_cell_range_str}")
+                if self.debug:
+                    print(f"  Merged: {merged_cell_range_str}")
             except Exception as e:
-                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+                if self.debug:
+                    print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
         
         # Restore row heights
         for row_num, height in self.row_heights.items():
@@ -287,7 +301,8 @@ class TemplateStateBuilder:
             if width:
                 target_worksheet.column_dimensions[get_column_letter(col_num)].width = width
         
-        print(f"[TemplateStateBuilder] Header restoration complete")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Header restoration complete")
 
     def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int):
         """
@@ -298,8 +313,9 @@ class TemplateStateBuilder:
             target_worksheet: The worksheet to restore footer to
             footer_start_row: The row where the template footer should start (after data footer)
         """
-        print(f"[TemplateStateBuilder] Restoring template footer starting at row {footer_start_row}")
-        print(f"  Template footer rows: {len(self.footer_state)}, Footer merges: {len(self.footer_merged_cells)}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring template footer starting at row {footer_start_row}")
+            print(f"  Template footer rows: {len(self.footer_state)}, Footer merges: {len(self.footer_merged_cells)}")
         
         # Calculate offset: template footer was at self.template_footer_start_row, now goes to footer_start_row
         offset = footer_start_row - self.template_footer_start_row if self.template_footer_start_row > 0 else 0
@@ -338,16 +354,19 @@ class TemplateStateBuilder:
                 max_row += offset
                 adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
                 target_worksheet.merge_cells(adjusted_range_str)
-                print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+                if self.debug:
+                    print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
             except Exception as e:
-                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+                if self.debug:
+                    print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
         
         # Restore row heights for footer rows
         for row_num, height in self.row_heights.items():
             if self.template_footer_start_row <= row_num <= self.template_footer_end_row and height:
                 target_worksheet.row_dimensions[row_num + offset].height = height
         
-        print(f"[TemplateStateBuilder] Template footer restoration complete ({len(self.footer_state)} rows restored)")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Template footer restoration complete ({len(self.footer_state)} rows restored)")
 
     def restore_state(self, target_worksheet: Worksheet, data_start_row: int, data_table_end_row: int, restore_footer_merges: bool = True):
         """
@@ -360,30 +379,36 @@ class TemplateStateBuilder:
             data_table_end_row: Ending row of data table
             restore_footer_merges: Whether to restore footer merges (False when FooterBuilder creates its own merges)
         """
-        print(f"[TemplateStateBuilder] Restoring formatting (merges, heights, widths):")
-        print(f"  Header merges: {len(self.header_merged_cells)}")
-        print(f"  Footer merges: {len(self.footer_merged_cells)} (restore: {restore_footer_merges})")
-        print(f"  Template footer start row: {self.template_footer_start_row}")
-        print(f"  Data table end row: {data_table_end_row}")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring formatting (merges, heights, widths):")
+            print(f"  Header merges: {len(self.header_merged_cells)}")
+            print(f"  Footer merges: {len(self.footer_merged_cells)} (restore: {restore_footer_merges})")
+            print(f"  Template footer start row: {self.template_footer_start_row}")
+            print(f"  Data table end row: {data_table_end_row}")
         
         # Restore header merged cells without offset
-        print(f"[TemplateStateBuilder] Restoring {len(self.header_merged_cells)} header merges...")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring {len(self.header_merged_cells)} header merges...")
         for merged_cell_range_str in self.header_merged_cells:
             try:
                 target_worksheet.merge_cells(merged_cell_range_str)
-                print(f"  Merged: {merged_cell_range_str}")
+                if self.debug:
+                    print(f"  Merged: {merged_cell_range_str}")
             except Exception as e:
-                print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+                if self.debug:
+                    print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
 
         # Calculate the offset for footer rows and merged cells
         footer_start_row_in_new_sheet = data_table_end_row + 1
         offset = footer_start_row_in_new_sheet - self.template_footer_start_row if self.template_footer_start_row != -1 else 0
         
-        print(f"[TemplateStateBuilder] Footer offset: {offset} (template row {self.template_footer_start_row} -> new row {footer_start_row_in_new_sheet})")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Footer offset: {offset} (template row {self.template_footer_start_row} -> new row {footer_start_row_in_new_sheet})")
 
         # Restore footer merged cells with offset (only if requested)
         if restore_footer_merges:
-            print(f"[TemplateStateBuilder] Restoring {len(self.footer_merged_cells)} footer merges with offset {offset}...")
+            if self.debug:
+                print(f"[TemplateStateBuilder] Restoring {len(self.footer_merged_cells)} footer merges with offset {offset}...")
             for merged_cell_range_str in self.footer_merged_cells:
                 try:
                     from openpyxl.utils.cell import range_boundaries
@@ -394,14 +419,18 @@ class TemplateStateBuilder:
                     max_row += offset
                     adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
                     target_worksheet.merge_cells(adjusted_range_str)
-                    print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+                    if self.debug:
+                        print(f"  Merged: {merged_cell_range_str} -> {adjusted_range_str}")
                 except Exception as e:
-                    print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
+                    if self.debug:
+                        print(f"  Warning: Could not merge {merged_cell_range_str}: {e}")
         else:
-            print(f"[TemplateStateBuilder] Skipping footer merge restoration (FooterBuilder creates its own merges)")
+            if self.debug:
+                print(f"[TemplateStateBuilder] Skipping footer merge restoration (FooterBuilder creates its own merges)")
 
         # Restore row heights for header
-        print(f"[TemplateStateBuilder] Restoring row heights...")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring row heights...")
         current_row = 1
         for row_data in self.header_state:
             target_worksheet.row_dimensions[current_row].height = self.row_heights.get(current_row, None)
@@ -414,8 +443,10 @@ class TemplateStateBuilder:
             target_worksheet.row_dimensions[r_idx].height = self.row_heights.get(original_footer_row_idx, None)
 
         # Restore column widths
-        print(f"[TemplateStateBuilder] Restoring column widths...")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Restoring column widths...")
         for c_idx, width in self.column_widths.items():
             target_worksheet.column_dimensions[get_column_letter(c_idx)].width = width
         
-        print(f"[TemplateStateBuilder] Formatting restoration complete!")
+        if self.debug:
+            print(f"[TemplateStateBuilder] Formatting restoration complete!")
