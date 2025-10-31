@@ -3,63 +3,115 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 
 from ..styling.models import StylingConfigModel
-from .header_builder import HeaderBuilder
-from .data_table_builder import DataTableBuilder
-from .footer_builder import FooterBuilder
+from .bundle_accessor import BundleAccessor
+from .header_builder import HeaderBuilderStyler
+from .data_table_builder import DataTableBuilderStyler
+from .footer_builder import FooterBuilderStyler
 from .text_replacement_builder import TextReplacementBuilder
 from .template_state_builder import TemplateStateBuilder
 
-class LayoutBuilder:
+class LayoutBuilder(BundleAccessor):
     """
     The Director in the Builder pattern.
-    Coordinates all builders to construct the complete document layout.
+    Coordinates BuilderStyler components to construct the complete document layout.
+    
+    This class orchestrates the building process in the correct sequence:
+    1. Template state capture (structure preservation)
+    2. Text replacement (if enabled)
+    3. Header building + styling (via HeaderBuilderStyler)
+    4. Data table building + styling (via DataTableBuilderStyler)
+    5. Footer building + styling (via FooterBuilderStyler)
+    6. Template footer restoration
+    
+    Uses pure bundle architecture for zero duplication and infinite extensibility.
     """
     def __init__(
         self,
         workbook: Workbook,
         worksheet: Worksheet,
         template_worksheet: Worksheet,
-        sheet_name: str,
-        sheet_config: Dict[str, Any],
-        all_sheet_configs: Dict[str, Any],
-        invoice_data: Dict[str, Any],
-        styling_config: Optional[StylingConfigModel] = None,
-        args: Optional[Any] = None,
-        final_grand_total_pallets: int = 0,
-        enable_text_replacement: bool = False,
-        # Optional skip flags for custom processors
-        skip_template_header_restoration: bool = False,
-        skip_header_builder: bool = False,
-        skip_data_table_builder: bool = False,
-        skip_footer_builder: bool = False,
-        skip_template_footer_restoration: bool = False,
+        style_config: Dict[str, Any],
+        context_config: Dict[str, Any],
+        layout_config: Dict[str, Any],
     ):
-        self.workbook = workbook  # Output workbook (writable)
-        self.worksheet = worksheet  # Output worksheet (writable)
-        self.template_worksheet = template_worksheet  # Template worksheet (read-only usage)
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.all_sheet_configs = all_sheet_configs
-        self.invoice_data = invoice_data
-        self.styling_config = styling_config
-        self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
-        self.enable_text_replacement = enable_text_replacement
+        """
+        Initialize LayoutBuilder with pure bundle pattern.
         
-        # Skip flags for flexible processor customization
-        self.skip_template_header_restoration = skip_template_header_restoration
-        self.skip_header_builder = skip_header_builder
-        self.skip_data_table_builder = skip_data_table_builder
-        self.skip_footer_builder = skip_footer_builder
-        self.skip_template_footer_restoration = skip_template_footer_restoration
+        Args:
+            workbook: Output workbook (writable)
+            worksheet: Output worksheet (writable)
+            template_worksheet: Template worksheet (read-only)
+            style_config: Bundle containing styling_config
+            context_config: Bundle containing sheet_name, invoice_data, all_sheet_configs, args, final_grand_total_pallets
+            layout_config: Bundle containing sheet_config, enable_text_replacement, skip flags
+        """
+        # Initialize base class with common bundles
+        super().__init__(
+            worksheet=worksheet,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config  # Pass layout_config to base via kwargs
+        )
         
-        # Store results after build
+        # Store LayoutBuilder-specific attributes
+        self.workbook = workbook
+        self.template_worksheet = template_worksheet
+        
+        # Initialize output state variables (build results, not configs)
         self.header_info = None
         self.next_row_after_footer = -1
-        self.data_start_row = -1  # Expose data range for multi-table sum calculation
-        self.data_end_row = -1    # Expose data range for multi-table sum calculation
-        self.dynamic_desc_used = False  # Expose for summary add-on condition
+        self.data_start_row = -1
+        self.data_end_row = -1
+        self.dynamic_desc_used = False
         self.template_state_builder = None
+    
+    # ========== Properties for Frequently Accessed Config Values ==========
+    # Note: sheet_name, all_sheet_configs, args, sheet_styling_config inherited from BundleAccessor
+    
+    @property
+    def sheet_config(self) -> Dict[str, Any]:
+        """Sheet configuration from layout config."""
+        return self.layout_config.get('sheet_config', {})
+    
+    @property
+    def invoice_data(self) -> Dict[str, Any]:
+        """Invoice data from context config."""
+        return self.context_config.get('invoice_data', {})
+    
+    @property
+    def final_grand_total_pallets(self) -> int:
+        """Final grand total pallets from context config."""
+        return self.context_config.get('final_grand_total_pallets', 0)
+    
+    @property
+    def enable_text_replacement(self) -> bool:
+        """Enable text replacement from layout config."""
+        return self.layout_config.get('enable_text_replacement', False)
+    
+    @property
+    def skip_template_header_restoration(self) -> bool:
+        """Skip template header restoration from layout config."""
+        return self.layout_config.get('skip_template_header_restoration', False)
+    
+    @property
+    def skip_header_builder(self) -> bool:
+        """Skip header builder from layout config."""
+        return self.layout_config.get('skip_header_builder', False)
+    
+    @property
+    def skip_data_table_builder(self) -> bool:
+        """Skip data table builder from layout config."""
+        return self.layout_config.get('skip_data_table_builder', False)
+    
+    @property
+    def skip_footer_builder(self) -> bool:
+        """Skip footer builder from layout config."""
+        return self.layout_config.get('skip_footer_builder', False)
+    
+    @property
+    def skip_template_footer_restoration(self) -> bool:
+        """Skip template footer restoration from layout config."""
+        return self.layout_config.get('skip_template_footer_restoration', False)
 
     def build(self) -> bool:
         """
@@ -120,20 +172,11 @@ class LayoutBuilder:
         
         # 4. Header Builder - writes header data to NEW worksheet (unless skipped)
         if not self.skip_header_builder:
-            # Convert styling_config dict to StylingConfigModel if needed
-            styling_model = self.styling_config
-            if styling_model and not isinstance(styling_model, StylingConfigModel):
-                try:
-                    styling_model = StylingConfigModel(**styling_model)
-                except Exception as e:
-                    print(f"Warning: Could not create StylingConfigModel: {e}")
-                    styling_model = None
-
-            header_builder = HeaderBuilder(
+            header_builder = HeaderBuilderStyler(
                 worksheet=self.worksheet,
                 start_row=start_row,
                 header_layout_config=header_to_write,
-                sheet_styling_config=styling_model,
+                sheet_styling_config=self.sheet_styling_config,
             )
             self.header_info = header_builder.build()
 
@@ -144,7 +187,6 @@ class LayoutBuilder:
             print(f"[LayoutBuilder] Skipping header builder (skip_header_builder=True)")
             # Must provide dummy header_info for downstream builders
             self.header_info = {'column_map': {}, 'first_row_index': start_row, 'second_row_index': start_row + 1}
-            styling_model = self.styling_config
 
         # 5. Data Table Builder (writes data rows, returns footer position) (unless skipped)
         if not self.skip_data_table_builder:
@@ -184,31 +226,47 @@ class LayoutBuilder:
                 print(f"Warning: Data source '{data_source_indicator}' unknown or data empty. Skipping fill.")
                 return True
 
-            data_table_builder = DataTableBuilder(
+            # Bundle configs for DataTableBuilder
+            dtb_style_config = {
+                'styling_config': self.sheet_styling_config
+            }
+            
+            dtb_context_config = {
+                'sheet_name': self.sheet_name,
+                'all_sheet_configs': self.all_sheet_configs,
+                'args': self.args,
+                'grand_total_pallets': self.final_grand_total_pallets,
+                'all_tables_data': None,
+                'table_keys': None,
+                'is_last_table': True
+            }
+            
+            dtb_layout_config = {
+                'sheet_config': self.sheet_config,
+                'add_blank_after_header': add_blank_after_hdr_flag,
+                'static_content_after_header': static_content_after_hdr_dict,
+                'add_blank_before_footer': add_blank_before_ftr_flag,
+                'static_content_before_footer': static_content_before_ftr_dict,
+                'merge_rules_after_header': merge_rules_after_hdr,
+                'merge_rules_before_footer': merge_rules_before_ftr,
+                'merge_rules_footer': merge_rules_footer,
+                'data_cell_merging_rules': data_cell_merging_rules,
+                'max_rows_to_fill': None
+            }
+            
+            dtb_data_config = {
+                'data_source': data_to_fill,
+                'data_source_type': data_source_type,
+                'header_info': self.header_info,
+                'mapping_rules': sheet_inner_mapping_rules_dict
+            }
+
+            data_table_builder = DataTableBuilderStyler(
                 worksheet=self.worksheet,
-                sheet_name=self.sheet_name,
-                sheet_config=self.sheet_config,
-                all_sheet_configs=self.all_sheet_configs,
-                data_source=data_to_fill,
-                data_source_type=data_source_type,
-                header_info=self.header_info,
-                mapping_rules=sheet_inner_mapping_rules_dict,
-                sheet_styling_config=styling_model,
-                add_blank_after_header=add_blank_after_hdr_flag,
-                static_content_after_header=static_content_after_hdr_dict,
-                add_blank_before_footer=add_blank_before_ftr_flag,
-                static_content_before_footer=static_content_before_ftr_dict,
-                merge_rules_after_header=merge_rules_after_hdr,
-                merge_rules_before_footer=merge_rules_before_ftr,
-                merge_rules_footer=merge_rules_footer,
-                max_rows_to_fill=None,
-                grand_total_pallets=self.final_grand_total_pallets,
-                custom_flag=self.args.custom,
-                data_cell_merging_rules=data_cell_merging_rules,
-                DAF_mode=self.args.DAF,
-                all_tables_data=None,
-                table_keys=None,
-                is_last_table=True,
+                style_config=dtb_style_config,
+                context_config=dtb_context_config,
+                layout_config=dtb_layout_config,
+                data_config=dtb_data_config
             )
 
             fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
@@ -246,21 +304,35 @@ class LayoutBuilder:
             if data_start_row > 0 and data_end_row >= data_start_row:
                 data_range_to_sum = [(data_start_row, data_end_row)]
 
-            footer_builder = FooterBuilder(
+            # Bundle configs for FooterBuilder
+            fb_style_config = {
+                'styling_config': self.sheet_styling_config
+            }
+            
+            fb_context_config = {
+                'header_info': self.header_info,
+                'pallet_count': pallet_count,
+                'sheet_name': self.sheet_name,
+                'is_last_table': True,
+                'dynamic_desc_used': False  # TODO: Track this if needed
+            }
+            
+            fb_data_config = {
+                'sum_ranges': data_range_to_sum,
+                'footer_config': footer_config,
+                'all_tables_data': None,  # TODO: Pass if multi-table support needed
+                'table_keys': None,
+                'mapping_rules': sheet_inner_mapping_rules_dict,
+                'DAF_mode': data_source_type == "DAF_aggregation",
+                'override_total_text': None
+            }
+
+            footer_builder = FooterBuilderStyler(
                 worksheet=self.worksheet,
                 footer_row_num=footer_row_position,
-                header_info=self.header_info,
-                sum_ranges=data_range_to_sum,
-                footer_config=footer_config,
-                pallet_count=pallet_count,
-                DAF_mode=data_source_type == "DAF_aggregation",
-                sheet_styling_config=styling_model,
-                all_tables_data=None,  # TODO: Pass if multi-table support needed
-                table_keys=None,
-                mapping_rules=sheet_inner_mapping_rules_dict,
-                sheet_name=self.sheet_name,
-                is_last_table=True,
-                dynamic_desc_used=False,  # TODO: Track this if needed
+                style_config=fb_style_config,
+                context_config=fb_context_config,
+                data_config=fb_data_config
             )
             self.next_row_after_footer = footer_builder.build()
             
@@ -268,10 +340,10 @@ class LayoutBuilder:
             if self.next_row_after_footer > footer_row_position:
                 # Multiple footer rows were created (e.g., regular footer + grand total)
                 for footer_row in range(footer_row_position, self.next_row_after_footer):
-                    self._apply_footer_row_height(footer_row, styling_model)
+                    self._apply_footer_row_height(footer_row)
             else:
                 # Single footer row
-                self._apply_footer_row_height(footer_row_position, styling_model)
+                self._apply_footer_row_height(footer_row_position)
         else:
             print(f"[LayoutBuilder] Skipping footer builder (skip_footer_builder=True)")
             # No footer, so next row is right after data (or header if no data)
@@ -294,31 +366,3 @@ class LayoutBuilder:
         print(f"[LayoutBuilder] Layout built successfully for sheet '{self.sheet_name}'")
         
         return True
-    
-    def _apply_footer_row_height(self, footer_row: int, styling_config):
-        """Helper method to apply footer height to a single footer row."""
-        if not styling_config or not styling_config.rowHeights:
-            return
-        
-        row_heights_cfg = styling_config.rowHeights
-        footer_height_config = row_heights_cfg.get("footer")
-        match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
-        
-        # Determine the footer height
-        final_footer_height = None
-        if match_header_height_flag:
-            # Get header height from config
-            header_height = row_heights_cfg.get("header")
-            if header_height is not None:
-                final_footer_height = header_height
-        if final_footer_height is None and footer_height_config is not None:
-            final_footer_height = footer_height_config
-        
-        # Apply the height
-        if final_footer_height is not None and footer_row > 0:
-            try:
-                h_val = float(final_footer_height)
-                if h_val > 0:
-                    self.worksheet.row_dimensions[footer_row].height = h_val
-            except (ValueError, TypeError):
-                pass

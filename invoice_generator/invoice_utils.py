@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 from decimal import Decimal
 from decimal import Decimal, InvalidOperation
 from .utils import merge_utils
-from .builders.footer_builder import FooterBuilder
+from .builders.footer_builder import FooterBuilderStyler
 from .styling.models import StylingConfigModel
 
 # --- Constants for Styling ---
@@ -1654,16 +1654,35 @@ def write_grand_total_footer(
             except Exception as style_err:
                 print(f"Warning: Could not create StylingConfigModel: {style_err}")
         
-        # Use FooterBuilder (the worker uses the tool)
-        footer_builder = FooterBuilder(
+        # Use FooterBuilder (the worker uses the tool) with bundle pattern
+        footer_style_config = {
+            'styling_config': styling_model
+        }
+        
+        footer_context_config = {
+            'header_info': header_info,
+            'pallet_count': pallet_count,
+            'sheet_name': None,
+            'is_last_table': False,
+            'dynamic_desc_used': False
+        }
+        
+        footer_data_config = {
+            'sum_ranges': sum_ranges,
+            'footer_config': footer_cfg_copy,
+            'all_tables_data': None,
+            'table_keys': None,
+            'mapping_rules': None,
+            'DAF_mode': DAF_mode,
+            'override_total_text': None
+        }
+        
+        footer_builder = FooterBuilderStyler(
             worksheet=worksheet,
-            footer_config=footer_cfg_copy,
-            header_info=header_info,
-            sheet_styling_config=styling_model,
             footer_row_num=footer_row_num,
-            sum_ranges=sum_ranges,
-            pallet_count=pallet_count,
-            DAF_mode=DAF_mode
+            style_config=footer_style_config,
+            context_config=footer_context_config,
+            data_config=footer_data_config
         )
         
         result_row = footer_builder.build()
@@ -2104,16 +2123,35 @@ def fill_invoice_data(
                 except Exception as style_err:
                     print(f"Warning: Could not create StylingConfigModel: {style_err}")
 
-            # Use FooterBuilder instead of write_footer_row
-            footer_builder = FooterBuilder(
+            # Use FooterBuilder instead of write_footer_row with bundle pattern
+            footer_style_config = {
+                'styling_config': styling_model
+            }
+            
+            footer_context_config = {
+                'header_info': header_info,
+                'pallet_count': pallet_count,
+                'sheet_name': None,
+                'is_last_table': False,
+                'dynamic_desc_used': False
+            }
+            
+            footer_data_config = {
+                'sum_ranges': data_range_to_sum,
+                'footer_config': footer_config,
+                'all_tables_data': None,
+                'table_keys': None,
+                'mapping_rules': None,
+                'DAF_mode': data_source_type == "DAF_aggregation",
+                'override_total_text': None
+            }
+            
+            footer_builder = FooterBuilderStyler(
                 worksheet=worksheet,
-                footer_config=footer_config,
-                header_info=header_info,
-                sheet_styling_config=styling_model,
                 footer_row_num=footer_row_final,
-                sum_ranges=data_range_to_sum,
-                pallet_count=pallet_count,
-                DAF_mode=data_source_type == "DAF_aggregation"
+                style_config=footer_style_config,
+                context_config=footer_context_config,
+                data_config=footer_data_config
             )
             
             result_row = footer_builder.build()

@@ -2,7 +2,7 @@
 import sys
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
-from ..builders.footer_builder import FooterBuilder
+from ..builders.footer_builder import FooterBuilderStyler
 from ..styling.models import StylingConfigModel
 import traceback
 from openpyxl.utils import get_column_letter
@@ -61,22 +61,35 @@ class MultiTableProcessor(SheetProcessor):
             # IMPORTANT: Set data_source to the table key so LayoutBuilder can find the data
             table_sheet_config['data_source'] = str(table_key)
             
+            # Prepare config bundles for LayoutBuilder
+            style_config = {
+                'styling_config': sheet_styling_config
+            }
+            
+            context_config = {
+                'sheet_name': self.sheet_name,
+                'invoice_data': table_invoice_data,
+                'all_sheet_configs': self.data_mapping_config,
+                'args': self.args,
+                'final_grand_total_pallets': 0  # Per-table, not grand total
+            }
+            
+            layout_config = {
+                'sheet_config': table_sheet_config,
+                'enable_text_replacement': False,  # Already done at main level
+                # For multi-table: Only restore template header/footer for FIRST table
+                # Subsequent tables should skip to avoid wrong row capture
+                'skip_template_header_restoration': (not is_first_table),
+                'skip_template_footer_restoration': True  # Never restore footer mid-document
+            }
+            
             layout_builder = LayoutBuilder(
                 workbook=self.output_workbook,
                 worksheet=self.output_worksheet,
                 template_worksheet=self.template_worksheet,
-                sheet_name=self.sheet_name,
-                sheet_config=table_sheet_config,
-                all_sheet_configs=self.data_mapping_config,
-                invoice_data=table_invoice_data,
-                styling_config=sheet_styling_config,
-                args=self.args,
-                final_grand_total_pallets=0,  # Per-table, not grand total
-                enable_text_replacement=False,  # Already done at main level
-                # For multi-table: Only restore template header/footer for FIRST table
-                # Subsequent tables should skip to avoid wrong row capture
-                skip_template_header_restoration=(not is_first_table),
-                skip_template_footer_restoration=True  # Never restore footer mid-document
+                style_config=style_config,
+                context_config=context_config,
+                layout_config=layout_config
             )
             
             # Build this table's layout
@@ -137,21 +150,35 @@ class MultiTableProcessor(SheetProcessor):
             if self.sheet_config.get("summary", False) and self.args.DAF:
                 footer_config_copy["add_ons"] = ["summary"]
             
-            footer_builder = FooterBuilder(
+            # Bundle configs for FooterBuilder
+            fb_style_config = {
+                'styling_config': styling_model
+            }
+            
+            fb_context_config = {
+                'header_info': last_header_info,
+                'pallet_count': grand_total_pallets,
+                'sheet_name': self.sheet_name,
+                'is_last_table': True,
+                'dynamic_desc_used': dynamic_desc_used
+            }
+            
+            fb_data_config = {
+                'sum_ranges': all_data_ranges,
+                'footer_config': footer_config_copy,
+                'all_tables_data': all_tables_data,
+                'table_keys': table_keys,
+                'mapping_rules': self.sheet_config.get('mappings', {}),
+                'DAF_mode': self.args.DAF,
+                'override_total_text': None
+            }
+            
+            footer_builder = FooterBuilderStyler(
                 worksheet=self.output_worksheet,
                 footer_row_num=grand_total_row,
-                header_info=last_header_info,
-                sum_ranges=all_data_ranges,  # Pass ALL table data ranges for sum formulas
-                footer_config=footer_config_copy,
-                pallet_count=grand_total_pallets,
-                DAF_mode=self.args.DAF,
-                sheet_styling_config=styling_model,
-                all_tables_data=all_tables_data,  # Pass full table data for summary add-on
-                table_keys=table_keys,  # Pass table keys for summary add-on
-                mapping_rules=self.sheet_config.get('mappings', {}),
-                sheet_name=self.sheet_name,
-                is_last_table=True,  # This is the last footer (after all tables)
-                dynamic_desc_used=dynamic_desc_used  # Pass tracked dynamic_desc_used flag
+                style_config=fb_style_config,
+                context_config=fb_context_config,
+                data_config=fb_data_config
             )
             next_row = footer_builder.build()
             

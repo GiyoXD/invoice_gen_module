@@ -7,49 +7,70 @@ This document explains the structure and purpose of the `DataTableBuilder` class
 The `DataTableBuilder` is a core component of the invoice generation system that bridges data preparation and worksheet rendering. It takes prepared data and configuration, then writes it to Excel worksheets with proper formatting, formulas, merging, and styling.
 
 - **Purpose**: To construct and populate data tables in Excel worksheets with invoice data while applying appropriate styling and calculations.
-- **Pattern**: Builder pattern - constructs complex data table structures step-by-step.
+- **Pattern**: Builder pattern with **Pure Bundle Architecture** - uses config bundles with `@property` accessors.
 - **Key Responsibility**: Translates business data into formatted Excel rows with formulas, merges, and styles.
+
+## Architecture: Pure Bundle Pattern
+
+`DataTableBuilder` uses the **Bundle Cascade Pattern** where configuration bundles flow from `LayoutBuilder` without extraction. This provides:
+- ✅ **Tiny constructor** (5 lines vs 50 lines)
+- ✅ **Zero maintenance** for new configs
+- ✅ **Clean access** via `@property` decorators
+- ✅ **Infinite extensibility**
+
+See `docs/BUNDLE_CASCADE_PATTERN.md` for full details.
 
 ## `DataTableBuilder` Class
 
 ### `__init__(...)` - The Constructor
 
-The constructor initializes the builder with all necessary data, configuration, and context needed to build a complete data table section in an Excel worksheet.
+The constructor uses the pure bundle pattern: stores bundles without extraction, uses properties for access.
 
-- **Purpose**: To configure the builder with worksheet context, data sources, styling rules, and layout specifications.
+- **Purpose**: To configure the builder with config bundles from LayoutBuilder (Bundle Cascade Pattern).
 - **Parameters**:
     - `worksheet: Worksheet`: The `openpyxl` Worksheet object where data will be written.
-    - `sheet_name: str`: The name of the worksheet being processed (for logging and debugging).
-    - `sheet_config: Dict[str, Any]`: The complete configuration for this specific sheet, including footer configurations and merge rules.
-    - `all_sheet_configs: Dict[str, Any]`: The full configuration dictionary for all sheets (allows cross-sheet references if needed).
-    - `data_source: Union[Dict[str, List[Any]], Dict[Tuple, Dict[str, Any]]]`: The actual data to be written, can be a flat dictionary of lists or a nested dictionary structure.
-    - `data_source_type: str`: Indicates the type of data source (e.g., `"aggregation"`, `"DAF_aggregation"`, `"custom_aggregation"`).
-    - `header_info: Dict[str, Any]`: Information about the header structure including:
-        - `second_row_index`: The row index of the second header row (data starts after this).
-        - `column_map`: Maps column names to their indices.
-        - `column_id_map`: Maps column IDs (e.g., `"col_desc"`) to their indices.
-        - `num_columns`: Total number of columns in the table.
-    - `mapping_rules: Dict[str, Any]`: Rules for mapping data to columns, including static values, dynamic mappings, and formula definitions.
-    - `sheet_styling_config: Optional[StylingConfigModel]`: The styling configuration model containing font, alignment, border, and row height specifications.
-    - `add_blank_after_header: bool`: Whether to insert a blank row immediately after the header (default: `False`).
-    - `static_content_after_header: Optional[Dict[str, Any]]`: Content to populate in the row after the header, if any.
-    - `add_blank_before_footer: bool`: Whether to insert a blank row immediately before the footer (default: `False`).
-    - `static_content_before_footer: Optional[Dict[str, Any]]`: Content to populate in the row before the footer, if any.
-    - `merge_rules_after_header: Optional[Dict[str, int]]`: Cell merge rules for the row after header.
-    - `merge_rules_before_footer: Optional[Dict[str, int]]`: Cell merge rules for the row before footer.
-    - `merge_rules_footer: Optional[Dict[str, int]]`: Cell merge rules for the footer row itself.
-    - `max_rows_to_fill: Optional[int]`: Maximum number of data rows to process (used for template constraints).
-    - `grand_total_pallets: int`: The global pallet count total (may be used in footers).
-    - `custom_flag: bool`: Indicates if custom processing mode is active.
-    - `data_cell_merging_rules: Optional[Dict[str, Any]]`: Rules for merging specific data cells within rows.
-    - `DAF_mode: Optional[bool]`: Delivery At Frontier mode flag that affects styling and content rules (default: `False`).
-    - `all_tables_data: Optional[Dict[str, Any]]`: Data for all tables (used in multi-table scenarios).
-    - `table_keys: Optional[List[str]]`: List of table keys for multi-table processing.
-    - `is_last_table: bool`: Flag indicating if this is the last table being processed (affects footer behavior).
+    - `style_config: Dict[str, Any]`: Style configuration bundle containing:
+        - `styling_config`: StylingConfigModel instance
+    - `context_config: Dict[str, Any]`: Runtime context bundle containing:
+        - `sheet_name`: Sheet being processed
+        - `all_sheet_configs`: All sheet configurations
+        - `grand_total_pallets`: Global pallet count
+        - `args`: Command-line arguments (for DAF/custom flags)
+        - `is_last_table`: Whether this is the last table
+    - `layout_config: Dict[str, Any]`: Layout configuration bundle containing:
+        - `sheet_config`: Complete sheet configuration
+        - `add_blank_after_header`: Insert blank row after header
+        - `static_content_after_header`: Static content after header
+        - `add_blank_before_footer`: Insert blank row before footer
+        - `static_content_before_footer`: Static content before footer
+        - `merge_rules_after_header`: Merge rules after header
+        - `merge_rules_before_footer`: Merge rules before footer
+        - `merge_rules_footer`: Footer merge rules
+        - `data_cell_merging_rules`: Data cell merge rules
+        - `max_rows_to_fill`: Maximum rows to fill
+    - `data_config: Dict[str, Any]`: Data source bundle containing:
+        - `data_source`: Actual data to write
+        - `data_source_type`: Type of data source (aggregation, DAF, etc.)
+        - `header_info`: Header structure information
+        - `mapping_rules`: Data-to-column mapping rules
+        - `all_tables_data`: All tables data (multi-table)
+        - `table_keys`: Table keys (multi-table)
 
 - **Instance Variables Initialized**:
-    - **Tracking Variables**: `actual_rows_to_process`, `data_rows_prepared`, `col1_index`, `num_static_labels`, `desc_col_idx`, `local_chunk_pallets`, `dynamic_desc_used`
-    - **Row Position Trackers**: `row_after_header_idx`, `data_start_row`, `data_end_row`, `row_before_footer_idx`, `footer_row_final`
+    - **Config Bundles**: `style_config`, `context_config`, `layout_config`, `data_config` stored as-is
+    - **Output State Variables** (build results, not configs):
+        - `actual_rows_to_process`, `data_rows_prepared`, `col1_index`, `num_static_labels`
+        - `desc_col_idx`, `local_chunk_pallets`, `dynamic_desc_used`
+        - `row_after_header_idx`, `data_start_row`, `data_end_row`, `row_before_footer_idx`, `footer_row_final`
+
+- **Property Accessors** (21 properties for clean access):
+    - `sheet_name`, `sheet_config`, `all_sheet_configs`
+    - `data_source`, `data_source_type`, `header_info`, `mapping_rules`
+    - `sheet_styling_config`, `add_blank_after_header`, `static_content_after_header`
+    - `add_blank_before_footer`, `static_content_before_footer`
+    - `merge_rules_after_header`, `merge_rules_before_footer`, `merge_rules_footer`
+    - `max_rows_to_fill`, `grand_total_pallets`, `custom_flag`, `data_cell_merging_rules`
+    - `DAF_mode`, `all_tables_data`, `table_keys`, `is_last_table`
 
 ### `build(self) -> Tuple[bool, int, int, int, int]` - The Main Build Method
 

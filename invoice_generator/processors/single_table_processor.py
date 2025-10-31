@@ -19,19 +19,32 @@ class SingleTableProcessor(SheetProcessor):
         # Get styling configuration
         sheet_styling_config = self.sheet_config.get("styling")
         
+        # Prepare three config bundles for LayoutBuilder
+        style_config = {
+            'styling_config': sheet_styling_config
+        }
+        
+        context_config = {
+            'sheet_name': self.sheet_name,
+            'invoice_data': self.invoice_data,
+            'all_sheet_configs': self.data_mapping_config,
+            'args': self.args,
+            'final_grand_total_pallets': self.final_grand_total_pallets
+        }
+        
+        layout_config = {
+            'sheet_config': self.sheet_config,
+            'enable_text_replacement': False  # Already done at main level
+        }
+        
         # Use LayoutBuilder to orchestrate the entire layout construction
         layout_builder = LayoutBuilder(
             workbook=self.output_workbook,
             worksheet=self.output_worksheet,
             template_worksheet=self.template_worksheet,
-            sheet_name=self.sheet_name,
-            sheet_config=self.sheet_config,
-            all_sheet_configs=self.data_mapping_config,
-            invoice_data=self.invoice_data,
-            styling_config=sheet_styling_config,
-            args=self.args,
-            final_grand_total_pallets=self.final_grand_total_pallets,
-            enable_text_replacement=False  # Already done at main level
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config
         )
         
         # Build the entire layout (header + table + footer)

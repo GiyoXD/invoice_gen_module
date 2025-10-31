@@ -6,7 +6,7 @@ from ..styling.style_applier import apply_header_style, apply_cell_style
 from ..utils.layout import unmerge_block, calculate_header_dimensions
 from openpyxl.utils import get_column_letter
 
-class HeaderBuilder:
+class HeaderBuilderStyler:
     def __init__(
         self,
         worksheet: Worksheet,

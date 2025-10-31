@@ -20,60 +20,47 @@ FORMAT_NUMBER_COMMA_SEPARATED1 = '#,##0'
 FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'
 
 from invoice_generator.styling.models import StylingConfigModel
+from .bundle_accessor import BundleAccessor
 
-class DataTableBuilder:
-    def __init__(self,
+class DataTableBuilderStyler(BundleAccessor):
+    """
+    Builds and styles data table sections using pure bundle architecture.
+    
+    This class handles BOTH structural building (rows, cells, formulas, merges)
+    AND styling (fonts, borders, colors, alignment) in a single efficient pass.
+    
+    Styling logic is delegated to the style_applier module for separation of concerns.
+    Uses config bundles for input and @property decorators for frequently accessed values.
+    """
+    
+    def __init__(
+        self,
         worksheet: Worksheet,
-        sheet_name: str,
-        sheet_config: Dict[str, Any],
-        all_sheet_configs: Dict[str, Any],
-        data_source: Union[Dict[str, List[Any]], Dict[Tuple, Dict[str, Any]]],
-        data_source_type: str,
-        header_info: Dict[str, Any],
-        mapping_rules: Dict[str, Any],
-        sheet_styling_config: Optional[StylingConfigModel] = None,
-        add_blank_after_header: bool = False,
-        static_content_after_header: Optional[Dict[str, Any]] = None,
-        add_blank_before_footer: bool = False,
-        static_content_before_footer: Optional[Dict[str, Any]] = None,
-        merge_rules_after_header: Optional[Dict[str, int]] = None,
-        merge_rules_before_footer: Optional[Dict[str, int]] = None,
-        merge_rules_footer: Optional[Dict[str, int]] = None,
-        max_rows_to_fill: Optional[int] = None,
-        grand_total_pallets: int = 0,
-        custom_flag: bool = False,
-        data_cell_merging_rules: Optional[Dict[str, Any]] = None,
-        DAF_mode: Optional[bool] = False,
-        all_tables_data: Optional[Dict[str, Any]] = None,
-        table_keys: Optional[List[str]] = None,
-        is_last_table: bool = False,
+        style_config: Dict[str, Any],
+        context_config: Dict[str, Any],
+        layout_config: Dict[str, Any],
+        data_config: Dict[str, Any]
     ):
-        self.worksheet = worksheet
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.all_sheet_configs = all_sheet_configs
-        self.data_source = data_source
-        self.data_source_type = data_source_type
-        self.header_info = header_info
-        self.mapping_rules = mapping_rules
-        self.sheet_styling_config = sheet_styling_config
-        self.add_blank_after_header = add_blank_after_header
-        self.static_content_after_header = static_content_after_header
-        self.add_blank_before_footer = add_blank_before_footer
-        self.static_content_before_footer = static_content_before_footer
-        self.merge_rules_after_header = merge_rules_after_header
-        self.merge_rules_before_footer = merge_rules_before_footer
-        self.merge_rules_footer = merge_rules_footer
-        self.max_rows_to_fill = max_rows_to_fill
-        self.grand_total_pallets = grand_total_pallets
-        self.custom_flag = custom_flag
-        self.data_cell_merging_rules = data_cell_merging_rules
-        self.DAF_mode = DAF_mode
-        self.all_tables_data = all_tables_data
-        self.table_keys = table_keys
-        self.is_last_table = is_last_table
+        """
+        Initialize DataTableBuilder with bundle configs.
+        
+        Args:
+            worksheet: The worksheet to build in
+            style_config: Bundle containing styling_config
+            context_config: Bundle containing sheet_name, args, pallets, table info
+            layout_config: Bundle containing sheet_config, blanks, static content, merge rules
+            data_config: Bundle containing data_source, data_source_type, header_info, mapping_rules
+        """
+        # Initialize base class with common bundles
+        super().__init__(
+            worksheet=worksheet,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config,  # Pass layout_config to base via kwargs
+            data_config=data_config       # Pass data_config to base via kwargs
+        )
 
-        # Initialize variables that were previously in fill_invoice_data
+        # Initialize output state variables (build process results)
         self.actual_rows_to_process = 0
         self.data_rows_prepared = []
         self.col1_index = 1
@@ -88,34 +75,146 @@ class DataTableBuilder:
         self.data_end_row = -1
         self.row_before_footer_idx = -1
         self.footer_row_final = -1
-
-    def _apply_footer_row_height(self, footer_row: int):
-        """Helper method to apply footer height to a single footer row."""
-        if not self.sheet_styling_config or not self.sheet_styling_config.rowHeights:
-            return
-        
-        row_heights_cfg = self.sheet_styling_config.rowHeights
-        footer_height_config = row_heights_cfg.get("footer")
-        match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
-        
-        # Determine the footer height
-        final_footer_height = None
-        if match_header_height_flag:
-            # Get header height from config
-            header_height = row_heights_cfg.get("header")
-            if header_height is not None:
-                final_footer_height = header_height
-        if final_footer_height is None and footer_height_config is not None:
-            final_footer_height = footer_height_config
-        
-        # Apply the height
-        if final_footer_height is not None and footer_row > 0:
-            try:
-                h_val = float(final_footer_height)
-                if h_val > 0:
-                    self.worksheet.row_dimensions[footer_row].height = h_val
-            except (ValueError, TypeError):
-                pass
+    
+    # ========== Properties for Frequently Accessed Config Values ==========
+    # Note: sheet_name, all_sheet_configs, args, sheet_styling_config inherited from BundleAccessor
+    
+    @property
+    def sheet_config(self) -> Dict[str, Any]:
+        """Sheet configuration from layout config."""
+        return self.layout_config.get('sheet_config', {})
+    
+    @property
+    def data_source(self) -> Union[Dict[str, List[Any]], Dict[Tuple, Dict[str, Any]]]:
+        """Data source from data config."""
+        return self.data_config.get('data_source')
+    
+    @property
+    def data_source_type(self) -> str:
+        """Data source type from data config."""
+        return self.data_config.get('data_source_type', '')
+    
+    @property
+    def header_info(self) -> Dict[str, Any]:
+        """Header information from data config."""
+        return self.data_config.get('header_info', {})
+    
+    @property
+    def mapping_rules(self) -> Dict[str, Any]:
+        """Mapping rules from data config."""
+        return self.data_config.get('mapping_rules', {})
+    
+    @mapping_rules.setter
+    def mapping_rules(self, value: Dict[str, Any]):
+        """Setter for mapping_rules."""
+        self.data_config['mapping_rules'] = value
+    
+    @property
+    def add_blank_after_header(self) -> bool:
+        """Add blank row after header from layout config."""
+        return self.layout_config.get('add_blank_after_header', False)
+    
+    @property
+    def static_content_after_header(self) -> Dict[str, Any]:
+        """Static content after header from layout config."""
+        return self.layout_config.get('static_content_after_header', {})
+    
+    @static_content_after_header.setter
+    def static_content_after_header(self, value: Dict[str, Any]):
+        """Setter for static_content_after_header."""
+        self.layout_config['static_content_after_header'] = value
+    
+    @property
+    def add_blank_before_footer(self) -> bool:
+        """Add blank row before footer from layout config."""
+        return self.layout_config.get('add_blank_before_footer', False)
+    
+    @property
+    def static_content_before_footer(self) -> Dict[str, Any]:
+        """Static content before footer from layout config."""
+        return self.layout_config.get('static_content_before_footer', {})
+    
+    @static_content_before_footer.setter
+    def static_content_before_footer(self, value: Dict[str, Any]):
+        """Setter for static_content_before_footer."""
+        self.layout_config['static_content_before_footer'] = value
+    
+    @property
+    def merge_rules_after_header(self) -> Dict[str, int]:
+        """Merge rules after header from layout config."""
+        return self.layout_config.get('merge_rules_after_header', {})
+    
+    @merge_rules_after_header.setter
+    def merge_rules_after_header(self, value: Dict[str, int]):
+        """Setter for merge_rules_after_header."""
+        self.layout_config['merge_rules_after_header'] = value
+    
+    @property
+    def merge_rules_before_footer(self) -> Dict[str, int]:
+        """Merge rules before footer from layout config."""
+        return self.layout_config.get('merge_rules_before_footer', {})
+    
+    @merge_rules_before_footer.setter
+    def merge_rules_before_footer(self, value: Dict[str, int]):
+        """Setter for merge_rules_before_footer."""
+        self.layout_config['merge_rules_before_footer'] = value
+    
+    @property
+    def merge_rules_footer(self) -> Dict[str, int]:
+        """Merge rules for footer from layout config."""
+        return self.layout_config.get('merge_rules_footer', {})
+    
+    @merge_rules_footer.setter
+    def merge_rules_footer(self, value: Dict[str, int]):
+        """Setter for merge_rules_footer."""
+        self.layout_config['merge_rules_footer'] = value
+    
+    @property
+    def max_rows_to_fill(self) -> Optional[int]:
+        """Maximum rows to fill from layout config."""
+        return self.layout_config.get('max_rows_to_fill')
+    
+    @property
+    def grand_total_pallets(self) -> int:
+        """Grand total pallets from context config."""
+        return self.context_config.get('grand_total_pallets', 0)
+    
+    @property
+    def custom_flag(self) -> bool:
+        """Custom mode flag from context config args."""
+        args = self.context_config.get('args')
+        return args.custom if args and hasattr(args, 'custom') else False
+    
+    @property
+    def data_cell_merging_rules(self) -> Optional[Dict[str, Any]]:
+        """Data cell merging rules from layout config."""
+        return self.layout_config.get('data_cell_merging_rules')
+    
+    @data_cell_merging_rules.setter
+    def data_cell_merging_rules(self, value: Optional[Dict[str, Any]]):
+        """Setter for data_cell_merging_rules."""
+        self.layout_config['data_cell_merging_rules'] = value
+    
+    @property
+    def DAF_mode(self) -> bool:
+        """DAF mode flag from context config args."""
+        args = self.context_config.get('args')
+        return args.DAF if args and hasattr(args, 'DAF') else False
+    
+    @property
+    def all_tables_data(self) -> Optional[Dict[str, Any]]:
+        """All tables data from data config."""
+        return self.data_config.get('all_tables_data')
+    
+    @property
+    def table_keys(self) -> Optional[List[str]]:
+        """Table keys from data config."""
+        return self.data_config.get('table_keys')
+    
+    @property
+    def is_last_table(self) -> bool:
+        """Is last table flag from context config."""
+        return self.context_config.get('is_last_table', False)
 
     def build(self) -> Tuple[bool, int, int, int, int]:
         # --- Initialize Variables --- (Keep existing initializations)
@@ -136,18 +235,18 @@ class DataTableBuilder:
         # --- Row Index Tracking --- (Keep existing)
         # These are now instance variables
 
-        # Ensure dictionaries/lists are initialized (Keep existing)
-        self.static_content_after_header = self.static_content_after_header or {}
-        self.static_content_before_footer = self.static_content_before_footer or {}
-        self.merge_rules_after_header = self.merge_rules_after_header or {}
-        self.merge_rules_before_footer = self.merge_rules_before_footer or {}
-        self.merge_rules_footer = self.merge_rules_footer or {} # Initialize footer merge rules
-        self.mapping_rules = self.mapping_rules or {}
+        # Get config values into local variables (properties are read-only!)
+        static_content_after_header = self.static_content_after_header or {}
+        static_content_before_footer = self.static_content_before_footer or {}
+        merge_rules_after_header = self.merge_rules_after_header or {}
+        merge_rules_before_footer = self.merge_rules_before_footer or {}
+        merge_rules_footer = self.merge_rules_footer or {}
+        mapping_rules = self.mapping_rules or {}
+        data_cell_merging_rules = self.data_cell_merging_rules or {}
+        
         col_id_map = self.header_info.get('column_id_map', {})
         column_map = self.header_info.get('column_map', {})
         idx_to_header_map = {v: k for k, v in column_map.items()}
-
-        self.data_cell_merging_rules = self.data_cell_merging_rules or {}
         # --- Validate Header Info ---
         if not self.header_info or 'second_row_index' not in self.header_info or 'column_map' not in self.header_info or 'num_columns' not in self.header_info:
             print("Error: Invalid header_info provided.")
@@ -178,7 +277,7 @@ class DataTableBuilder:
             if self.sheet_styling_config.headerAlignment:
                 effective_header_align = Alignment(**self.sheet_styling_config.headerAlignment.model_dump(exclude_none=True))
         parsed_rules = parse_mapping_rules(
-            mapping_rules=self.mapping_rules,
+            mapping_rules=mapping_rules,
             column_id_map=col_id_map,
             idx_to_header_map=idx_to_header_map
         )
@@ -329,13 +428,13 @@ class DataTableBuilder:
                     apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
 
                 # Apply data cell merging rules
-                if self.data_cell_merging_rules:
+                if data_cell_merging_rules:
                     apply_explicit_data_cell_merges_by_id(
                         worksheet=self.worksheet,
                         row_num=current_row_idx,
                         column_id_map=col_id_map,
                         num_total_columns=num_columns,
-                        merge_rules_data_cells=self.data_cell_merging_rules,
+                        merge_rules_data_cells=data_cell_merging_rules,
                         sheet_styling_config=self.sheet_styling_config,
                         DAF_mode=self.DAF_mode
                     )
@@ -382,7 +481,7 @@ class DataTableBuilder:
         if self.add_blank_before_footer and self.row_before_footer_idx > 0:
             try:
                 # Step 1: Fill the row with content (this applies default styles)
-                fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, self.static_content_before_footer, self.sheet_styling_config)
+                fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, static_content_before_footer, self.sheet_styling_config)
                 
                 # Step 2: Apply the special styling and borders for this specific row
                 for c_idx in range(1, num_columns + 1):
@@ -416,19 +515,19 @@ class DataTableBuilder:
     # function gets this info from header_info and footer_config.
         # --- Apply Merges ---
         # Apply merges to row after header (if applicable)
-        if self.add_blank_after_header and self.row_after_header_idx > 0 and self.merge_rules_after_header:
-            apply_row_merges(self.worksheet, self.row_after_header_idx, num_columns, self.merge_rules_after_header)
+        if self.add_blank_after_header and self.row_after_header_idx > 0 and merge_rules_after_header:
+            apply_row_merges(self.worksheet, self.row_after_header_idx, num_columns, merge_rules_after_header)
 
         # Apply merges to row before footer (if applicable)
         target_row_for_bf_merge = self.row_before_footer_idx if self.add_blank_before_footer and self.row_before_footer_idx > 0 else -1
-        if target_row_for_bf_merge > 0 and self.merge_rules_before_footer:
-            apply_row_merges(self.worksheet, target_row_for_bf_merge, num_columns, self.merge_rules_before_footer)
+        if target_row_for_bf_merge > 0 and merge_rules_before_footer:
+            apply_row_merges(self.worksheet, target_row_for_bf_merge, num_columns, merge_rules_before_footer)
 
         # Apply merges to the footer row itself (if applicable)
-        if self.footer_row_final > 0 and self.merge_rules_footer:
-            print(f"Applying footer merges to row {self.footer_row_final} with rules: {self.merge_rules_footer}") # Optional Debug
+        if self.footer_row_final > 0 and merge_rules_footer:
+            print(f"Applying footer merges to row {self.footer_row_final} with rules: {merge_rules_footer}") # Optional Debug
             try:
-                apply_row_merges(self.worksheet, self.footer_row_final, num_columns, self.merge_rules_footer)
+                apply_row_merges(self.worksheet, self.footer_row_final, num_columns, merge_rules_footer)
             except Exception as footer_merge_err:
                 print(f"Warning: Error applying footer merges: {footer_merge_err}")
 

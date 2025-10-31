@@ -152,7 +152,7 @@ def main():
     args = parser.parse_args()
 
     print("--- Starting Invoice Generation (Refactored) ---")
-    print(f"🕒 Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+    print(f"Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
 
     paths = derive_paths(args.input_data_file, args.templatedir, args.configdir)
     if not paths: sys.exit(1)
@@ -185,7 +185,7 @@ def main():
             paths['template'], 
             read_only=False
         )
-        print(f"✅ Template loaded successfully (read_only=False)")
+        print(f"Template loaded successfully (read_only=False)")
         print(f"   Template sheets: {template_workbook.sheetnames}")
         
         # Step 2: Collect all sheet names from template
@@ -198,7 +198,7 @@ def main():
         
         # Step 4: Build the new clean workbook
         output_workbook = workbook_builder.build()
-        print(f"✅ New output workbook created with {len(output_workbook.sheetnames)} sheets")
+        print(f"New output workbook created with {len(output_workbook.sheetnames)} sheets")
         
         # Step 5: Store references to both workbooks
         # - template_workbook: Used for reading template state (READ-ONLY usage)
@@ -314,8 +314,8 @@ def main():
 
     total_time = time.time() - start_time
     print("\n--- Invoice Generation Finished ---")
-    print(f"🕒 Total Time: {total_time:.2f} seconds")
-    print(f"🏁 Completed at: {time.strftime('%H:%M:%S', time.localtime())}")
+    print(f"Total Time: {total_time:.2f} seconds")
+    print(f"Completed at: {time.strftime('%H:%M:%S', time.localtime())}")
 
 if __name__ == "__main__":
     # To run this script directly, you might need to adjust Python's path

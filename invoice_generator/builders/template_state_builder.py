@@ -1,3 +1,5 @@
+from logging import log
+import logging
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -319,6 +321,7 @@ class TemplateStateBuilder:
         
         # Calculate offset: template footer was at self.template_footer_start_row, now goes to footer_start_row
         offset = footer_start_row - self.template_footer_start_row if self.template_footer_start_row > 0 else 0
+        logging.info(f"Offset for footer restoration pls look: {offset}")
         
         # Restore footer cell values and formatting with offset
         for row_idx, row_data in enumerate(self.footer_state):

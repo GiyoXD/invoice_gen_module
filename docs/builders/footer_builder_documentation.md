@@ -305,3 +305,4 @@ next_row = builder.build()
 - Row height application uses the same logic as `DataTableBuilder`, ensuring visual consistency between data rows and footer rows.
 - The `override_total_text` parameter allows dynamic text based on context (e.g., "SUBTOTAL:" for intermediate footers).
 
+
