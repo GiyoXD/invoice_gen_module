@@ -162,7 +162,7 @@
       "_sections": ["structure", "data_flow", "content", "footer"],
       
       "structure": {
-        "start_row": 21,
+        "header_row": 21,
         "columns": [
           {"id": "col_static", "header": "Mark & Nº"},
           {"id": "col_po", "header": "P.O. Nº", "format": "@"},
@@ -214,7 +214,7 @@
       "_sections": ["structure", "data_flow", "footer"],
       
       "structure": {
-        "start_row": 15,
+        "header_row": 15,
         "columns": [
           {"id": "col_no", "header": "No.", "format": "@"},
           {"id": "col_item", "header": "ITEM Nº"},
@@ -257,7 +257,7 @@
       "_sections": ["structure", "data_flow", "content", "footer"],
       
       "structure": {
-        "start_row": 21,
+        "header_row": 21,
         "columns": [
           {"id": "col_static", "header": "Mark & Nº", "rowspan": 2},
           {"id": "col_po", "header": "P.O Nº", "rowspan": 2, "format": "@"},

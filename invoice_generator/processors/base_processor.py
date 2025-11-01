@@ -18,12 +18,12 @@ class SheetProcessor(ABC):
         output_worksheet: Worksheet,
         sheet_name: str,
         sheet_config: Dict[str, Any],
-        data_mapping_config: Dict[str, Any],
         data_source_indicator: str,
         invoice_data: Dict[str, Any],
         cli_args: argparse.Namespace,
         final_grand_total_pallets: int,
-        config_loader: Optional[Any] = None
+        config_loader: Optional[Any] = None,
+        data_mapping_config: Optional[Dict[str, Any]] = None  # Deprecated, use config_loader instead
     ):
         """
         Initializes the processor with all necessary data and configurations.
@@ -57,6 +57,7 @@ class SheetProcessor(ABC):
         self.invoice_data = invoice_data
         self.args = cli_args
         self.final_grand_total_pallets = final_grand_total_pallets
+        self.config_loader = config_loader  # Store config loader for resolver usage
         self.processing_successful = True
         
         # New: Store config loader for direct bundled config access

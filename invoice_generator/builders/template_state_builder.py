@@ -315,19 +315,27 @@ class TemplateStateBuilder:
             target_worksheet: The worksheet to restore footer to
             footer_start_row: The row where the template footer should start (after data footer)
         """
+        print(f"[TemplateStateBuilder] restore_footer_only called with:")
+        print(f"  footer_start_row parameter: {footer_start_row}")
+        print(f"  self.template_footer_start_row: {self.template_footer_start_row}")
+        print(f"  self.template_footer_end_row: {self.template_footer_end_row}")
+        print(f"  len(self.footer_state): {len(self.footer_state)}")
+        
         if self.debug:
             print(f"[TemplateStateBuilder] Restoring template footer starting at row {footer_start_row}")
             print(f"  Template footer rows: {len(self.footer_state)}, Footer merges: {len(self.footer_merged_cells)}")
         
         # Calculate offset: template footer was at self.template_footer_start_row, now goes to footer_start_row
         offset = footer_start_row - self.template_footer_start_row if self.template_footer_start_row > 0 else 0
-        logging.info(f"Offset for footer restoration pls look: {offset}")
+        print(f"[TemplateStateBuilder] Calculated offset: {offset} (footer_start_row={footer_start_row} - template_footer_start_row={self.template_footer_start_row})")
+        print(f"offet: {offset}")
         
         # Restore footer cell values and formatting with offset
         for row_idx, row_data in enumerate(self.footer_state):
             actual_row = self.template_footer_start_row + row_idx + offset
             for col_idx, cell_info in enumerate(row_data):
                 actual_col = col_idx + self.min_col
+                print(f"actual_row: {actual_row}, actual_col: {actual_col}")
                 target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
                 
                 # Restore value

@@ -1,0 +1,128 @@
+Traceback (most recent call last):
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\generate_invoice.py", line 343, in main
+    processing_successful = processor.process()
+                            ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\processors\multi_table_processor.py", line 210, in process
+    template_state_builder.restore_footer_only(
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\builders\template_state_builder.py", line 331, in restore_footer_only
+    target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\openpyxl\worksheet\worksheet.py", line 242, in cell
+    raise ValueError("Row or column values must be at least 1")
+ValueError: Row or column values must be at least 1
+--- Starting Invoice Generation (Refactored) ---
+Started at: 14:41:49
+Deriving paths from input: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+Derived initial template name part: 'JF'
+Checking for exact match: Template='C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template\JF.xlsx', Config='C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config.json'
+Found exact match for template and bundled config (subdir): C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+Loading configuration from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+Configuration loaded successfully.
+Detected bundled config version: 2.1_developer_optimized
+Loading data from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+Template will be loaded as read-only for state capture
+
+4. Loading template and creating new workbook...
+Loading template from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template\JF.xlsx
+Template loaded successfully (read_only=False)
+   Template sheets: ['Contract', 'Invoice', 'Packing list']
+Found 3 sheets in template
+Creating new output workbook using WorkbookBuilder...
+[WorkbookBuilder] Creating new workbook with 3 sheets
+[WorkbookBuilder]   Created sheet: 'Contract'
+[WorkbookBuilder]   Created sheet: 'Invoice'
+[WorkbookBuilder]   Created sheet: 'Packing list'
+[WorkbookBuilder] New workbook created successfully
+New output workbook created with 3 sheets
+Both template (read) and output (write) workbooks ready
+
+--- Running Placeholder Replacement Task (within A1:N14) ---
+
+--- Starting Find and Replace on sheets (Searching Range up to row 14, col 14) ---
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+--- Finished Placeholder Replacement Task ---
+
+--- Running DAF-Specific Replacement Task (within 50x16 grid) ---
+
+--- Starting Find and Replace on sheets (Searching Range up to row 200, col 16) ---
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+  PASS 1: Locating placeholders and applying simple value replacements...
+  PASS 2: Building and applying formula replacements...
+    -> No formula rules to apply.
+--- Finished DAF-Specific Replacement Task ---
+DEBUG: Globally calculated final grand total pallets: 31
+
+--- Processing Sheet: 'Invoice' ---
+Processing sheet 'Invoice' as single table/aggregation.
+[LayoutBuilder] Building layout for sheet 'Invoice'
+[LayoutBuilder] Reading from template, writing to output worksheet
+[LayoutBuilder] Capturing template state from template worksheet
+[LayoutBuilder] Restoring header from template to output worksheet
+[LayoutBuilder] Skipping header builder (skip_header_builder=True)
+Warning: Data source 'DAF_aggregation' unknown or data empty. Skipping fill.
+Successfully filled table data/footer for sheet 'Invoice'.
+
+--- Processing Sheet: 'Contract' ---
+Processing sheet 'Contract' as single table/aggregation.
+[LayoutBuilder] Building layout for sheet 'Contract'
+[LayoutBuilder] Reading from template, writing to output worksheet
+[LayoutBuilder] Capturing template state from template worksheet
+[LayoutBuilder] Restoring header from template to output worksheet
+[LayoutBuilder] Skipping header builder (skip_header_builder=True)
+Warning: Data source 'DAF_aggregation' unknown or data empty. Skipping fill.
+Successfully filled table data/footer for sheet 'Contract'.
+
+--- Processing Sheet: 'Packing list' ---
+Processing sheet 'Packing list' as multi-table/packing list.
+Found 2 tables to process: ['1', '2']
+
+--- Processing table '1' (1/2) ---
+[MultiTableProcessor] layout_config keys before LayoutBuilder: ['sheet_config', 'blanks', 'static_content', 'merge_rules', 'header_info', 'mapping_rules', 'data_source', 'data_source_type', 'start_row', 'skip_header_builder', 'enable_text_replacement', 'skip_template_header_restoration', 'skip_template_footer_restoration']
+[MultiTableProcessor] data_source_type in layout_config: processed_tables_multi
+[LayoutBuilder] Building layout for sheet 'Packing list'
+[LayoutBuilder] Reading from template, writing to output worksheet
+[LayoutBuilder] Capturing template state from template worksheet
+[LayoutBuilder] Restoring header from template to output worksheet
+[LayoutBuilder] Skipping header builder (skip_header_builder=True)
+Warning: Data source 'None' unknown or data empty. Skipping fill.
+Table '1' complete. Next row: 0, Pallets: 20
+
+--- Processing table '2' (2/2) ---
+[MultiTableProcessor] layout_config keys before LayoutBuilder: ['sheet_config', 'blanks', 'static_content', 'merge_rules', 'header_info', 'mapping_rules', 'data_source', 'data_source_type', 'start_row', 'skip_header_builder', 'enable_text_replacement', 'skip_template_header_restoration', 'skip_template_footer_restoration']
+[MultiTableProcessor] data_source_type in layout_config: processed_tables_multi
+[LayoutBuilder] Building layout for sheet 'Packing list'
+[LayoutBuilder] Reading from template, writing to output worksheet
+[LayoutBuilder] Capturing template state from template worksheet
+[LayoutBuilder] Skipping template header restoration (skip_template_header_restoration=True)
+[LayoutBuilder] Skipping header builder (skip_header_builder=True)
+Warning: Data source 'None' unknown or data empty. Skipping fill.
+Table '2' complete. Next row: -1, Pallets: 11
+
+--- Adding Grand Total Row ---
+Grand Total Row added at row -1: 31 pallets
+
+--- Restoring Template Footer ---
+[MultiTableProcessor] Restoring template footer after row -1
+
+--- UNHANDLED ERROR: Row or column values must be at least 1 ---
+Template workbook closed.
+Output workbook closed.
+
+--- Invoice Generation Finished ---
+Total Time: 0.49 seconds
+Completed at: 14:41:50
+Running command: C:\Users\JPZ031127\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe -m invoice_generator.generate_invoice C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json --output C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx --templatedir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template --configdir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled --DAF
+Invoice generated successfully at: C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx

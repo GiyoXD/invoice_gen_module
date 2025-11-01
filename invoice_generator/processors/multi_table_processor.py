@@ -4,6 +4,7 @@ from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import FooterBuilderStyler
 from ..styling.models import StylingConfigModel
+from ..config.builder_config_resolver import BuilderConfigResolver
 import traceback
 from openpyxl.utils import get_column_letter
 
@@ -28,11 +29,9 @@ class MultiTableProcessor(SheetProcessor):
         table_keys = sorted(all_tables_data.keys(), key=lambda x: int(x) if str(x).isdigit() else float('inf'))
         print(f"Found {len(table_keys)} tables to process: {table_keys}")
         
-        # Get styling configuration
-        sheet_styling_config = self.sheet_config.get("styling")
-        
         # Track the current row position as we build multiple tables
-        current_row = self.sheet_config.get('start_row', 1)
+        # Start at header_row (where first table's header will be written)
+        current_row = self.sheet_config.get('header_row', 1) if self.sheet_config else 1
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
@@ -54,43 +53,42 @@ class MultiTableProcessor(SheetProcessor):
                 }
             }
             
-            # Use LayoutBuilder for this table iteration
-            # For multi-table, we use a modified sheet_config that points to the current row
-            table_sheet_config = self.sheet_config.copy()
-            table_sheet_config['start_row'] = current_row
-            # IMPORTANT: Set data_source to the table key so LayoutBuilder can find the data
-            table_sheet_config['data_source'] = str(table_key)
+            # Use BuilderConfigResolver to prepare bundles for this table
+            resolver = BuilderConfigResolver(
+                config_loader=self.config_loader,
+                sheet_name=self.sheet_name,
+                worksheet=self.output_worksheet,
+                args=self.args,
+                invoice_data=table_invoice_data,
+                pallets=0  # Per-table, not grand total
+            )
             
-            # Prepare config bundles for LayoutBuilder
-            style_config = {
-                'styling_config': sheet_styling_config
-            }
+            # Get the bundles
+            style_config = resolver.get_style_bundle()
+            print(style_config)
+            context_config = resolver.get_context_bundle(
+                invoice_data=table_invoice_data,
+                enable_text_replacement=False
+            )
+            layout_config = resolver.get_layout_bundle()
             
-            context_config = {
-                'sheet_name': self.sheet_name,
-                'invoice_data': table_invoice_data,
-                'all_sheet_configs': self.data_mapping_config,
-                'args': self.args,
-                'final_grand_total_pallets': 0,  # Per-table, not grand total
-                'config_loader': self.config_loader  # For direct bundled config access
-            }
-            
-            layout_config = {
-                'sheet_config': table_sheet_config,
-                'enable_text_replacement': False,  # Already done at main level
-                # For multi-table: Only restore template header/footer for FIRST table
-                # Subsequent tables should skip to avoid wrong row capture
-                'skip_template_header_restoration': (not is_first_table),
-                'skip_template_footer_restoration': True  # Never restore footer mid-document
-                # NOTE: HeaderBuilder writes the TABLE column headers (e.g., "Mark & No", "Description")
-                # This is DIFFERENT from template header (static content like company info)
-                # HeaderBuilder should run for EACH table to write column headers
-            }
+            # Get data bundle to extract header_info
+            data_bundle = resolver.get_data_bundle(table_key=str(table_key))
+            layout_config['header_info'] = data_bundle.get('header_info', {})
+            layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
+            layout_config['data_source'] = data_bundle.get('data_source')
+            layout_config['data_source_type'] = data_bundle.get('data_source_type')
+            layout_config['header_row'] = current_row  # Override with current position for this table's header
+            layout_config['skip_header_builder'] = True  # Using pre-constructed header_info
+            layout_config['enable_text_replacement'] = False
+            # For multi-table: Only restore template header/footer for FIRST table
+            layout_config['skip_template_header_restoration'] = (not is_first_table)
+            layout_config['skip_template_footer_restoration'] = True  # Never restore footer mid-document
             
             layout_builder = LayoutBuilder(
-                workbook=self.output_workbook,
-                worksheet=self.output_worksheet,
-                template_worksheet=self.template_worksheet,
+                self.output_workbook,
+                self.output_worksheet,
+                self.template_worksheet,
                 style_config=style_config,
                 context_config=context_config,
                 layout_config=layout_config
@@ -130,14 +128,31 @@ class MultiTableProcessor(SheetProcessor):
             grand_total_pallets += table_pallets
             
             print(f"Table '{table_key}' complete. Next row: {current_row}, Pallets: {table_pallets}")
+            print(f"  layout_builder.next_row_after_footer: {layout_builder.next_row_after_footer}")
+            print(f"  layout_builder.data_start_row: {layout_builder.data_start_row}")
+            print(f"  layout_builder.data_end_row: {layout_builder.data_end_row}")
         
         # After all tables, add grand total row if needed
         if len(table_keys) > 1 and last_header_info:
             print(f"\n--- Adding Grand Total Row ---")
             grand_total_row = current_row
             
-            # Get styling configuration
-            styling_model = sheet_styling_config
+            # Create resolver for grand total footer (reuse last table's context)
+            grand_total_resolver = BuilderConfigResolver(
+                config_loader=self.config_loader,
+                sheet_name=self.sheet_name,
+                worksheet=self.output_worksheet,
+                args=self.args,
+                invoice_data=self.invoice_data,
+                pallets=grand_total_pallets  # Use calculated grand total pallets
+            )
+            
+            # Get bundles from resolver
+            gt_style_config = grand_total_resolver.get_style_bundle()
+            gt_layout_config = grand_total_resolver.get_layout_bundle()
+            
+            # Get styling model from style bundle
+            styling_model = gt_style_config.get('styling_config')
             if styling_model and not isinstance(styling_model, StylingConfigModel):
                 try:
                     styling_model = StylingConfigModel(**styling_model)
@@ -145,13 +160,13 @@ class MultiTableProcessor(SheetProcessor):
                     print(f"Warning: Could not create StylingConfigModel: {e}")
                     styling_model = None
             
-            # Use FooterBuilder to create grand total footer (proper builder pattern)
-            footer_config = self.sheet_config.get('footer_configurations', {})
+            # Get footer config and mappings from layout bundle
+            footer_config = gt_layout_config.get('footer', {})
             footer_config_copy = footer_config.copy()
             footer_config_copy["type"] = "grand_total"  # Mark as grand total type
             
-            # Add summary add-on if enabled in sheet config
-            if self.sheet_config.get("summary", False) and self.args.DAF:
+            # Add summary add-on if enabled in layout config
+            if gt_layout_config.get('content', {}).get("summary", False) and self.args.DAF:
                 footer_config_copy["add_ons"] = ["summary"]
             
             # Bundle configs for FooterBuilder
@@ -172,7 +187,7 @@ class MultiTableProcessor(SheetProcessor):
                 'footer_config': footer_config_copy,
                 'all_tables_data': all_tables_data,
                 'table_keys': table_keys,
-                'mapping_rules': self.sheet_config.get('mappings', {}),
+                'mapping_rules': gt_layout_config.get('data_flow', {}).get('mappings', {}),
                 'DAF_mode': self.args.DAF,
                 'override_total_text': None
             }

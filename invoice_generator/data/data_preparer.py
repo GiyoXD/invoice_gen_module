@@ -225,7 +225,7 @@ def prepare_data_rows(
             for key_tuple, value_dict in aggregation_data.items():
                 normalized_data.append({'key_tuple': key_tuple, 'value_dict': value_dict})
 
-        elif data_source_type == 'processed_tables':
+        elif data_source_type in ['processed_tables', 'processed_tables_multi']:
             table_data = data_source or {}
             if isinstance(table_data, dict):
                 max_len = max((len(v) for v in table_data.values() if isinstance(v, list)), default=0)

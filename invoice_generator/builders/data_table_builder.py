@@ -6,7 +6,7 @@ from openpyxl.cell.cell import MergedCell
 import traceback
 
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
-from invoice_generator.utils.layout import unmerge_row, unmerge_block, safe_unmerge_block, apply_column_widths
+from invoice_generator.utils.layout import unmerge_row, unmerge_block, apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
@@ -356,19 +356,11 @@ class DataTableBuilderStyler(BundleAccessor):
         self.footer_row_final = data_writing_start_row + total_rows_to_insert
         total_rows_to_insert += 1 # Add 1 for the footer itself
 
-        # --- Bulk Insert Rows --- # V11: Only insert if NOT pre-inserted by caller (i.e., for single-table modes)
-        if self.data_source_type in ['aggregation', 'DAF_aggregation', "custom_aggregation"]:
-            if total_rows_to_insert > 0:
-                try:
-                    self.worksheet.insert_rows(data_writing_start_row, amount=total_rows_to_insert)
-                    # Unmerge the block covering the inserted rows *before* the footer starts
-                    safe_unmerge_block(self.worksheet, data_writing_start_row, self.footer_row_final - 1, num_columns)
-                    print("Rows inserted and unmerged successfully.")
-                except Exception as bulk_insert_err:
-                    print(f"Error during single-table bulk row insert/unmerge: {bulk_insert_err}")
-                    # Adjust fallback row calculation
-                    fallback_row = self.header_info.get('second_row_index', 0) + 1
-                    return False, fallback_row, -1, -1, 0
+        # --- NO ROW INSERTION NEEDED ---
+        # Since we're using WorkbookBuilder with a separate output workbook,
+        # we don't need to insert rows - we just write to the next available row.
+        # The output workbook is fresh and empty, so rows already exist.
+        print(f"Writing {total_rows_to_insert} rows starting at row {data_writing_start_row} (no insertion needed)")
 
         # --- Fill Row After Header (if applicable) --- 
 
