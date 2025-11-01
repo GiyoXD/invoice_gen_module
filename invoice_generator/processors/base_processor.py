@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 import argparse
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 class SheetProcessor(ABC):
     """
@@ -22,7 +22,8 @@ class SheetProcessor(ABC):
         data_source_indicator: str,
         invoice_data: Dict[str, Any],
         cli_args: argparse.Namespace,
-        final_grand_total_pallets: int
+        final_grand_total_pallets: int,
+        config_loader: Optional[Any] = None
     ):
         """
         Initializes the processor with all necessary data and configurations.
@@ -57,6 +58,10 @@ class SheetProcessor(ABC):
         self.args = cli_args
         self.final_grand_total_pallets = final_grand_total_pallets
         self.processing_successful = True
+        
+        # New: Store config loader for direct bundled config access
+        self.config_loader = config_loader
+        self._use_bundled = config_loader is not None
 
     @abstractmethod
     def process(self) -> bool:

@@ -11,13 +11,37 @@ class HeaderBuilderStyler:
         self,
         worksheet: Worksheet,
         start_row: int,
-        header_layout_config: List[Dict[str, Any]],
+        header_layout_config: Optional[List[Dict[str, Any]]] = None,
+        bundled_columns: Optional[List[Dict[str, Any]]] = None,
         sheet_styling_config: Optional[StylingConfigModel] = None,
     ):
+        """
+        Initialize HeaderBuilder with either legacy or bundled config.
+        
+        Args:
+            worksheet: The worksheet to write to
+            start_row: Starting row for header
+            header_layout_config: Legacy format (list with row/col/text/id/rowspan/colspan)
+            bundled_columns: Bundled format (list with id/header/format/rowspan/colspan/children)
+            sheet_styling_config: Styling configuration
+        """
         self.worksheet = worksheet
         self.start_row = start_row
-        self.header_layout_config = header_layout_config
         self.sheet_styling_config = sheet_styling_config
+        
+        # Convert bundled columns to internal format if provided
+        if bundled_columns:
+            print(f"[HeaderBuilder] [OK] Using BUNDLED config (columns={len(bundled_columns)})")
+            # Show first column as example
+            if bundled_columns:
+                sample = bundled_columns[0]
+                sample_header = str(sample.get('header', '')).encode('ascii', 'replace').decode('ascii')
+                print(f"[HeaderBuilder] Sample bundled column: id='{sample.get('id')}', header='{sample_header}', format='{sample.get('format')}'")
+            self.header_layout_config = self._convert_bundled_columns(bundled_columns)
+            print(f"[HeaderBuilder] Converted to {len(self.header_layout_config)} header cells")
+        else:
+            print(f"[HeaderBuilder] [LEGACY] Using legacy config")
+            self.header_layout_config = header_layout_config or []
 
     def build(self) -> Optional[Dict[str, Any]]:
         if not self.header_layout_config or self.start_row <= 0:
@@ -72,3 +96,58 @@ class HeaderBuilderStyler:
             'column_id_map': column_id_map,
             'num_columns': max_col
         }
+    
+    def _convert_bundled_columns(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert bundled columns format to internal header_layout_config format.
+        
+        Bundled format:
+            {"id": "col_po", "header": "P.O. №", "format": "@", "rowspan": 2}
+        
+        Internal format:
+            {"row": 0, "col": 1, "text": "P.O. №", "id": "col_po", "rowspan": 2, "colspan": 1}
+        """
+        headers = []
+        col_index = 0
+        
+        for col in columns:
+            col_id = col.get('id', '')
+            header_text = col.get('header', '')
+            rowspan = col.get('rowspan', 1)
+            colspan = col.get('colspan', 1)
+            
+            # Handle parent column with children (e.g., Quantity with PCS/SF)
+            if 'children' in col:
+                # Add parent header
+                headers.append({
+                    'row': 0,
+                    'col': col_index,
+                    'text': header_text,
+                    'id': col_id,
+                    'rowspan': 1,
+                    'colspan': len(col['children'])
+                })
+                
+                # Add children headers
+                for child in col['children']:
+                    headers.append({
+                        'row': 1,
+                        'col': col_index,
+                        'text': child.get('header', ''),
+                        'id': child.get('id', ''),
+                        'rowspan': 1,
+                        'colspan': 1
+                    })
+                    col_index += 1
+            else:
+                headers.append({
+                    'row': 0,
+                    'col': col_index,
+                    'text': header_text,
+                    'id': col_id,
+                    'rowspan': rowspan,
+                    'colspan': colspan
+                })
+                col_index += 1
+        
+        return headers

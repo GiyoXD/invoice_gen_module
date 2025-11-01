@@ -71,7 +71,8 @@ class MultiTableProcessor(SheetProcessor):
                 'invoice_data': table_invoice_data,
                 'all_sheet_configs': self.data_mapping_config,
                 'args': self.args,
-                'final_grand_total_pallets': 0  # Per-table, not grand total
+                'final_grand_total_pallets': 0,  # Per-table, not grand total
+                'config_loader': self.config_loader  # For direct bundled config access
             }
             
             layout_config = {
@@ -81,6 +82,9 @@ class MultiTableProcessor(SheetProcessor):
                 # Subsequent tables should skip to avoid wrong row capture
                 'skip_template_header_restoration': (not is_first_table),
                 'skip_template_footer_restoration': True  # Never restore footer mid-document
+                # NOTE: HeaderBuilder writes the TABLE column headers (e.g., "Mark & No", "Description")
+                # This is DIFFERENT from template header (static content like company info)
+                # HeaderBuilder should run for EACH table to write column headers
             }
             
             layout_builder = LayoutBuilder(

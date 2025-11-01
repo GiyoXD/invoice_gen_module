@@ -4,10 +4,10 @@ import os
 
 # Define the paths relative to the script's location
 script_dir = os.path.dirname(__file__)
-data_file = os.path.join(script_dir, "CLW.json")
+data_file = os.path.join(script_dir, "invoice_generator", "JF.json")  # Changed to JF (has bundled config)
 output_file = os.path.join(script_dir, "result_test2.xlsx")
 template_dir = os.path.join(script_dir, "invoice_generator", "template")
-config_dir = os.path.join(script_dir, "invoice_generator", "config")
+config_dir = os.path.join(script_dir, "invoice_generator", "config_bundled")  # Changed to bundled config
 orchestrator_path = os.path.join(script_dir, "invoice_generator", "generate_invoice.py")
 
 command = [

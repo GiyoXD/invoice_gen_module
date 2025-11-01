@@ -29,7 +29,8 @@ class SingleTableProcessor(SheetProcessor):
             'invoice_data': self.invoice_data,
             'all_sheet_configs': self.data_mapping_config,
             'args': self.args,
-            'final_grand_total_pallets': self.final_grand_total_pallets
+            'final_grand_total_pallets': self.final_grand_total_pallets,
+            'config_loader': self.config_loader  # For direct bundled config access
         }
         
         layout_config = {

@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Border, Side, Font
 from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import MergedCell
 import traceback
 
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
@@ -254,6 +255,7 @@ class DataTableBuilderStyler(BundleAccessor):
 
         # --- FIX: Extract num_columns and other values from header_info ---
         num_columns = self.header_info['num_columns']
+        # Data always starts right after the table column header
         data_writing_start_row = self.header_info['second_row_index'] + 1
 
         # --- Find Description & Pallet Info Column Indices --- (Keep existing)
@@ -398,7 +400,9 @@ class DataTableBuilderStyler(BundleAccessor):
                 # Write initial static values for the first column
                 if i < self.num_static_labels and self.col1_index != -1:
                     cell = self.worksheet.cell(row=current_row_idx, column=self.col1_index)
-                    cell.value = initial_static_col1_values[i]
+                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
+                    if not isinstance(cell, MergedCell):
+                        cell.value = initial_static_col1_values[i]
                     apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(self.col1_index), "col_idx": self.col1_index, "static_col_idx": self.col1_index})
 
                 # Write dynamic data
@@ -406,7 +410,9 @@ class DataTableBuilderStyler(BundleAccessor):
                     if isinstance(value, dict) and value.get("type") == "formula":
                         continue
                     cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    cell.value = value
+                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
+                    if not isinstance(cell, MergedCell):
+                        cell.value = value
                     apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
 
                 # Write formulas
@@ -424,7 +430,9 @@ class DataTableBuilderStyler(BundleAccessor):
                     formula = formula.replace("{row}", str(current_row_idx))
                     
                     cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    cell.value = f"={formula}"
+                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
+                    if not isinstance(cell, MergedCell):
+                        cell.value = f"={formula}"
                     apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
 
                 # Apply data cell merging rules

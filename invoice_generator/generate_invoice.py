@@ -21,6 +21,7 @@ from .builders.text_replacement_builder import TextReplacementBuilder
 from .builders.workbook_builder import WorkbookBuilder
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
+from .config.loader import BundledConfigLoader
 
 # --- Helper Functions (derive_paths, load_config, load_data) ---
 # These functions remain largely the same but are part of the new script.
@@ -62,9 +63,21 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
         exact_config_filename = f"{template_name_part}_config.json"
         exact_template_path = template_dir / exact_template_filename
         exact_config_path = config_dir / exact_config_filename
+        
+        # Check for bundled config in subdirectory structure
+        exact_bundled_config_subdir = config_dir / f"{template_name_part}_config" / f"{template_name_part}_config.json"
+        exact_bundled_config_v2 = config_dir / f"{template_name_part}_bundled_v2.json"
+        
         print(f"Checking for exact match: Template='{exact_template_path}', Config='{exact_config_path}'")
 
-        if exact_template_path.is_file() and exact_config_path.is_file():
+        # Check for bundled config first (preferred) - try subdirectory structure first
+        if exact_template_path.is_file() and exact_bundled_config_subdir.is_file():
+            print(f"Found exact match for template and bundled config (subdir): {exact_bundled_config_subdir}")
+            return {"data": input_data_path, "template": exact_template_path, "config": exact_bundled_config_subdir}
+        elif exact_template_path.is_file() and exact_bundled_config_v2.is_file():
+            print(f"Found exact match for template and bundled config (v2): {exact_bundled_config_v2}")
+            return {"data": input_data_path, "template": exact_template_path, "config": exact_bundled_config_v2}
+        elif exact_template_path.is_file() and exact_config_path.is_file():
             print("Found exact match for template and config.")
             return {"data": input_data_path, "template": exact_template_path, "config": exact_config_path}
         else:
@@ -77,9 +90,20 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
                 prefix_config_filename = f"{prefix}_config.json"
                 prefix_template_path = template_dir / prefix_template_filename
                 prefix_config_path = config_dir / prefix_config_filename
+                
+                # Check for bundled config in subdirectory structure
+                prefix_bundled_config_subdir = config_dir / f"{prefix}_config" / f"{prefix}_config.json"
+                prefix_bundled_config_v2 = config_dir / f"{prefix}_bundled_v2.json"
                 print(f"Checking for prefix match: Template='{prefix_template_path}', Config='{prefix_config_path}'")
 
-                if prefix_template_path.is_file() and prefix_config_path.is_file():
+                # Check bundled config first - try subdirectory structure first
+                if prefix_template_path.is_file() and prefix_bundled_config_subdir.is_file():
+                    print(f"Found prefix match for template and bundled config (subdir): {prefix_bundled_config_subdir}")
+                    return {"data": input_data_path, "template": prefix_template_path, "config": prefix_bundled_config_subdir}
+                elif prefix_template_path.is_file() and prefix_bundled_config_v2.is_file():
+                    print(f"Found prefix match for template and bundled config (v2): {prefix_bundled_config_v2}")
+                    return {"data": input_data_path, "template": prefix_template_path, "config": prefix_bundled_config_v2}
+                elif prefix_template_path.is_file() and prefix_config_path.is_file():
                     print("Found prefix match for template and config.")
                     return {"data": input_data_path, "template": prefix_template_path, "config": prefix_config_path}
                 else:
@@ -103,6 +127,15 @@ def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
     try:
         with open(config_path, 'r', encoding='utf-8') as f: config_data = json.load(f)
         print("Configuration loaded successfully.")
+        
+        # Check if this is a bundled config (has _meta and config_version)
+        if '_meta' in config_data and 'config_version' in config_data['_meta']:
+            print(f"Detected bundled config version: {config_data['_meta']['config_version']}")
+            config_data['_is_bundled'] = True
+        else:
+            print("Detected legacy config format")
+            config_data['_is_bundled'] = False
+        
         return config_data
     except Exception as e:
         print(f"Error loading configuration file {config_path}: {e}"); traceback.print_exc(); return None
@@ -206,7 +239,27 @@ def main():
         workbook = output_workbook  # Keep 'workbook' name for compatibility with rest of code
         print("Both template (read) and output (write) workbooks ready")
 
-        sheets_to_process_config = config.get('sheets_to_process', [])
+        # Detect config type and setup appropriate accessors
+        is_bundled = config.get('_is_bundled', False)
+        config_loader = None
+        
+        if is_bundled:
+            print("\n--- Using Bundled Config Format (Direct) ---")
+            config_loader = BundledConfigLoader(config)
+            sheets_to_process_config = config_loader.get_sheets_to_process()
+            sheet_data_map = config_loader.get_sheet_data_map()
+            
+            # NO CONVERSION - Pass config_loader to processors directly
+            data_mapping_config = {}  # Empty, processors will use config_loader instead
+            
+            print(f"Customer: {config_loader.customer}")
+            print(f"Sheets to process: {sheets_to_process_config}")
+        else:
+            print("\n--- Using Legacy Config Format ---")
+            sheets_to_process_config = config.get('sheets_to_process', [])
+            sheet_data_map = config.get('sheet_data_map', {})
+            data_mapping_config = config.get('data_mapping', {})
+        
         sheets_to_process = [s for s in sheets_to_process_config if s in workbook.sheetnames]
 
         if not sheets_to_process:
@@ -220,9 +273,6 @@ def main():
             # Still run header replacement for non-DAF mode
             text_replacer = TextReplacementBuilder(workbook=workbook, invoice_data=invoice_data)
             text_replacer._replace_placeholders()  # Only run placeholder replacement
-
-        sheet_data_map = config.get('sheet_data_map', {})
-        data_mapping_config = config.get('data_mapping', {})
 
         # Global pallet calculation remains the same
         final_grand_total_pallets = 0
@@ -243,10 +293,19 @@ def main():
             template_worksheet = template_workbook[sheet_name]
             output_worksheet = workbook[sheet_name]
             
-            sheet_config = data_mapping_config.get(sheet_name, {})
-            data_source_indicator = sheet_data_map.get(sheet_name)
+            # Get sheet config - from loader if bundled, else from legacy dict
+            if config_loader:
+                sheet_config = {}  # Processor will use config_loader directly
+                data_source_indicator = config_loader.get_data_source(sheet_name)
+            else:
+                sheet_config = data_mapping_config.get(sheet_name, {})
+                data_source_indicator = sheet_data_map.get(sheet_name)
 
-            if not sheet_config or not data_source_indicator:
+            # Validate - if not bundled, need sheet_config; always need data_source
+            if not data_source_indicator:
+                print(f"Warning: No data source specified for sheet '{sheet_name}'. Skipping.")
+                continue
+            if not config_loader and not sheet_config:
                 print(f"Warning: No config for sheet '{sheet_name}'. Skipping.")
                 continue
 
@@ -264,7 +323,8 @@ def main():
                     data_source_indicator=data_source_indicator,
                     invoice_data=invoice_data,
                     cli_args=args,
-                    final_grand_total_pallets=final_grand_total_pallets
+                    final_grand_total_pallets=final_grand_total_pallets,
+                    config_loader=config_loader
                 )
             else: # Default to single table processor
                 processor = SingleTableProcessor(
@@ -278,7 +338,8 @@ def main():
                     data_source_indicator=data_source_indicator,
                     invoice_data=invoice_data,
                     cli_args=args,
-                    final_grand_total_pallets=final_grand_total_pallets
+                    final_grand_total_pallets=final_grand_total_pallets,
+                    config_loader=config_loader
                 )
             
             # --- Execute Processing ---
