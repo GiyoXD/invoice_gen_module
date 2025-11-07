@@ -233,12 +233,17 @@ class LayoutBuilder(BundleAccessor):
                 return False
         else:
             print(f"[LayoutBuilder] Skipping header builder (skip_header_builder=True)")
-            # Must provide dummy header_info for downstream builders
-            self.header_info = {
-                'column_map': {}, 
-                'first_row_index': next_available_row_after_template, 
-                'second_row_index': next_available_row_after_template + 1
-            }
+            # When skipping, we must get the pre-constructed header_info from the layout_config
+            self.header_info = self.layout_config.get('header_info')
+            if not self.header_info:
+                print("Error: skip_header_builder is True, but no header_info was provided in layout_config.")
+                # Provide a minimal dummy header_info to avoid crashing downstream
+                self.header_info = {
+                    'column_map': {},
+                    'num_columns': 0,
+                    'first_row_index': next_available_row_after_template, 
+                    'second_row_index': next_available_row_after_template + 1
+                }
 
         # 5. Data Table Builder (writes data rows, returns footer position) (unless skipped)
         if not self.skip_data_table_builder:
@@ -280,7 +285,8 @@ class LayoutBuilder(BundleAccessor):
                 data_cell_merging_rules = None
                 # IMPORTANT: Check sheet_config first for multi-table override (e.g., table key '1', '2')
                 # Multi-table processor sets sheet_config['data_source'] to the specific table key
-                data_source_indicator = self.sheet_config.get("data_source") or self.config_loader.get_data_source(self.sheet_name)
+                # For multi-table, data_source is set directly on layout_config. For single table, it's in sheet_config.
+                data_source_indicator = self.layout_config.get("data_source") or self.sheet_config.get("data_source") or self.config_loader.get_data_source(self.sheet_name)
             else:
                 merge_rules_before_ftr = self.sheet_config.get("merge_rules_before_footer", {})
                 merge_rules_footer = self.sheet_config.get("merge_rules_footer", {})

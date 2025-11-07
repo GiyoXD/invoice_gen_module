@@ -32,6 +32,7 @@ class MultiTableProcessor(SheetProcessor):
         # Track the current row position as we build multiple tables
         # Start at header_row (where first table's header will be written)
         current_row = self.sheet_config.get('header_row', 1) if self.sheet_config else 1
+        print(f"[MultiTableProcessor] Initial current_row: {current_row}")
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
@@ -108,6 +109,7 @@ class MultiTableProcessor(SheetProcessor):
             # Update tracking variables
             last_header_info = layout_builder.header_info
             current_row = layout_builder.next_row_after_footer
+            print(f"[MultiTableProcessor] After table '{table_key}', current_row is now: {current_row}")
             
             # Add 1 blank row spacing after each table footer (except the last one)
             if not is_last_table:
@@ -203,11 +205,12 @@ class MultiTableProcessor(SheetProcessor):
             
             print(f"Grand Total Row added at row {grand_total_row}: {grand_total_pallets} pallets")
             current_row = next_row  # Update current_row for template footer restoration
+            print(f"[MultiTableProcessor] After grand total, current_row is now: {current_row}")
         
         # Restore template footer at the very end after all tables and grand total
         if template_state_builder:
             print(f"\n--- Restoring Template Footer ---")
-            print(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+            print(f"[MultiTableProcessor] FINAL CHECK: Restoring template footer with footer_start_row = {current_row}")
             template_state_builder.restore_footer_only(
                 target_worksheet=self.output_worksheet,
                 footer_start_row=current_row
