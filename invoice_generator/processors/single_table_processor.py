@@ -35,6 +35,11 @@ class SingleTableProcessor(SheetProcessor):
         )
         layout_config = resolver.get_layout_bundle()
         layout_config['enable_text_replacement'] = False
+        layout_config['skip_data_table_builder'] = False  # IMPORTANT: Enable data table builder to use resolver
+        
+        print(f"[SingleTableProcessor DEBUG] layout_config keys: {list(layout_config.keys())}")
+        print(f"[SingleTableProcessor DEBUG] skip_data_table_builder in layout_config: {layout_config.get('skip_data_table_builder', 'NOT SET')}")
+        print(f"[SingleTableProcessor DEBUG] skip_data_table_builder in sheet_config: {layout_config.get('sheet_config', {}).get('skip_data_table_builder', 'NOT SET')}")
         
         # Get data bundle to extract header_info and mapping_rules
         data_bundle = resolver.get_data_bundle()
@@ -43,6 +48,20 @@ class SingleTableProcessor(SheetProcessor):
         layout_config['data_source'] = data_bundle.get('data_source')
         layout_config['data_source_type'] = data_bundle.get('data_source_type')
         layout_config['skip_header_builder'] = True  # Using pre-constructed header_info from resolver
+        
+        print(f"[SingleTableProcessor DEBUG] header_info keys: {list(data_bundle.get('header_info', {}).keys())}")
+        
+        # NEW: Use TableDataResolver to prepare data
+        try:
+            table_resolver = resolver.get_table_data_resolver()
+            resolved_data = table_resolver.resolve()
+            layout_config['resolved_data'] = resolved_data
+            print(f"[SingleTableProcessor] Successfully resolved table data using TableDataResolver")
+        except Exception as e:
+            print(f"[SingleTableProcessor] Error resolving table data: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
         
         # Use LayoutBuilder to orchestrate the entire layout construction
         layout_builder = LayoutBuilder(

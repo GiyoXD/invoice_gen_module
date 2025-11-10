@@ -6,7 +6,7 @@ from openpyxl.cell.cell import MergedCell
 import traceback
 
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
-from invoice_generator.utils.layout import unmerge_row, unmerge_block, apply_column_widths
+from invoice_generator.utils.layout import apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
@@ -23,530 +23,121 @@ FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'
 from invoice_generator.styling.models import StylingConfigModel
 from .bundle_accessor import BundleAccessor
 
-class DataTableBuilderStyler(BundleAccessor):
+class DataTableBuilderStyler:
     """
-    Builds and styles data table sections using pure bundle architecture.
+    Builds and styles data table sections based on pre-resolved data.
     
-    This class handles BOTH structural building (rows, cells, formulas, merges)
-    AND styling (fonts, borders, colors, alignment) in a single efficient pass.
-    
-    Styling logic is delegated to the style_applier module for separation of concerns.
-    Uses config bundles for input and @property decorators for frequently accessed values.
+    This class is a "dumb" builder. Its only job is to take prepared data
+    and write it to the worksheet. It does not contain any data-sourcing
+    or mapping logic.
     """
     
     def __init__(
         self,
         worksheet: Worksheet,
-        style_config: Dict[str, Any],
-        context_config: Dict[str, Any],
-        layout_config: Dict[str, Any],
-        data_config: Dict[str, Any]
+        header_info: Dict[str, Any],
+        resolved_data: Dict[str, Any],
+        sheet_styling_config: Optional[StylingConfigModel] = None
     ):
         """
-        Initialize DataTableBuilder with bundle configs.
+        Initialize the builder with resolved data.
         
         Args:
-            worksheet: The worksheet to build in
-            style_config: Bundle containing styling_config
-            context_config: Bundle containing sheet_name, args, pallets, table info
-            layout_config: Bundle containing sheet_config, blanks, static content, merge rules
-            data_config: Bundle containing data_source, data_source_type, header_info, mapping_rules
+            worksheet: The worksheet to write to.
+            header_info: Header information with column maps.
+            resolved_data: The data prepared by TableDataResolver.
+            sheet_styling_config: The styling configuration for the sheet.
         """
-        # Initialize base class with common bundles
-        super().__init__(
-            worksheet=worksheet,
-            style_config=style_config,
-            context_config=context_config,
-            layout_config=layout_config,  # Pass layout_config to base via kwargs
-            data_config=data_config       # Pass data_config to base via kwargs
-        )
+        self.worksheet = worksheet
+        self.header_info = header_info
+        self.resolved_data = resolved_data
+        self.sheet_styling_config = sheet_styling_config
 
-        # Initialize output state variables (build process results)
-        self.actual_rows_to_process = 0
-        self.data_rows_prepared = []
-        self.col1_index = 1
-        self.num_static_labels = 0
-        self.columns_to_grid = []
-        self.desc_col_idx = None
-        self.local_chunk_pallets = 0
-        self.dynamic_desc_used = False
-
-        self.row_after_header_idx = -1
-        self.data_start_row = -1
-        self.data_end_row = -1
-        self.row_before_footer_idx = -1
-        self.footer_row_final = -1
-    
-    # ========== Properties for Frequently Accessed Config Values ==========
-    # Note: sheet_name, all_sheet_configs, args, sheet_styling_config inherited from BundleAccessor
-    
-    @property
-    def sheet_config(self) -> Dict[str, Any]:
-        """Sheet configuration from layout config."""
-        return self.layout_config.get('sheet_config', {})
-    
-    @property
-    def data_source(self) -> Union[Dict[str, List[Any]], Dict[Tuple, Dict[str, Any]]]:
-        """Data source from data config."""
-        return self.data_config.get('data_source')
-    
-    @property
-    def data_source_type(self) -> str:
-        """Data source type from data config."""
-        return self.data_config.get('data_source_type', '')
-    
-    @property
-    def header_info(self) -> Dict[str, Any]:
-        """Header information from data config."""
-        return self.data_config.get('header_info', {})
-    
-    @property
-    def mapping_rules(self) -> Dict[str, Any]:
-        """Mapping rules from data config."""
-        return self.data_config.get('mapping_rules', {})
-    
-    @mapping_rules.setter
-    def mapping_rules(self, value: Dict[str, Any]):
-        """Setter for mapping_rules."""
-        self.data_config['mapping_rules'] = value
-    
-    @property
-    def add_blank_after_header(self) -> bool:
-        """Add blank row after header from layout config."""
-        return self.layout_config.get('add_blank_after_header', False)
-    
-    @property
-    def static_content_after_header(self) -> Dict[str, Any]:
-        """Static content after header from layout config."""
-        return self.layout_config.get('static_content_after_header', {})
-    
-    @static_content_after_header.setter
-    def static_content_after_header(self, value: Dict[str, Any]):
-        """Setter for static_content_after_header."""
-        self.layout_config['static_content_after_header'] = value
-    
-    @property
-    def add_blank_before_footer(self) -> bool:
-        """Add blank row before footer from layout config."""
-        return self.layout_config.get('add_blank_before_footer', False)
-    
-    @property
-    def static_content_before_footer(self) -> Dict[str, Any]:
-        """Static content before footer from layout config."""
-        return self.layout_config.get('static_content_before_footer', {})
-    
-    @static_content_before_footer.setter
-    def static_content_before_footer(self, value: Dict[str, Any]):
-        """Setter for static_content_before_footer."""
-        self.layout_config['static_content_before_footer'] = value
-    
-    @property
-    def merge_rules_after_header(self) -> Dict[str, int]:
-        """Merge rules after header from layout config."""
-        return self.layout_config.get('merge_rules_after_header', {})
-    
-    @merge_rules_after_header.setter
-    def merge_rules_after_header(self, value: Dict[str, int]):
-        """Setter for merge_rules_after_header."""
-        self.layout_config['merge_rules_after_header'] = value
-    
-    @property
-    def merge_rules_before_footer(self) -> Dict[str, int]:
-        """Merge rules before footer from layout config."""
-        return self.layout_config.get('merge_rules_before_footer', {})
-    
-    @merge_rules_before_footer.setter
-    def merge_rules_before_footer(self, value: Dict[str, int]):
-        """Setter for merge_rules_before_footer."""
-        self.layout_config['merge_rules_before_footer'] = value
-    
-    @property
-    def merge_rules_footer(self) -> Dict[str, int]:
-        """Merge rules for footer from layout config."""
-        return self.layout_config.get('merge_rules_footer', {})
-    
-    @merge_rules_footer.setter
-    def merge_rules_footer(self, value: Dict[str, int]):
-        """Setter for merge_rules_footer."""
-        self.layout_config['merge_rules_footer'] = value
-    
-    @property
-    def max_rows_to_fill(self) -> Optional[int]:
-        """Maximum rows to fill from layout config."""
-        return self.layout_config.get('max_rows_to_fill')
-    
-    @property
-    def grand_total_pallets(self) -> int:
-        """Grand total pallets from context config."""
-        return self.context_config.get('grand_total_pallets', 0)
-    
-    @property
-    def custom_flag(self) -> bool:
-        """Custom mode flag from context config args."""
-        args = self.context_config.get('args')
-        return args.custom if args and hasattr(args, 'custom') else False
-    
-    @property
-    def data_cell_merging_rules(self) -> Optional[Dict[str, Any]]:
-        """Data cell merging rules from layout config."""
-        return self.layout_config.get('data_cell_merging_rules')
-    
-    @data_cell_merging_rules.setter
-    def data_cell_merging_rules(self, value: Optional[Dict[str, Any]]):
-        """Setter for data_cell_merging_rules."""
-        self.layout_config['data_cell_merging_rules'] = value
-    
-    @property
-    def DAF_mode(self) -> bool:
-        """DAF mode flag from context config args."""
-        args = self.context_config.get('args')
-        return args.DAF if args and hasattr(args, 'DAF') else False
-    
-    @property
-    def all_tables_data(self) -> Optional[Dict[str, Any]]:
-        """All tables data from data config."""
-        return self.data_config.get('all_tables_data')
-    
-    @property
-    def table_keys(self) -> Optional[List[str]]:
-        """Table keys from data config."""
-        return self.data_config.get('table_keys')
-    
-    @property
-    def is_last_table(self) -> bool:
-        """Is last table flag from context config."""
-        return self.context_config.get('is_last_table', False)
+        # Extract commonly used values
+        self.data_rows = resolved_data.get('data_rows', [])
+        self.static_info = resolved_data.get('static_info', {})
+        self.formula_rules = resolved_data.get('formula_rules', {})
+        self.pallet_counts = resolved_data.get('pallet_counts', [])
+        self.dynamic_desc_used = resolved_data.get('dynamic_desc_used', False)
+        
+        self.col_id_map = header_info.get('column_id_map', {})
+        self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
 
     def build(self) -> Tuple[bool, int, int, int, int]:
-        # --- Initialize Variables --- (Keep existing initializations)
-        # These are now instance variables
-
-        # get data source pallet count and handle null/conversion errors
-        for pallet_count in self.data_source.get("pallet_count", []):
-            if pallet_count is not None:
-                try:
-                    # Convert to float first to handle decimal strings, then to int
-                    numeric_pallet_count = float(str(pallet_count).strip())
-                    self.local_chunk_pallets += int(numeric_pallet_count)
-                except (ValueError, TypeError) as e:
-                    # Log the conversion error but continue processing
-                    print(f"Warning: Could not convert pallet_count '{pallet_count}' to number: {e}")
-                    continue
-
-        # --- Row Index Tracking --- (Keep existing)
-        # These are now instance variables
-
-        # Get config values into local variables (properties are read-only!)
-        static_content_after_header = self.static_content_after_header or {}
-        static_content_before_footer = self.static_content_before_footer or {}
-        merge_rules_after_header = self.merge_rules_after_header or {}
-        merge_rules_before_footer = self.merge_rules_before_footer or {}
-        merge_rules_footer = self.merge_rules_footer or {}
-        mapping_rules = self.mapping_rules or {}
-        data_cell_merging_rules = self.data_cell_merging_rules or {}
-        
-        col_id_map = self.header_info.get('column_id_map', {})
-        column_map = self.header_info.get('column_map', {})
-        idx_to_header_map = {v: k for k, v in column_map.items()}
-        # --- Validate Header Info ---
-        if not self.header_info or 'second_row_index' not in self.header_info or 'column_map' not in self.header_info or 'num_columns' not in self.header_info:
-            print("Error: Invalid header_info provided.")
+        if not self.header_info or 'second_row_index' not in self.header_info:
+            print("Error: Invalid header_info provided to DataTableBuilderStyler.")
             return False, -1, -1, -1, 0
 
-        # --- FIX: Extract num_columns and other values from header_info ---
-        num_columns = self.header_info['num_columns']
-        # Data always starts right after the table column header
-        data_writing_start_row = self.header_info['second_row_index'] + 1
-
-        # --- Find Description & Pallet Info Column Indices --- (Keep existing)
-        self.desc_col_idx = col_id_map.get("col_desc")
-        pallet_info_col_idx = col_id_map.get("col_pallet")
-        if pallet_info_col_idx is None: print("Warning: Header 'Pallet Info' not found.")
-
-        # --- ADD/MODIFY THIS PART FOR PALLET INFO INDEX ---
-        if pallet_info_col_idx is None:
-            print("Warning: Could not find a 'Pallet Info' (e.g., 'Pallet\\nNo') column header.")
-        # --- END OF ADDITION/MODIFICATION FOR PALLET INFO INDEX ---
-
-        # --- Get Styling Config --- (Keep existing)
-        force_text_headers = []
-        effective_header_font = BOLD_FONT # Start with default
-        effective_header_align = CENTER_ALIGNMENT # Start with default
-
-        if self.sheet_styling_config:
-            if self.sheet_styling_config.headerFont:
-                effective_header_font = Font(**self.sheet_styling_config.headerFont.model_dump(exclude_none=True))
-            if self.sheet_styling_config.headerAlignment:
-                effective_header_align = Alignment(**self.sheet_styling_config.headerAlignment.model_dump(exclude_none=True))
-        parsed_rules = parse_mapping_rules(
-            mapping_rules=mapping_rules,
-            column_id_map=col_id_map,
-            idx_to_header_map=idx_to_header_map
-        )
-
-        # Unpack the results into local variables for the rest of the function to use
-        static_value_map = parsed_rules["static_value_map"]
-        initial_static_col1_values = parsed_rules["initial_static_col1_values"]
-        dynamic_mapping_rules = parsed_rules["dynamic_mapping_rules"]
-        formula_rules = parsed_rules["formula_rules"]
-        self.col1_index = parsed_rules["col1_index"]
-        self.num_static_labels = parsed_rules["num_static_labels"]
-        static_column_header_name = parsed_rules["static_column_header_name"]
-        apply_special_border_rule = parsed_rules["apply_special_border_rule"]
-        fallback_on_none = parsed_rules.get("dynamic_mapping_rules", {}).get("description", {}).get("fallback_on_none")
-
-        # --- Prepare Data Rows for Writing (Determine number of rows needed from source) ---
-        # This section remains largely the same, preparing the `data_rows_prepared` list
-        # which holds the *input* data, not the calculated formulas.
-        self.desc_col_idx = col_id_map.get("col_desc") # Get the description column index
-        self.data_rows_prepared, pallet_counts_for_rows, self.dynamic_desc_used, num_data_rows_from_source = prepare_data_rows(
-            data_source_type=self.data_source_type,
-            data_source=self.data_source,
-            dynamic_mapping_rules=dynamic_mapping_rules,
-            column_id_map=col_id_map,
-            idx_to_header_map=idx_to_header_map,
-            desc_col_idx=self.desc_col_idx,
-            num_static_labels=self.num_static_labels,
-            static_value_map=static_value_map,
-            DAF_mode=self.DAF_mode,
-        )
-# --- Determine Final Number of Data Rows ---
-# The number of rows to process is the greater of the number of data rows or static labels.
-        self.actual_rows_to_process = max(len(self.data_rows_prepared), self.num_static_labels)
-
-        # Optional: Apply max_rows_to_fill constraint if it exists
-        if self.max_rows_to_fill is not None and self.max_rows_to_fill >= 0:
-            self.actual_rows_to_process = min(self.actual_rows_to_process, self.max_rows_to_fill)
-
-        # Ensure pallet counts list matches the number of rows we intend to process
-        if len(pallet_counts_for_rows) < self.actual_rows_to_process: pallet_counts_for_rows.extend([0] * (self.actual_rows_to_process - len(pallet_counts_for_rows)))
-        elif len(pallet_counts_for_rows) > self.actual_rows_to_process: pallet_counts_for_rows = pallet_counts_for_rows[:self.actual_rows_to_process]
-
-        # --- Calculate Total Rows to Insert and Row Indices ---
-        total_rows_to_insert = 0
-        current_row_offset = 0
-
-        # Row after header (static/blank)
-        if self.add_blank_after_header:
-            self.row_after_header_idx = data_writing_start_row + current_row_offset
-            total_rows_to_insert += 1
-            current_row_offset += 1
-        else:
-            self.row_after_header_idx = -1 # Indicate no blank row
-
-        # Data rows
-        self.data_start_row = data_writing_start_row + current_row_offset
-        if self.actual_rows_to_process > 0:
-            self.data_end_row = self.data_start_row + self.actual_rows_to_process - 1
-            total_rows_to_insert += self.actual_rows_to_process
-            current_row_offset += self.actual_rows_to_process
-        else:
-            # No data rows to process (can happen if source is empty)
-            self.data_end_row = self.data_start_row - 1 # Indicate no data rows
-
-        # Row before footer (static/blank)
-        if self.add_blank_before_footer:
-            self.row_before_footer_idx = data_writing_start_row + current_row_offset
-            total_rows_to_insert += 1
-            current_row_offset += 1
-        else:
-            self.row_before_footer_idx = -1 # Indicate no blank row
-
-        # Calculate final footer row index relative to where this chunk starts
-        self.footer_row_final = data_writing_start_row + total_rows_to_insert
-        total_rows_to_insert += 1 # Add 1 for the footer itself
-
-        # --- NO ROW INSERTION NEEDED ---
-        # Since we're using WorkbookBuilder with a separate output workbook,
-        # we don't need to insert rows - we just write to the next available row.
-        # The output workbook is fresh and empty, so rows already exist.
-        print(f"Writing {total_rows_to_insert} rows starting at row {data_writing_start_row} (no insertion needed)")
-
-        # --- Fill Row After Header (if applicable) --- 
-
-        # --- Prepare DAF Data Dictionary (inside loop now, safer) ---
-        # Removed the premature preparation block here.
-        # DAF data dict will be prepared inside the loop if data_source_type is DAF_aggregation.
+        num_columns = self.header_info.get('num_columns', 0)
+        data_writing_start_row = self.header_info.get('second_row_index', 0) + 1
+        
+        actual_rows_to_process = len(self.data_rows)
+        
+        data_start_row = data_writing_start_row
+        data_end_row = data_start_row + actual_rows_to_process - 1 if actual_rows_to_process > 0 else data_start_row - 1
+        
+        footer_row_final = data_end_row + 1
 
         # --- Fill Data Rows Loop ---
-        if self.actual_rows_to_process > 0:
-            print(f"--- DEBUG START LOOP (Sheet: {self.worksheet.title}) ---")
-            print(f"  data_start_row: {self.data_start_row}")
-            print(f"  actual_rows_to_process: {self.actual_rows_to_process}")
-            print(f"  num_static_labels: {self.num_static_labels}")
-            print(f"  col1_index: {self.col1_index}")
-            print(f"  initial_static_col1_values: {initial_static_col1_values}")
-            print(f"  data_source_type: {self.data_source_type}")
-            # --- END DEBUG START LOOP ---
         try:
-            # --- Create a reverse map from index to ID for easy lookups inside the loop ---
-            idx_to_id_map = {v: k for k, v in col_id_map.items()}
-
             data_row_indices_written = []
-            for i in range(self.actual_rows_to_process):
-                current_row_idx = self.data_start_row + i
+            for i in range(actual_rows_to_process):
+                current_row_idx = data_start_row + i
                 data_row_indices_written.append(current_row_idx)
                 
-                row_data = self.data_rows_prepared[i] if i < len(self.data_rows_prepared) else {}
+                row_data = self.data_rows[i]
 
-                # Write initial static values for the first column
-                if i < self.num_static_labels and self.col1_index != -1:
-                    cell = self.worksheet.cell(row=current_row_idx, column=self.col1_index)
-                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
-                    if not isinstance(cell, MergedCell):
-                        cell.value = initial_static_col1_values[i]
-                    apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(self.col1_index), "col_idx": self.col1_index, "static_col_idx": self.col1_index})
-
-                # Write dynamic data
+                # Write data
                 for col_idx, value in row_data.items():
-                    if isinstance(value, dict) and value.get("type") == "formula":
-                        continue
                     cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
                     if not isinstance(cell, MergedCell):
-                        cell.value = value
-                    apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
+                        # Check if value is a formula dict
+                        if isinstance(value, dict) and value.get('type') == 'formula':
+                            # Convert formula dict to Excel formula string
+                            formula_str = self._build_formula_string(value, current_row_idx)
+                            cell.value = formula_str
+                        else:
+                            cell.value = value
+                    # apply_cell_style(...) # Styling logic can be added here
 
-                # Write formulas
-                for col_idx, formula_info in formula_rules.items():
-                    formula_template = formula_info["template"]
-                    input_ids = formula_info["input_ids"]
-                    
-                    formula = formula_template
-                    for input_id in input_ids:
-                        input_col_idx = col_id_map.get(input_id)
-                        if input_col_idx:
-                            col_letter = get_column_letter(input_col_idx)
-                            formula = formula.replace(f"{{col_ref_{input_ids.index(input_id)}}}", col_letter)
-                    
-                    formula = formula.replace("{row}", str(current_row_idx))
-                    
-                    cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    # Skip writing if cell is a MergedCell (non-master cell in a merged range)
-                    if not isinstance(cell, MergedCell):
-                        cell.value = f"={formula}"
-                    apply_cell_style(cell, self.sheet_styling_config, {"col_id": idx_to_id_map.get(col_idx), "col_idx": col_idx, "static_col_idx": self.col1_index})
-
-                # Apply data cell merging rules
-                if data_cell_merging_rules:
-                    apply_explicit_data_cell_merges_by_id(
-                        worksheet=self.worksheet,
-                        row_num=current_row_idx,
-                        column_id_map=col_id_map,
-                        num_total_columns=num_columns,
-                        merge_rules_data_cells=data_cell_merging_rules,
-                        sheet_styling_config=self.sheet_styling_config,
-                        DAF_mode=self.DAF_mode
-                    )
+            # --- Merging and other logic can be added here if needed ---
 
         except Exception as fill_data_err:
             print(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
-            return False, self.footer_row_final + 1, self.data_start_row, self.data_end_row, 0
+            return False, -1, -1, -1, 0
 
-    # Merge Description Column if the layout used fallback/static data
-        if not self.dynamic_desc_used and self.data_start_row > 0 and self.data_end_row > self.data_start_row:
-            desc_col_id = "col_desc" 
-            if col_id_map.get(desc_col_id):
-                merge_contiguous_cells_by_id(
-                    worksheet=self.worksheet,
-                    start_row=self.data_start_row,
-                    end_row=self.data_end_row,
-                    col_id_to_merge=desc_col_id,
-                    column_id_map=col_id_map
-                )
+        local_chunk_pallets = sum(int(p) for p in self.pallet_counts if p is not None and str(p).isdigit())
 
-        # Always try to merge the Pallet Info Column if it exists
-        if self.data_start_row > 0 and self.data_end_row > self.data_start_row:
-            pallet_col_id = "col_pallet" 
-            if col_id_map.get(pallet_col_id):
-                merge_contiguous_cells_by_id(
-                    worksheet=self.worksheet,
-                    start_row=self.data_start_row,
-                    end_row=self.data_end_row,
-                    col_id_to_merge=pallet_col_id,
-                    column_id_map=col_id_map
-                )
-        if self.data_start_row > 0 and self.data_end_row > self.data_start_row:
-            pallet_col_id = "col_hs" 
-            if col_id_map.get(pallet_col_id):
-                merge_contiguous_cells_by_id(
-                    worksheet=self.worksheet,
-                    start_row=self.data_start_row,
-                    end_row=self.data_end_row,
-                    col_id_to_merge=pallet_col_id,
-                    column_id_map=col_id_map
-                )
-
-# --- Fill Row Before Footer ---
-        if self.add_blank_before_footer and self.row_before_footer_idx > 0:
-            try:
-                # Step 1: Fill the row with content (this applies default styles)
-                fill_static_row(self.worksheet, self.row_before_footer_idx, num_columns, static_content_before_footer, self.sheet_styling_config)
-                
-                # Step 2: Apply the special styling and borders for this specific row
-                for c_idx in range(1, num_columns + 1):
-                    cell = self.worksheet.cell(row=self.row_before_footer_idx, column=c_idx)
-                    current_col_id = idx_to_id_map.get(c_idx)
-                    context = {
-                        "col_id": current_col_id,
-                        "col_idx": c_idx,
-                        "static_col_idx": self.col1_index,
-                        "is_pre_footer": True,
-                        "DAF_mode": self.DAF_mode
-                    }
-                    apply_cell_style(cell, self.sheet_styling_config, context)
-            except Exception as fill_bf_err:
-                print(f"Warning: Error filling/styling row before footer: {fill_bf_err}")
+        return True, footer_row_final, data_start_row, data_end_row, local_chunk_pallets
+    
+    def _build_formula_string(self, formula_dict: Dict[str, Any], row_num: int) -> str:
+        """
+        Convert a formula dict to an Excel formula string.
         
-
-        # --- Fill Footer Row --- (Keep existing logic)
-        # The SUM formulas here should correctly sum the results of the formulas
-        # written in the data rows above.
-        if self.footer_row_final > 0:
-            # Get the footer configuration object from the main sheet config
-            footer_config = self.sheet_config.get("footer_configurations", {})
-            data_range_to_sum = [(self.data_start_row, self.data_end_row)]
-
-            # FooterBuilder is now called by LayoutBuilder (Director pattern)
-            # DataTableBuilder only prepares the data and returns the position
-            # Apply footer height to the initial footer row position
-            self._apply_footer_row_height(self.footer_row_final)
-    # No need to pass font, alignment, num_columns, etc. as the
-    # function gets this info from header_info and footer_config.
-        # --- Apply Merges ---
-        # Apply merges to row after header (if applicable)
-        if self.add_blank_after_header and self.row_after_header_idx > 0 and merge_rules_after_header:
-            apply_row_merges(self.worksheet, self.row_after_header_idx, num_columns, merge_rules_after_header)
-
-        # Apply merges to row before footer (if applicable)
-        target_row_for_bf_merge = self.row_before_footer_idx if self.add_blank_before_footer and self.row_before_footer_idx > 0 else -1
-        if target_row_for_bf_merge > 0 and merge_rules_before_footer:
-            apply_row_merges(self.worksheet, target_row_for_bf_merge, num_columns, merge_rules_before_footer)
-
-        # Apply merges to the footer row itself (if applicable)
-        if self.footer_row_final > 0 and merge_rules_footer:
-            print(f"Applying footer merges to row {self.footer_row_final} with rules: {merge_rules_footer}") # Optional Debug
-            try:
-                apply_row_merges(self.worksheet, self.footer_row_final, num_columns, merge_rules_footer)
-            except Exception as footer_merge_err:
-                print(f"Warning: Error applying footer merges: {footer_merge_err}")
-
-        import logging
-        logging.debug("Reached end of try block in DataTableBuilder.build()")
-        # --- Finalization ---
-        # Return footer_row_final so LayoutBuilder can call FooterBuilder at this position
-        if self.actual_rows_to_process == 0: self.data_start_row = -1; self.data_end_row = -1
+        Args:
+            formula_dict: Dict with 'template' and 'inputs' keys
+            row_num: Current row number
         
-        # --- Apply Row Heights --- (Moved outside of try-catch to ensure it runs)
-        apply_row_heights(
-            worksheet=self.worksheet,
-            sheet_styling_config=self.sheet_styling_config,
-            header_info=self.header_info,
-            data_row_indices=data_row_indices_written,
-            footer_row_index=self.footer_row_final,
-            row_after_header_idx=self.row_after_header_idx,
-            row_before_footer_idx=self.row_before_footer_idx
-        )
+        Returns:
+            Excel formula string (e.g., "=B5*C5")
+        """
+        template = formula_dict.get('template', '')
+        inputs = formula_dict.get('inputs', [])
         
-        # Return: success, footer_row_position, data_start, data_end, pallets
-        return True, self.footer_row_final, self.data_start_row, self.data_end_row, self.local_chunk_pallets
+        # Replace placeholders like {col_ref_0}, {col_ref_1}, etc.
+        formula = template
+        for i, input_id in enumerate(inputs):
+            col_idx = self.col_id_map.get(input_id)
+            if col_idx:
+                col_letter = get_column_letter(col_idx)
+                formula = formula.replace(f'{{col_ref_{i}}}', col_letter)
+        
+        # Replace {row} with actual row number
+        formula = formula.replace('{row}', str(row_num))
+        
+        # Ensure formula starts with =
+        if not formula.startswith('='):
+            formula = '=' + formula
+        
+        return formula
+

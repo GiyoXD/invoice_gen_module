@@ -247,118 +247,17 @@ class LayoutBuilder(BundleAccessor):
 
         # 5. Data Table Builder (writes data rows, returns footer position) (unless skipped)
         if not self.skip_data_table_builder:
-            # Get mappings from bundled config if available, else from legacy
-            if self.config_loader:
-                data_flow = self.config_loader.get_sheet_data_flow(self.sheet_name)
-                structure = self.config_loader.get_sheet_structure(self.sheet_name)
-                content = self.config_loader.get_sheet_content(self.sheet_name)
-                
-                # Convert bundled mappings to internal format
-                sheet_inner_mapping_rules_dict = self._convert_bundled_mappings(
-                    data_flow.get('mappings', {}),
-                    structure.get('columns', [])
-                )
-                
-                # Get content settings
-                static_info = content.get('static', {})
-                add_blank_after_hdr_flag = False  # Not in bundled config yet
-                static_content_after_hdr_dict = {}  # Not in bundled config yet
-                add_blank_before_ftr_flag = False  # Handled in footer config
-                static_content_before_ftr_dict = {}
-                if 'before_footer' in static_info:
-                    bf = static_info['before_footer']
-                    if 'col' in bf:
-                        static_content_before_ftr_dict[str(bf['col'])] = bf.get('text', '')
-                merge_rules_after_hdr = {}  # Not in bundled config yet
-            else:
-                # Legacy format
-                sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
-                add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
-                static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
-                add_blank_before_ftr_flag = self.sheet_config.get("add_blank_before_footer", False)
-                static_content_before_ftr_dict = self.sheet_config.get("static_content_before_footer", {})
-                merge_rules_after_hdr = self.sheet_config.get("merge_rules_after_header", {})
-            # Merge rules - not yet in bundled config, use empty for now
-            if self.config_loader:
-                merge_rules_before_ftr = {}
-                merge_rules_footer = {}
-                data_cell_merging_rules = None
-                # IMPORTANT: Check sheet_config first for multi-table override (e.g., table key '1', '2')
-                # Multi-table processor sets sheet_config['data_source'] to the specific table key
-                # For multi-table, data_source is set directly on layout_config. For single table, it's in sheet_config.
-                data_source_indicator = self.layout_config.get("data_source") or self.sheet_config.get("data_source") or self.config_loader.get_data_source(self.sheet_name)
-            else:
-                merge_rules_before_ftr = self.sheet_config.get("merge_rules_before_footer", {})
-                merge_rules_footer = self.sheet_config.get("merge_rules_footer", {})
-                data_cell_merging_rules = self.sheet_config.get("data_cell_merging_rule", None)
-                data_source_indicator = self.sheet_config.get("data_source")
+            resolved_data = self.layout_config.get('resolved_data')
+            if not resolved_data:
+                print("Error: LayoutBuilder expected 'resolved_data' in layout_config, but it was not found.")
+                return False
 
-            data_to_fill = None
-            data_source_type = None
-
-            if self.args.custom and data_source_indicator == 'aggregation':
-                data_to_fill = self.invoice_data.get('custom_aggregation_results')
-                data_source_type = 'custom_aggregation'
-
-            if data_to_fill is None:
-                if self.args.DAF and self.sheet_name in ["Invoice", "Contract"]:
-                    data_source_indicator = 'DAF_aggregation'
-
-                if data_source_indicator == 'DAF_aggregation':
-                    data_to_fill = self.invoice_data.get('final_DAF_compounded_result')
-                    data_source_type = 'DAF_aggregation'
-                elif data_source_indicator == 'aggregation':
-                    data_to_fill = self.invoice_data.get('standard_aggregation_results')
-                    data_source_type = 'aggregation'
-                elif 'processed_tables_data' in self.invoice_data and data_source_indicator in self.invoice_data.get('processed_tables_data', {}):
-                    data_to_fill = self.invoice_data['processed_tables_data'].get(data_source_indicator)
-                    data_source_type = 'processed_tables'
-
-            if data_to_fill is None:
-                print(f"Warning: Data source '{data_source_indicator}' unknown or data empty. Skipping fill.")
-                return True
-
-            # Bundle configs for DataTableBuilder
-            dtb_style_config = {
-                'styling_config': self.sheet_styling_config
-            }
-            
-            dtb_context_config = {
-                'sheet_name': self.sheet_name,
-                'all_sheet_configs': self.all_sheet_configs,
-                'args': self.args,
-                'grand_total_pallets': self.final_grand_total_pallets,
-                'all_tables_data': None,
-                'table_keys': None,
-                'is_last_table': True
-            }
-            
-            dtb_layout_config = {
-                'sheet_config': self.sheet_config,
-                'add_blank_after_header': add_blank_after_hdr_flag,
-                'static_content_after_header': static_content_after_hdr_dict,
-                'add_blank_before_footer': add_blank_before_ftr_flag,
-                'static_content_before_footer': static_content_before_ftr_dict,
-                'merge_rules_after_header': merge_rules_after_hdr,
-                'merge_rules_before_footer': merge_rules_before_ftr,
-                'merge_rules_footer': merge_rules_footer,
-                'data_cell_merging_rules': data_cell_merging_rules,
-                'max_rows_to_fill': None
-            }
-            
-            dtb_data_config = {
-                'data_source': data_to_fill,
-                'data_source_type': data_source_type,
-                'header_info': self.header_info,
-                'mapping_rules': sheet_inner_mapping_rules_dict
-            }
-
+            # The new DataTableBuilder will take resolved_data directly
             data_table_builder = DataTableBuilderStyler(
                 worksheet=self.worksheet,
-                style_config=dtb_style_config,
-                context_config=dtb_context_config,
-                layout_config=dtb_layout_config,
-                data_config=dtb_data_config
+                header_info=self.header_info,
+                resolved_data=resolved_data,
+                sheet_styling_config=self.sheet_styling_config
             )
 
             fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
@@ -384,8 +283,8 @@ class LayoutBuilder(BundleAccessor):
         print(f"[LayoutBuilder] Checking FooterBuilder - skip_footer_builder={self.skip_footer_builder}")
         if not self.skip_footer_builder:
             # Prepare footer parameters
-            pallet_count = 0
-            if data_source_type == "processed_tables":
+            # Use local_chunk_pallets from data if available, otherwise use grand total
+            if local_chunk_pallets > 0:
                 pallet_count = local_chunk_pallets
             else:
                 pallet_count = self.final_grand_total_pallets
@@ -428,7 +327,7 @@ class LayoutBuilder(BundleAccessor):
                 'all_tables_data': None,  # TODO: Pass if multi-table support needed
                 'table_keys': None,
                 'mapping_rules': sheet_inner_mapping_rules_dict,
-                'DAF_mode': data_source_type == "DAF_aggregation",
+                'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
                 'override_total_text': None
             }
 

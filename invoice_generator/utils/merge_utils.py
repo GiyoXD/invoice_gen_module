@@ -195,47 +195,6 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
                         failed_count += 1
 
     print("Merge restoration process finished.")
-
-
-def force_unmerge_from_row_down(worksheet: Worksheet, start_row: int):
-    """
-    Forcefully unmerges all cells that start on or after a specific row.
-
-    This is the ideal way to clean a 'data area' while leaving a
-    'header area' completely untouched.
-
-    Args:
-        worksheet: The openpyxl worksheet object to modify.
-        start_row: The row number from which to start unmerging. All merges
-                   at this row or any row below it will be removed.
-    """
-    print(f"--- Selectively unmerging cells from row {start_row} downwards on sheet '{worksheet.title}' ---")
-    
-    # Create a copy of the list to avoid issues while modifying it
-    all_merged_ranges = list(worksheet.merged_cells.ranges)
-    unmerged_count = 0
-    
-    for merged_range in all_merged_ranges:
-        # The key condition: only unmerge if the merge starts in the target zone.
-        if merged_range.min_row >= start_row:
-            try:
-                worksheet.unmerge_cells(str(merged_range))
-                unmerged_count += 1
-            except KeyError as e:
-                # This can happen when openpyxl tries to delete cells that don't exist
-                # during unmerge. It's safe to ignore this error.
-                print(f"Warning: KeyError when unmerging {merged_range}: {e} (ignoring)")
-                unmerged_count += 1
-            except Exception as e:
-                print(f"Error unmerging cells: {e}")
-                traceback.print_exc(file=sys.stdout) # Print to stdout
-                raise # Re-raise the exception
-    
-    if unmerged_count > 0:
-        print(f"--- Removed {unmerged_count} merges from the data area (row {start_row}+) ---")
-    else:
-        print(f"--- No merges found in the data area (row {start_row}+) to remove ---")
-
 def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
     """
     Applies horizontal merges to a specific row based on a dictionary of rules.

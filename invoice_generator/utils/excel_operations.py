@@ -119,17 +119,6 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
                             end_row = start_row
                             end_col = start_col + col_span - 1
 
-                            merged_ranges_copy = list(worksheet.merged_cells.ranges)
-                            for existing_merge in merged_ranges_copy:
-                                rows_overlap = (existing_merge.min_row <= end_row) and (existing_merge.max_row >= start_row)
-                                cols_overlap = (existing_merge.min_col <= end_col) and (existing_merge.max_col >= start_col)
-
-                                if rows_overlap and cols_overlap:
-                                    try:
-                                        worksheet.unmerge_cells(str(existing_merge))
-                                    except Exception:
-                                        pass
-
                             try:
                                 worksheet.merge_cells(start_row=start_row, start_column=start_col, end_row=end_row, end_column=end_col)
 
@@ -160,30 +149,6 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
                         failed_count += 1
 
     print("Merge restoration process finished.")
-
-
-def force_unmerge_from_row_down(worksheet: Worksheet, start_row: int):
-    """
-    Forcefully unmerges all cells that start on or after a specific row.
-    """
-    print(f"--- Selectively unmerging cells from row {start_row} downwards on sheet '{worksheet.title}' ---")
-    
-    all_merged_ranges = list(worksheet.merged_cells.ranges)
-    unmerged_count = 0
-    
-    for merged_range in all_merged_ranges:
-        if merged_range.min_row >= start_row:
-            try:
-                worksheet.unmerge_cells(str(merged_range))
-                unmerged_count += 1
-            except Exception:
-                pass 
-    
-    if unmerged_count > 0:
-        print(f"--- Removed {unmerged_count} merges from the data area (row {start_row}+) ---")
-    else:
-        print(f"--- No merges found in the data area (row {start_row}+) to remove ---")
-
 def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
     """
     Applies horizontal merges to a specific row based on a dictionary of rules.

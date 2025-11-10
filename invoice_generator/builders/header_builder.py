@@ -3,7 +3,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from ..styling.models import StylingConfigModel
 from ..styling.style_applier import apply_header_style, apply_cell_style
-from ..utils.layout import unmerge_block, calculate_header_dimensions
+from ..utils.layout import calculate_header_dimensions
 from openpyxl.utils import get_column_letter
 
 class HeaderBuilderStyler:
@@ -48,8 +48,6 @@ class HeaderBuilderStyler:
             return None
 
         num_header_rows, num_header_cols = calculate_header_dimensions(self.header_layout_config)
-        if num_header_rows > 0 and num_header_cols > 0:
-            unmerge_block(self.worksheet, self.start_row, self.start_row + num_header_rows - 1, num_header_cols)
 
         first_row_index = self.start_row
         last_row_index = self.start_row

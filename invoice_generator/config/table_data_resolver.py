@@ -145,12 +145,54 @@ class TableDataResolver:
     def _parse_mapping_rules(self) -> Dict[str, Any]:
         """Parse mapping rules using existing data_preparer logic."""
         if self._parsed_rules is None:
+            # Convert bundled config format to legacy format if needed
+            converted_rules = self._convert_bundled_mappings_to_legacy(self.mapping_rules)
             self._parsed_rules = parse_mapping_rules(
-                mapping_rules=self.mapping_rules,
+                mapping_rules=converted_rules,
                 column_id_map=self.column_id_map,
                 idx_to_header_map=self.idx_to_header_map
             )
         return self._parsed_rules
+    
+    def _convert_bundled_mappings_to_legacy(self, mappings: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert bundled config mapping format to legacy format expected by parse_mapping_rules.
+        
+        Bundled format:
+            {"po": {"column": "col_po", "source_key": 0}, ...}
+        
+        Legacy format:
+            {"po": {"id": "col_po", "key_index": 0}, ...}
+        """
+        converted = {}
+        
+        for key, value in mappings.items():
+            if not isinstance(value, dict):
+                # Skip non-dict values
+                continue
+            
+            legacy_value = {}
+            
+            # Convert 'column' to 'id'
+            if 'column' in value:
+                legacy_value['id'] = value['column']
+            
+            # Convert 'source_key' to 'key_index'
+            if 'source_key' in value:
+                legacy_value['key_index'] = value['source_key']
+            
+            # Convert 'source_value' to 'value_key'
+            if 'source_value' in value:
+                legacy_value['value_key'] = value['source_value']
+            
+            # Copy over other fields as-is
+            for other_key in ['fallback', 'type', 'formula_template', 'inputs', 'column_header_id', 'values', 'static_value']:
+                if other_key in value:
+                    legacy_value[other_key] = value[other_key]
+            
+            converted[key] = legacy_value
+        
+        return converted
     
     def _extract_table_data(self) -> Union[Dict, List, None]:
         """

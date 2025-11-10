@@ -4,9 +4,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Font, Side, Border
 from openpyxl.utils import get_column_letter
 
-from ..utils.layout import unmerge_row
-
-
 from ..styling.models import StylingConfigModel
 
 from ..styling.style_applier import apply_cell_style
@@ -186,26 +183,22 @@ class FooterBuilderStyler(BundleAccessor):
     def _build_regular_footer(self, current_footer_row: int):
         """Build regular footer with TOTAL: text."""
         default_total_text = self.footer_config.get("total_text", "TOTAL:")
-        self._build_footer_common(current_footer_row, default_total_text, unmerge_first=True)
+        self._build_footer_common(current_footer_row, default_total_text)
 
     def _build_grand_total_footer(self, current_footer_row: int):
         """Build grand total footer with TOTAL OF: text."""
-        self._build_footer_common(current_footer_row, "TOTAL OF:", unmerge_first=False)
+        self._build_footer_common(current_footer_row, "TOTAL OF:")
     
-    def _build_footer_common(self, current_footer_row: int, default_total_text: str, unmerge_first: bool = True):
+    def _build_footer_common(self, current_footer_row: int, default_total_text: str):
         """
         Common footer building logic for both regular and grand total footers.
         
         Args:
             current_footer_row: The row to build the footer in
             default_total_text: Default text to use for total label
-            unmerge_first: Whether to unmerge the row first
         """
         num_columns = self.header_info.get('num_columns', 1)
         column_map_by_id = self.header_info.get('column_id_map', {})
-
-        if unmerge_first:
-            unmerge_row(self.worksheet, current_footer_row, num_columns)
 
         # Write total text
         total_text = self.override_total_text if self.override_total_text is not None else default_total_text
