@@ -1,5 +1,8 @@
+import logging
 from typing import Any, Dict, List, Optional
 from openpyxl.worksheet.worksheet import Worksheet
+
+logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
 from ..styling.style_applier import apply_header_style, apply_cell_style
@@ -31,16 +34,16 @@ class HeaderBuilderStyler:
         
         # Convert bundled columns to internal format if provided
         if bundled_columns:
-            print(f"[HeaderBuilder] [OK] Using BUNDLED config (columns={len(bundled_columns)})")
+            logger.info(f"Using BUNDLED config (columns={len(bundled_columns)})")
             # Show first column as example
             if bundled_columns:
                 sample = bundled_columns[0]
                 sample_header = str(sample.get('header', '')).encode('ascii', 'replace').decode('ascii')
-                print(f"[HeaderBuilder] Sample bundled column: id='{sample.get('id')}', header='{sample_header}', format='{sample.get('format')}'")
+                logger.debug(f"Sample bundled column: id='{sample.get('id')}', header='{sample_header}', format='{sample.get('format')}'")
             self.header_layout_config = self._convert_bundled_columns(bundled_columns)
-            print(f"[HeaderBuilder] Converted to {len(self.header_layout_config)} header cells")
+            logger.debug(f"Converted to {len(self.header_layout_config)} header cells")
         else:
-            print(f"[HeaderBuilder] [LEGACY] Using legacy config")
+            logger.warning(f"Using legacy config")
             self.header_layout_config = header_layout_config or []
 
     def build(self) -> Optional[Dict[str, Any]]:

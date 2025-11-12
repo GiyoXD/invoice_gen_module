@@ -1,8 +1,12 @@
 """
-Tests for TableDataResolver
+Tests for TableDataResolver (Adapter Pattern)
 
 Tests the table data preparation logic that transforms raw invoice data
 into table-ready row dictionaries.
+
+Run these tests:
+    python -m pytest tests/config/test_table_data_resolver.py -v
+    python -m pytest tests/config/test_table_data_resolver.py::TestTableDataResolver::test_resolve_with_real_invoice_config -v
 """
 import unittest
 from unittest.mock import Mock
@@ -373,3 +377,123 @@ class TestTableDataResolverEdgeCases(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ========== Additional Isolated Unit Tests ==========
+
+class TestTableDataResolverIsolated(unittest.TestCase):
+    """Isolated unit tests that don't require real config files."""
+    
+    def test_bundled_to_legacy_mapping_conversion(self):
+        """Test conversion from bundled config mapping format to legacy format."""
+        bundled_mappings = {
+            'po': {
+                'column': 'col_po',
+                'source_key': 0
+            },
+            'item': {
+                'column': 'col_item',
+                'source_key': 1,
+                'fallback': 'N/A'
+            },
+            'total': {
+                'column': 'col_total',
+                'formula_template': 'SUM({sqft},{amount})',
+                'inputs': ['sqft', 'amount']
+            }
+        }
+        
+        header_info = {
+            'column_map': {},
+            'column_id_map': {
+                'col_po': 1,
+                'col_item': 2,
+                'col_total': 5
+            }
+        }
+        
+        resolver = TableDataResolver(
+            data_source_type='aggregation',
+            data_source={},
+            mapping_rules=bundled_mappings,
+            header_info=header_info,
+            DAF_mode=False
+        )
+        
+        # Call the conversion method
+        legacy = resolver._convert_bundled_mappings_to_legacy(bundled_mappings)
+        
+        # Verify conversions
+        self.assertEqual(legacy['po']['id'], 'col_po')
+        self.assertEqual(legacy['po']['key_index'], 0)
+        
+        self.assertEqual(legacy['item']['id'], 'col_item')
+        self.assertEqual(legacy['item']['key_index'], 1)
+        self.assertEqual(legacy['item']['fallback'], 'N/A')
+        
+        self.assertEqual(legacy['total']['id'], 'col_total')
+        self.assertEqual(legacy['total']['formula_template'], 'SUM({sqft},{amount})')
+    
+    def test_all_three_data_source_types(self):
+        """Test that all 3 supported data source types work."""
+        header_info = {
+            'column_map': {},
+            'column_id_map': {'col_po': 1}
+        }
+        
+        # Test aggregation
+        resolver1 = TableDataResolver(
+            data_source_type='aggregation',
+            data_source={},
+            mapping_rules={},
+            header_info=header_info,
+            DAF_mode=False
+        )
+        self.assertEqual(resolver1.data_source_type, 'aggregation')
+        
+        # Test DAF_aggregation
+        resolver2 = TableDataResolver(
+            data_source_type='DAF_aggregation',
+            data_source={},
+            mapping_rules={},
+            header_info=header_info,
+            DAF_mode=True
+        )
+        self.assertEqual(resolver2.data_source_type, 'DAF_aggregation')
+        self.assertTrue(resolver2.DAF_mode)
+        
+        # Test processed_tables_multi
+        resolver3 = TableDataResolver(
+            data_source_type='processed_tables_multi',
+            data_source={'po': ['PO123']},
+            mapping_rules={},
+            header_info=header_info,
+            DAF_mode=False,
+            table_key='1'
+        )
+        self.assertEqual(resolver3.data_source_type, 'processed_tables_multi')
+        self.assertEqual(resolver3.table_key, '1')
+    
+    def test_resolver_caches_parsed_rules(self):
+        """Test that parsed mapping rules are cached after first parse."""
+        header_info = {
+            'column_map': {},
+            'column_id_map': {'col_po': 1}
+        }
+        
+        resolver = TableDataResolver(
+            data_source_type='aggregation',
+            data_source={},
+            mapping_rules={'po': {'column': 'col_po', 'source_key': 0}},
+            header_info=header_info,
+            DAF_mode=False
+        )
+        
+        # First call should parse
+        self.assertIsNone(resolver._parsed_rules)
+        parsed1 = resolver._parse_mapping_rules()
+        self.assertIsNotNone(resolver._parsed_rules)
+        
+        # Second call should return cached
+        parsed2 = resolver._parse_mapping_rules()
+        self.assertIs(parsed1, parsed2)  # Same object reference

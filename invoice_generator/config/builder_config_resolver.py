@@ -112,7 +112,7 @@ class BuilderConfigResolver:
             'sheet_name': self.sheet_name,
             'args': self.args,
             'pallets': self.pallets,
-            'all_sheet_configs': self.config_loader.get_raw_config().get('data_bundle', {}),
+            'all_sheet_configs': self.config_loader.get_raw_config().get('layout_bundle', {}),
         }
         
         # Merge in any overrides and additional context
@@ -252,7 +252,7 @@ class BuilderConfigResolver:
     
     def get_table_data_resolver(self, table_key: Optional[str] = None):
         """
-        Create a TableDataResolver for preparing table-specific data.
+        Create aTableDataAdapter for preparing table-specific data.
         
         This method provides a high-level interface to data preparation logic,
         eliminating the need for builders to handle data transformation directly.
@@ -261,7 +261,7 @@ class BuilderConfigResolver:
             table_key: Optional table key for multi-table scenarios
         
         Returns:
-            Configured TableDataResolver instance
+            ConfiguredTableDataAdapter instance
         
         Example:
             resolver = BuilderConfigResolver(...)
@@ -274,12 +274,12 @@ class BuilderConfigResolver:
             # - dynamic_desc_used: Metadata
             # - static_info: Column 1 static values, etc.
         """
-        from .table_data_resolver import TableDataResolver
+        from .table_data_resolver import TableDataAdapter
         
         data_config = self.get_data_bundle(table_key=table_key)
         context_config = self.get_context_bundle()
         
-        return TableDataResolver.create_from_bundles(
+        return TableDataAdapter.create_from_bundles(
             data_config=data_config,
             context_config=context_config
         )
@@ -403,6 +403,6 @@ class BuilderConfigResolver:
         Get configurations for all sheets (for cross-sheet references).
         
         Returns:
-            Dictionary of all sheet configurations
+            Dictionary of all sheet configurations from layout_bundle
         """
-        return self.config_loader.get_raw_config().get('data_bundle', {})
+        return self.config_loader.get_raw_config().get('layout_bundle', {})

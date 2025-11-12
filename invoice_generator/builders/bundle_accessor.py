@@ -15,8 +15,11 @@ The 'style_config' bundle stored here contains styling configuration,
 but this class doesn't DO any styling - it just provides ACCESS to the config.
 Actual styling is delegated to the style_applier module.
 """
+import logging
 from typing import Any, Dict, Optional
 from openpyxl.worksheet.worksheet import Worksheet
+
+logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
 
@@ -79,7 +82,7 @@ class BundleAccessor:
             try:
                 styling_config = StylingConfigModel(**styling_config)
             except Exception as e:
-                print(f"Warning: Could not create StylingConfigModel: {e}")
+                logger.warning(f"Could not create StylingConfigModel: {e}")
                 styling_config = None
         return styling_config
     

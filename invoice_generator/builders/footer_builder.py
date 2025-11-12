@@ -1,8 +1,11 @@
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Font, Side, Border
 from openpyxl.utils import get_column_letter
+
+logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
 
@@ -177,7 +180,7 @@ class FooterBuilderStyler(BundleAccessor):
             return current_footer_row
 
         except Exception as e:
-            print(f"ERROR: An error occurred during footer generation on row {self.footer_row_num}: {e}")
+            logger.error(f"An error occurred during footer generation on row {self.footer_row_num}: {e}")
             return -1
 
     def _build_regular_footer(self, current_footer_row: int):

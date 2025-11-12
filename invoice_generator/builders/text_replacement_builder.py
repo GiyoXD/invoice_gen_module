@@ -1,8 +1,11 @@
+import logging
 import openpyxl
 from typing import Dict, Any
 
 # Import the core replacement engine
 from ..utils.text import find_and_replace
+
+logger = logging.getLogger(__name__)
 
 class TextReplacementBuilder:
     """
@@ -21,7 +24,7 @@ class TextReplacementBuilder:
 
     def _replace_placeholders(self):
         """Defines and runs the data-driven placeholder replacement task."""
-        print("\n--- Running Placeholder Replacement Task (within A1:N14) ---")
+        logger.info("Running placeholder replacement task (within A1:N14)")
         header_rules = [
             {"find": "JFINV", "data_path": ["processed_tables_data", "1", "inv_no", 0], "match_mode": "exact"},
             {"find": "JFTIME", "data_path": ["processed_tables_data", "1", "inv_date", 0], "is_date": True, "match_mode": "exact"},
@@ -36,11 +39,11 @@ class TextReplacementBuilder:
             limit_cols=14,
             invoice_data=self.invoice_data
         )
-        print("--- Finished Placeholder Replacement Task ---")
+        logger.info("Finished placeholder replacement task")
 
     def _run_daf_specific_replacement(self):
         """Defines and runs the hardcoded, DAF-specific replacement task."""
-        print("\n--- Running DAF-Specific Replacement Task (within 50x16 grid) ---")
+        logger.info("Running DAF-specific replacement task (within 50x16 grid)")
         daf_rules = [
             {"find": "BINH PHUOC", "replace": "BAVET", "match_mode": "exact"},
             {"find": "BAVET, SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
@@ -64,4 +67,4 @@ class TextReplacementBuilder:
             limit_rows=200,
             limit_cols=16
         )
-        print("--- Finished DAF-Specific Replacement Task ---")
+        logger.info("Finished DAF-specific replacement task")

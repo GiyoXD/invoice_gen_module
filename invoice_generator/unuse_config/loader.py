@@ -279,5 +279,5 @@ def load_bundled_config(config_path: str) -> BundledConfigLoader:
 
 def load_styling_config(sheet_config: Dict[str, Any]) -> StylingConfigModel:
     """Parses the styling portion of the config into Pydantic models."""
-    print(f"DEBUG: sheet_config in load_styling_config: {sheet_config.get('styling', {})}")
+    logger.debug(f"DEBUG: sheet_config in load_styling_config: {sheet_config.get('styling', {})}")
     return StylingConfigModel(**sheet_config.get('styling', {}))

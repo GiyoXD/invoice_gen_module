@@ -1,7 +1,10 @@
 # invoice_generator/builders/workbook_builder.py
+import logging
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 class WorkbookBuilder:
     """
@@ -27,7 +30,7 @@ class WorkbookBuilder:
         Returns:
             A new Workbook instance with empty sheets
         """
-        print(f"[WorkbookBuilder] Creating new workbook with {len(self.sheet_names)} sheets")
+        logger.info(f"Creating new workbook with {len(self.sheet_names)} sheets")
         
         # Create new workbook
         self.workbook = Workbook()
@@ -39,9 +42,9 @@ class WorkbookBuilder:
         # Create all required sheets with correct names
         for sheet_name in self.sheet_names:
             self.workbook.create_sheet(title=sheet_name)
-            print(f"[WorkbookBuilder]   Created sheet: '{sheet_name}'")
+            logger.debug(f"Created sheet: '{sheet_name}'")
         
-        print(f"[WorkbookBuilder] New workbook created successfully")
+        logger.info(f"New workbook created successfully")
         return self.workbook
     
     def get_worksheet(self, sheet_name: str) -> Worksheet:

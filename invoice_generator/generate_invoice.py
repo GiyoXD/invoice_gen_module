@@ -10,6 +10,7 @@ import openpyxl
 import traceback
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import ast
@@ -22,21 +23,29 @@ from .builders.workbook_builder import WorkbookBuilder
 from .processors.single_table_processor import SingleTableProcessor
 from .processors.multi_table_processor import MultiTableProcessor
 
+logger = logging.getLogger(__name__)
+
 # --- Helper Functions (derive_paths, load_config, load_data) ---
 # These functions remain largely the same but are part of the new script.
 def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str: str) -> Optional[Dict[str, Path]]:
     """
     Derives template and config file paths based on the input data filename.
     """
-    print(f"Deriving paths from input: {input_data_path_str}")
+    logger.info(f"Deriving paths from input: {input_data_path_str}")
     try:
         input_data_path = Path(input_data_path_str).resolve()
         template_dir = Path(template_dir_str).resolve()
         config_dir = Path(config_dir_str).resolve()
 
-        if not input_data_path.is_file(): print(f"Error: Input data file not found: {input_data_path}"); return None
-        if not template_dir.is_dir(): print(f"Error: Template directory not found: {template_dir}"); return None
-        if not config_dir.is_dir(): print(f"Error: Config directory not found: {config_dir}"); return None
+        if not input_data_path.is_file(): 
+            logger.error(f"Input data file not found: {input_data_path}")
+            return None
+        if not template_dir.is_dir(): 
+            logger.error(f"Template directory not found: {template_dir}")
+            return None
+        if not config_dir.is_dir(): 
+            logger.error(f"Config directory not found: {config_dir}")
+            return None
 
         base_name = input_data_path.stem
         template_name_part = base_name
@@ -54,70 +63,74 @@ def derive_paths(input_data_path_str: str, template_dir_str: str, config_dir_str
                     break
 
         if not template_name_part:
-            print(f"Error: Could not derive template name part from: '{base_name}'")
+            logger.error(f"Could not derive template name part from: '{base_name}'")
             return None
-        print(f"Derived initial template name part: '{template_name_part}'")
+        logger.debug(f"Derived initial template name part: '{template_name_part}'")
 
         exact_template_filename = f"{template_name_part}.xlsx"
         exact_config_filename = f"{template_name_part}_config.json"
         exact_template_path = template_dir / exact_template_filename
         exact_config_path = config_dir / exact_config_filename
-        print(f"Checking for exact match: Template='{exact_template_path}', Config='{exact_config_path}'")
+        logger.debug(f"Checking for exact match: Template='{exact_template_path}', Config='{exact_config_path}'")
 
         if exact_template_path.is_file() and exact_config_path.is_file():
-            print("Found exact match for template and config.")
+            logger.info("Found exact match for template and config")
             return {"data": input_data_path, "template": exact_template_path, "config": exact_config_path}
         
         # Check for bundled config subdirectory pattern: config_bundled/JF_config/JF_config.json
         bundled_config_subdir = config_dir / exact_config_filename.replace('.json', '') / exact_config_filename
         if exact_template_path.is_file() and bundled_config_subdir.is_file():
-            print(f"Found exact match for template and bundled config (subdir): {bundled_config_subdir}")
+            logger.info(f"Found exact match for template and bundled config (subdir): {bundled_config_subdir}")
             return {"data": input_data_path, "template": exact_template_path, "config": bundled_config_subdir}
         
-        print("Exact match not found. Attempting prefix matching...")
+        logger.debug("Exact match not found. Attempting prefix matching...")
         prefix_match = re.match(r'^([a-zA-Z]+[-_]?[a-zA-Z]*)', template_name_part)
         if prefix_match:
-            print("Exact match not found. Attempting prefix matching...")
+            logger.debug("Exact match not found. Attempting prefix matching...")
             prefix_match = re.match(r'^([a-zA-Z]+[-_]?[a-zA-Z]*)', template_name_part)
             if prefix_match:
                 prefix = prefix_match.group(1)
-                print(f"Extracted prefix: '{prefix}'")
+                logger.debug(f"Extracted prefix: '{prefix}'")
                 prefix_template_filename = f"{prefix}.xlsx"
                 prefix_config_filename = f"{prefix}_config.json"
                 prefix_template_path = template_dir / prefix_template_filename
                 prefix_config_path = config_dir / prefix_config_filename
-                print(f"Checking for prefix match: Template='{prefix_template_path}', Config='{prefix_config_path}'")
+                logger.debug(f"Checking for prefix match: Template='{prefix_template_path}', Config='{prefix_config_path}'")
 
                 if prefix_template_path.is_file() and prefix_config_path.is_file():
-                    print("Found prefix match for template and config.")
+                    logger.info("Found prefix match for template and config")
                     return {"data": input_data_path, "template": prefix_template_path, "config": prefix_config_path}
                 else:
-                    print("Prefix match not found.")
+                    logger.debug("Prefix match not found")
             else:
-                print("Could not extract a letter-based prefix.")
+                logger.debug("Could not extract a letter-based prefix")
 
-            print(f"Error: Could not find matching template/config files using exact ('{template_name_part}') or prefix methods.")
-            if not exact_template_path.is_file(): print(f"Error: Template file not found: {exact_template_path}")
-            if not exact_config_path.is_file(): print(f"Error: Configuration file not found: {exact_config_path}")
+            logger.error(f"Could not find matching template/config files using exact ('{template_name_part}') or prefix methods")
+            if not exact_template_path.is_file(): 
+                logger.error(f"Template file not found: {exact_template_path}")
+            if not exact_config_path.is_file(): 
+                logger.error(f"Configuration file not found: {exact_config_path}")
             return None
 
     except Exception as e:
-        print(f"Error deriving file paths: {e}")
+        logger.error(f"Error deriving file paths: {e}")
         traceback.print_exc()
         return None
 
 def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
     """Loads and parses the JSON configuration file."""
-    print(f"Loading configuration from: {config_path}")
+    logger.info(f"Loading configuration from: {config_path}")
     try:
         with open(config_path, 'r', encoding='utf-8') as f: config_data = json.load(f)
-        print("Configuration loaded successfully.")
+        logger.info("Configuration loaded successfully.")
         # Detect bundled config version
         if '_meta' in config_data and 'config_version' in config_data['_meta']:
-            print(f"Detected bundled config version: {config_data['_meta']['config_version']}")
+            logger.info(f"Detected bundled config version: {config_data['_meta']['config_version']}")
         return config_data
     except Exception as e:
-        print(f"Error loading configuration file {config_path}: {e}"); traceback.print_exc(); return None
+        logger.error(f"Error loading configuration file {config_path}: {e}")
+        traceback.print_exc()
+        return None
 
 def build_sheet_config_from_bundled(config: Dict[str, Any], sheet_name: str) -> Dict[str, Any]:
     """
@@ -161,7 +174,7 @@ def build_sheet_config_from_bundled(config: Dict[str, Any], sheet_name: str) -> 
 
 def load_data(data_path: Path) -> Optional[Dict[str, Any]]:
     """ Loads and parses the input data file. Supports .json and .pkl. """
-    print(f"Loading data from: {data_path}")
+    logger.info(f"Loading data from: {data_path}")
     invoice_data = None; file_suffix = data_path.suffix.lower()
     try:
         if file_suffix == '.json':
@@ -169,7 +182,7 @@ def load_data(data_path: Path) -> Optional[Dict[str, Any]]:
         elif file_suffix == '.pkl':
             with open(data_path, 'rb') as f: invoice_data = pickle.load(f)
         else:
-            print(f"Error: Unsupported data file extension: '{file_suffix}'."); return None
+            logger.error(f"Error: Unsupported data file extension: '{file_suffix}'.")
         
         # Key conversion logic remains the same
         for key_to_convert in ["standard_aggregation_results", "custom_aggregation_results"]:
@@ -183,12 +196,14 @@ def load_data(data_path: Path) -> Optional[Dict[str, Any]]:
                         key_tuple = ast.literal_eval(processed_key_str)
                         processed_data[key_tuple] = value_dict
                     except Exception as e:
-                        print(f"Warning: Could not convert key '{key_str}': {e}")
+                        logger.warning(f"Warning: Could not convert key '{key_str}': {e}")
                 invoice_data[key_to_convert] = processed_data
         
         return invoice_data
     except Exception as e:
-        print(f"Error loading data file {data_path}: {e}"); traceback.print_exc(); return None
+        logger.error(f"Error loading data file {data_path}: {e}")
+        traceback.print_exc()
+        return None
 
 def main():
     """Main function to orchestrate invoice generation."""
@@ -201,10 +216,73 @@ def main():
     parser.add_argument("-c", "--configdir", default="./configs", help="Directory containing configuration JSON files.")
     parser.add_argument("--DAF", action="store_true", help="Enable DAF-specific processing.")
     parser.add_argument("--custom", action="store_true", help="Enable custom processing logic.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging (shows all DEBUG messages).")
+    parser.add_argument("--log-level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], 
+                        default='INFO', help="Set logging level (default: INFO).")
     args = parser.parse_args()
-
-    print("--- Starting Invoice Generation (Refactored) ---")
-    print(f"Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+    
+    # Configure logging based on command-line arguments
+    if args.debug:
+        log_level = logging.DEBUG
+    else:
+        log_level = getattr(logging, args.log_level, logging.INFO)
+    
+    # Configure logging with separate handlers and colors
+    # INFO/DEBUG -> stdout (white), WARNING -> stderr (yellow), ERROR/CRITICAL -> stderr (red)
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    logger.handlers.clear()  # Clear any existing handlers
+    
+    # Custom formatter with ANSI color codes and level-based format
+    class ColoredFormatter(logging.Formatter):
+        COLORS = {
+            'DEBUG': '\033[36m',      # Cyan
+            'INFO': '\033[0m',         # White (reset)
+            'WARNING': '\033[33m',     # Yellow
+            'ERROR': '\033[31m',       # Red
+            'CRITICAL': '\033[35m',    # Magenta
+            'RESET': '\033[0m'         # Reset
+        }
+        
+        # Different formats for different levels
+        FORMATS = {
+            logging.DEBUG: '>>> %(levelname)s >>> [%(filename)s:%(lineno)d in %(funcName)s()] %(message)s',
+            logging.INFO: '>>> %(levelname)s >>> %(message)s',  # Clean format for INFO
+            logging.WARNING: '>>> %(levelname)s >>> [%(filename)s:%(lineno)d in %(funcName)s()] %(message)s',
+            logging.ERROR: '>>> %(levelname)s >>> [%(filename)s:%(lineno)d in %(funcName)s()] %(message)s',
+            logging.CRITICAL: '>>> %(levelname)s >>> [%(filename)s:%(lineno)d in %(funcName)s()] %(message)s',
+        }
+        
+        def format(self, record):
+            # Apply color to level name
+            color = self.COLORS.get(record.levelname, self.COLORS['RESET'])
+            record.levelname = f"{color}{record.levelname}{self.COLORS['RESET']}"
+            
+            # Use format based on log level
+            log_fmt = self.FORMATS.get(record.levelno, self.FORMATS[logging.INFO])
+            formatter = logging.Formatter(log_fmt)
+            return formatter.format(record)
+    
+    # Create formatter instance
+    formatter = ColoredFormatter()
+    
+    # Handler for INFO and DEBUG -> stdout (normal color)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG)
+    stdout_handler.setFormatter(formatter)
+    stdout_handler.addFilter(lambda record: record.levelno <= logging.INFO)
+    logger.addHandler(stdout_handler)
+    
+    # Handler for WARNING, ERROR, CRITICAL -> stderr (colored: yellow/red)
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)
+    stderr_handler.setFormatter(formatter)
+    logger.addHandler(stderr_handler)
+    
+    logger = logging.getLogger(__name__)
+    logger.info("=== Starting Invoice Generation (Refactored) ===")
+    logger.info(f"Started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+    logger.debug(f"Arguments: {vars(args)}")
 
     paths = derive_paths(args.input_data_file, args.templatedir, args.configdir)
     if not paths: sys.exit(1)
@@ -213,7 +291,7 @@ def main():
     try:
         config_loader = BundledConfigLoader(paths['config'])
     except Exception as e:
-        print(f"Failed to load configuration: {e}")
+        logger.error(f"Failed to load configuration: {e}")
         sys.exit(1)
     
     invoice_data = load_data(paths['data'])
@@ -223,13 +301,14 @@ def main():
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        print(f"Error creating output directory: {e}"); sys.exit(1)
+        logger.error(f"Error creating output directory: {e}")
+        sys.exit(1)
     
     # NOTE: We no longer copy the template file directly.
     # Instead, we'll load it as read-only and create a new workbook separately.
-    print("Template will be loaded as read-only for state capture")
+    logger.info("Template will be loaded as read-only for state capture")
 
-    print("\n4. Loading template and creating new workbook...")
+    logger.info("Loading template and creating new workbook...")
     template_workbook = None
     output_workbook = None
     processing_successful = True
@@ -238,38 +317,38 @@ def main():
         # Step 1: Load template workbook as read_only=False
         # - read_only=False: Allows access to merged_cells for state capture
         # - data_only=False (default): Preserves formulas and text with '=' signs
-        print(f"Loading template from: {paths['template']}")
+        logger.debug(f"Loading template from: {paths['template']}")
         template_workbook = openpyxl.load_workbook(
             paths['template'], 
             read_only=False
         )
-        print(f"Template loaded successfully (read_only=False)")
-        print(f"   Template sheets: {template_workbook.sheetnames}")
+        logger.debug(f"Template loaded successfully (read_only=False)")
+        logger.debug(f"   Template sheets: {template_workbook.sheetnames}")
         
         # Step 2: Collect all sheet names from template
         template_sheet_names = template_workbook.sheetnames
-        print(f"Found {len(template_sheet_names)} sheets in template")
+        logger.debug(f"Found {len(template_sheet_names)} sheets in template")
         
         # Step 3: Create WorkbookBuilder with template sheet names
-        print("Creating new output workbook using WorkbookBuilder...")
+        logger.debug("Creating new output workbook using WorkbookBuilder...")
         workbook_builder = WorkbookBuilder(sheet_names=template_sheet_names)
         
         # Step 4: Build the new clean workbook
         output_workbook = workbook_builder.build()
-        print(f"New output workbook created with {len(output_workbook.sheetnames)} sheets")
+        logger.debug(f"New output workbook created with {len(output_workbook.sheetnames)} sheets")
         
         # Step 5: Store references to both workbooks
         # - template_workbook: Used for reading template state (READ-ONLY usage)
         # - output_workbook: Used for writing final output (WRITABLE)
         workbook = output_workbook  # Keep 'workbook' name for compatibility with rest of code
-        print("Both template (read) and output (write) workbooks ready")
+        logger.debug("Both template (read) and output (write) workbooks ready")
 
         # Get sheets to process from config loader
         sheets_to_process_config = config_loader.get_sheets_to_process()
         sheets_to_process = [s for s in sheets_to_process_config if s in workbook.sheetnames]
 
         if not sheets_to_process:
-            print("Error: No valid sheets to process."); sys.exit(1)
+            logger.error("Error: No valid sheets to process."); sys.exit(1)
 
         # Use TextReplacementBuilder instead of old utils
         if args.DAF:
@@ -286,13 +365,16 @@ def main():
         if isinstance(processed_tables_data_for_calc, dict):
             # Simplified calculation
             final_grand_total_pallets = sum(int(c) for t in processed_tables_data_for_calc.values() for c in t.get("pallet_count", []) if str(c).isdigit())
-        print(f"DEBUG: Globally calculated final grand total pallets: {final_grand_total_pallets}")
+        logger.debug(f"DEBUG: Globally calculated final grand total pallets: {final_grand_total_pallets}")
 
         # --- REFACTORED Main Processing Loop ---
+        sheets_processed = []
+        sheets_failed = []
+        
         for sheet_name in sheets_to_process:
-            print(f"\n--- Processing Sheet: '{sheet_name}' ---")
+            logger.info(f"Processing sheet '{sheet_name}'")
             if sheet_name not in workbook.sheetnames:
-                print(f"Warning: Sheet '{sheet_name}' not found. Skipping.")
+                logger.warning(f"Warning: Sheet '{sheet_name}' not found. Skipping.")
                 continue
             
             # Get both template and output worksheets
@@ -304,7 +386,7 @@ def main():
             data_source_indicator = config_loader.get_data_source_type(sheet_name)
 
             if not data_source_indicator:
-                print(f"Warning: No data source configured for sheet '{sheet_name}'. Skipping.")
+                logger.warning(f"Warning: No data source configured for sheet '{sheet_name}'. Skipping.")
                 continue
 
             # --- Processor Factory ---
@@ -342,37 +424,50 @@ def main():
             if processor:
                 processing_successful = processor.process()
                 if not processing_successful:
-                    print(f"--- ERROR occurred while processing sheet '{sheet_name}'. Halting. ---")
-                    break # Stop on first error
+                    logger.error(f"--- ERROR occurred while processing sheet '{sheet_name}'. Continuing to next sheet. ---")
+                    sheets_failed.append(sheet_name)
+                    # Don't break - continue processing other sheets to see all errors
+                else:
+                    sheets_processed.append(sheet_name)
             else:
-                print(f"Warning: No suitable processor found for sheet '{sheet_name}'. Skipping.")
+                logger.warning(f"Warning: No suitable processor found for sheet '{sheet_name}'. Skipping.")
+                sheets_failed.append(sheet_name)
 
         # --- End of Loop ---
+        
+        # Summary of processing results
+        logger.info(f"=== Processing Summary ===")
+        logger.info(f"Sheets processed successfully: {len(sheets_processed)}/{len(sheets_to_process)}")
+        if sheets_processed:
+            logger.info(f"  Success: {', '.join(sheets_processed)}")
+        if sheets_failed:
+            logger.error(f"  Failed: {', '.join(sheets_failed)}")
+        
+        processing_successful = len(sheets_failed) == 0
 
-        print("\n--------------------------------")
         if processing_successful:
-            print("5. Saving final workbook...")
+            logger.info("Saving final workbook...")
             output_workbook.save(output_path)
-            print(f"--- Workbook saved successfully: '{output_path}' ---")
+            logger.info(f"Workbook saved successfully: '{output_path}'")
         else:
-            print("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
+            logger.error("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
             output_workbook.save(output_path)
 
     except Exception as e:
-        print(f"\n--- UNHANDLED ERROR: {e} ---"); traceback.print_exc()
+        logger.error(f"\n--- UNHANDLED ERROR: {e} ---"); traceback.print_exc()
     finally:
         # Close both workbooks
         if template_workbook:
-            try: template_workbook.close(); print("Template workbook closed.")
+            try: template_workbook.close(); logger.debug("Template workbook closed.")
             except Exception: pass
         if output_workbook:
-            try: output_workbook.close(); print("Output workbook closed.")
+            try: output_workbook.close(); logger.debug("Output workbook closed.")
             except Exception: pass
 
     total_time = time.time() - start_time
-    print("\n--- Invoice Generation Finished ---")
-    print(f"Total Time: {total_time:.2f} seconds")
-    print(f"Completed at: {time.strftime('%H:%M:%S', time.localtime())}")
+    logger.info("=== Invoice Generation Finished ===")
+    logger.info(f"Total Time: {total_time:.2f} seconds")
+    logger.info(f"Completed at: {time.strftime('%H:%M:%S', time.localtime())}")
 
 if __name__ == "__main__":
     # To run this script directly, you might need to adjust Python's path

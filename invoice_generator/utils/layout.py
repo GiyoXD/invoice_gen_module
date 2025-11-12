@@ -9,6 +9,9 @@ import re
 import traceback
 import logging
 
+logger = logging.getLogger(__name__)
+
+
 
 
 def apply_column_widths(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_map: Optional[Dict[str, int]]):
@@ -84,9 +87,9 @@ def fill_static_row(worksheet: Worksheet, row_num: int, num_cols: int, static_co
                 # Column index out of range, log warning?
                 pass
         except (ValueError, TypeError) as e:
-            logging.warning(f"Invalid column key '{col_key}' in static content for row {row_num}: {e}")
+            logger.warning(f"Invalid column key '{col_key}' in static content for row {row_num}: {e}")
         except Exception as cell_err:
-            logging.error(f"Error writing static content to row {row_num}, column {target_col_index}: {cell_err}")
+            logger.error(f"Error writing static content to row {row_num}, column {target_col_index}: {cell_err}")
 
 def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
     """
@@ -107,7 +110,7 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
         rules_with_int_keys = {int(k): v for k, v in merge_rules.items()}
         sorted_keys = sorted(rules_with_int_keys.keys())
     except (ValueError, TypeError) as e:
-        logging.warning(f"Invalid key format in merge_rules for row {row_num}: {e}. Keys must be numeric.")
+        logger.warning(f"Invalid key format in merge_rules for row {row_num}: {e}. Keys must be numeric.")
         return
 
     for start_col in sorted_keys:
@@ -116,7 +119,7 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
             # Ensure colspan is an integer
             colspan = int(colspan_val)
         except (ValueError, TypeError):
-            logging.warning(f"Invalid colspan value '{colspan_val}' for column {start_col} in row {row_num}. Must be numeric.")
+            logger.warning(f"Invalid colspan value '{colspan_val}' for column {start_col} in row {row_num}. Must be numeric.")
             continue
 
         # Basic validation for start column and colspan
@@ -139,10 +142,10 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
                 top_left_cell.alignment = CENTER_ALIGNMENT # Apply center alignment if none exists
         except ValueError as ve:
             # This can happen if trying to merge over an existing merged cell that wasn't properly unmerged
-            logging.warning(f"Failed to merge cells in row {row_num}, columns {start_col}-{end_col}: {ve}. "
+            logger.warning(f"Failed to merge cells in row {row_num}, columns {start_col}-{end_col}: {ve}. "
                           f"Cell range may already be merged or overlap with existing merge.")
         except Exception as merge_err:
-            logging.error(f"Unexpected error merging cells in row {row_num}, columns {start_col}-{end_col}: {merge_err}")
+            logger.error(f"Unexpected error merging cells in row {row_num}, columns {start_col}-{end_col}: {merge_err}")
             traceback.print_exc()
 
 def merge_contiguous_cells_by_id(
@@ -172,12 +175,10 @@ def merge_contiguous_cells_by_id(
                         worksheet.merge_cells(
                             start_row=current_merge_start_row,
                             start_column=col_idx,
-                            end_row=row_idx - 1,
-                            end_column=col_idx
+                            end_row=row_idx - 1, end_column=col_idx
                         )
                     except Exception as e:
-                        print(f"Could not merge cells for ID {col_id_to_merge} from row {current_merge_start_row} to {row_idx - 1}. Error: {e}")
-            
+                        logger.error(f"Could not merge cells for ID {col_id_to_merge} from row {current_merge_start_row} to {row_idx - 1}. Error: {e}")
             current_merge_start_row = row_idx
             if row_idx <= end_row:
                 value_to_match = cell_value
@@ -207,7 +208,7 @@ def apply_explicit_data_cell_merges_by_id(
         # Get column index from the ID map
         start_col_idx = column_id_map.get(col_id)
         if not start_col_idx:
-            print(f"Warning: Could not find column for merge rule with ID '{col_id}'.")
+            logger.warning(f"Warning: Could not find column for merge rule with ID '{col_id}'.")
             continue
             
         end_col_idx = start_col_idx + colspan_to_apply - 1
@@ -231,7 +232,7 @@ def apply_explicit_data_cell_merges_by_id(
             apply_cell_style(anchor_cell, sheet_styling_config, context)
 
         except Exception as e:
-            print(f"Error applying explicit data cell merge for ID '{col_id}' on row {row_num}: {e}")
+            logger.error(f"Error applying explicit data cell merge for ID '{col_id}' on row {row_num}: {e}")
 
 def write_summary_rows(
     worksheet: Worksheet,
@@ -284,7 +285,7 @@ def write_summary_rows(
                 desc_val = str(raw_val)
                 is_buffalo = "BUFFALO" in desc_val.upper()
 
-                logging.debug(f"DEBUG: desc_val: {desc_val}, is_buffalo: {is_buffalo}")
+                logger.debug(f"DEBUG: desc_val: {desc_val}, is_buffalo: {is_buffalo}")
 
                 try:
                     pallet_val = int(pallet_counts[i]) if i < len(pallet_counts) else 0
@@ -293,9 +294,9 @@ def write_summary_rows(
                         buffalo_pallet_total += pallet_val
                     else: # If not buffalo, it's cow leather
                         cow_pallet_total += pallet_val
-                    logging.debug(f"DEBUG: Pallet - grand: {grand_pallet_total}, buffalo: {buffalo_pallet_total}, cow: {cow_pallet_total}")
+                    logger.debug(f"DEBUG: Pallet - grand: {grand_pallet_total}, buffalo: {buffalo_pallet_total}, cow: {cow_pallet_total}")
                 except (ValueError, TypeError) as e:
-                    logging.warning(f"Invalid pallet count value at index {i} for description '{desc_val}': {e}")
+                    logger.warning(f"Invalid pallet count value at index {i} for description '{desc_val}': {e}")
                     pass
 
                 for col_id in ids_to_sum:
@@ -317,9 +318,9 @@ def write_summary_rows(
                                 buffalo_totals[col_id] += numeric_value
                             else: # If not buffalo, it's cow leather
                                 cow_totals[col_id] += numeric_value
-                            logging.debug(f"DEBUG: {col_id} - grand: {grand_totals[col_id]}, buffalo: {buffalo_totals[col_id]}, cow: {cow_totals[col_id]}") # Changed to logging.debug
+                            logger.debug(f"DEBUG: {col_id} - grand: {grand_totals[col_id]}, buffalo: {buffalo_totals[col_id]}, cow: {cow_totals[col_id]}") # Changed to logging.debug
                         except (ValueError, TypeError, IndexError) as e:
-                            logging.warning(f"Failed to process numeric value for {col_id} at index {i} (description '{desc_val}'): {e}")
+                            logger.warning(f"Failed to process numeric value for {col_id} at index {i} (description '{desc_val}'): {e}")
                             pass
 
         # --- Writing to Worksheet ---
@@ -358,6 +359,6 @@ def write_summary_rows(
         return next_available_row
 
     except Exception as summary_err:
-        logging.error(f"Warning: Failed processing summary rows: {summary_err}") # Changed to logging.error
+        logger.error(f"Warning: Failed processing summary rows: {summary_err}") # Changed to logging.error
         traceback.print_exc()
         return start_row + 2

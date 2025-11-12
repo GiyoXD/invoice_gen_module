@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Border, Side, Font
@@ -5,20 +6,18 @@ from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import MergedCell
 import traceback
 
+logger = logging.getLogger(__name__)
+
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
 from invoice_generator.utils.layout import apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
 # FooterBuilder is now called by LayoutBuilder (proper Director pattern)
-from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT
+from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, FORMAT_GENERAL, FORMAT_TEXT, FORMAT_NUMBER_COMMA_SEPARATED1, FORMAT_NUMBER_COMMA_SEPARATED2
 
 
 # --- Constants for Number Formats ---
-FORMAT_GENERAL = 'General'
-FORMAT_TEXT = '@'
-FORMAT_NUMBER_COMMA_SEPARATED1 = '#,##0'
-FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'
 
 from invoice_generator.styling.models import StylingConfigModel
 from .bundle_accessor import BundleAccessor
@@ -45,7 +44,7 @@ class DataTableBuilderStyler:
         Args:
             worksheet: The worksheet to write to.
             header_info: Header information with column maps.
-            resolved_data: The data prepared by TableDataResolver.
+            resolved_data: The data prepared byTableDataAdapter.
             sheet_styling_config: The styling configuration for the sheet.
         """
         self.worksheet = worksheet
@@ -65,7 +64,7 @@ class DataTableBuilderStyler:
 
     def build(self) -> Tuple[bool, int, int, int, int]:
         if not self.header_info or 'second_row_index' not in self.header_info:
-            print("Error: Invalid header_info provided to DataTableBuilderStyler.")
+            logger.error("Invalid header_info provided to DataTableBuilderStyler")
             return False, -1, -1, -1, 0
 
         num_columns = self.header_info.get('num_columns', 0)
@@ -103,7 +102,7 @@ class DataTableBuilderStyler:
             # --- Merging and other logic can be added here if needed ---
 
         except Exception as fill_data_err:
-            print(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
+            logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
             return False, -1, -1, -1, 0
 
         local_chunk_pallets = sum(int(p) for p in self.pallet_counts if p is not None and str(p).isdigit())

@@ -1,11 +1,14 @@
 # This module contains utilities for text manipulation, date parsing, and replacement operations.
 
+import logging
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell import Cell
 from typing import List, Dict, Optional, Any
 import re
 import datetime
+
+logger = logging.getLogger(__name__)
 
 # The python-dateutil library is required for advanced date parsing.
 # Install it using: pip install python-dateutil
@@ -80,7 +83,7 @@ def find_and_replace(
     Pass 1: Locates all placeholders and performs simple value replacements.
     Pass 2: Uses the locations found in Pass 1 to build and apply formulas.
     """
-    print(f"\n--- Starting Find and Replace on sheets (Searching Range up to row {limit_rows}, col {limit_cols}) ---")
+    logger.info(f"Starting find and replace on sheets (searching range up to row {limit_rows}, col {limit_cols})")
     
     placeholder_locations: Dict[str, str] = {}
     
@@ -92,7 +95,7 @@ def find_and_replace(
             continue
 
         # --- PASS 1: Find all placeholder locations and apply simple replacements ---
-        print("  PASS 1: Locating placeholders and applying simple value replacements...")
+        logger.debug("PASS 1: Locating placeholders and applying simple value replacements...")
         for row in sheet.iter_rows(max_row=limit_rows, max_col=limit_cols):
             for cell in row:
                 if not isinstance(cell.value, str) or not cell.value:
@@ -121,7 +124,7 @@ def find_and_replace(
                             replacement_content = rule["replace"]
 
                         if replacement_content is not None:
-                            print(f"    -> Applying rule for '{text_to_find}' at {cell.coordinate}...")
+                            logger.debug(f"Applying rule for '{text_to_find}' at {cell.coordinate}...")
                             if rule.get("is_date", False):
                                 format_cell_as_date_smarter(cell, replacement_content)
                             elif match_mode == 'exact':
@@ -131,9 +134,9 @@ def find_and_replace(
                         break
 
         # --- PASS 2: Build and apply formula-based replacements ---
-        print("  PASS 2: Building and applying formula replacements...")
+        logger.debug("PASS 2: Building and applying formula replacements...")
         if not formula_rules:
-            print("    -> No formula rules to apply.")
+            logger.debug("No formula rules to apply")
         
         for rule in formula_rules:
             formula_template = rule["formula_template"]
@@ -141,7 +144,7 @@ def find_and_replace(
             
             target_cell_coord = placeholder_locations.get(target_placeholder)
             if not target_cell_coord:
-                print(f"    -> WARNING: Could not find cell for formula placeholder '{target_placeholder}'. Skipping.")
+                logger.warning(f"Could not find cell for formula placeholder '{target_placeholder}'. Skipping")
                 continue
 
             dependent_placeholders = re.findall(r'(\{\[\[.*?\ এমন)\\}\\}\\)', formula_template)
@@ -156,11 +159,11 @@ def find_and_replace(
                 if dep_coord:
                     final_formula_str = final_formula_str.replace(dep_placeholder, dep_coord)
                 else:
-                    print(f"    -> ERROR: Could not find location for dependency '{dep_key}' needed by formula for '{target_placeholder}'.")
+                    logger.error(f"Could not find location for dependency '{dep_key}' needed by formula for '{target_placeholder}'")
                     all_deps_found = False
                     break
             
             if all_deps_found:
                 final_formula_str = f"={final_formula_str}"
-                print(f"    -> SUCCESS: Placing formula '{final_formula_str}' in cell {target_cell_coord}.")
+                logger.debug(f"Placing formula '{final_formula_str}' in cell {target_cell_coord}")
                 sheet[target_cell_coord].value = final_formula_str

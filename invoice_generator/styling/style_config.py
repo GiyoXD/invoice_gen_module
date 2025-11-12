@@ -16,3 +16,9 @@ LEFT_ALIGNMENT = Alignment(horizontal='left', vertical='center', wrap_text=True)
 
 # --- Font Styles ---
 BOLD_FONT = Font(bold=True)
+
+# --- Constants for Number Formats ---
+FORMAT_GENERAL = 'General'
+FORMAT_TEXT = '@'
+FORMAT_NUMBER_COMMA_SEPARATED1 = '#,##0'
+FORMAT_NUMBER_COMMA_SEPARATED2 = '#,##0.00'

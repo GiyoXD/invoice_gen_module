@@ -17,6 +17,8 @@ Bundled Config Structure:
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional, List
+import logging
+logger = logging.getLogger(__name__)
 
 
 class BundledConfigLoader:
@@ -49,7 +51,7 @@ class BundledConfigLoader:
     
     def _load(self) -> None:
         """Load and parse the config file."""
-        print(f"Loading configuration from: {self.config_path}")
+        logger.debug(f"Loading configuration from: {self.config_path}")
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 self.raw_config = json.load(f)
@@ -58,8 +60,8 @@ class BundledConfigLoader:
             meta = self.raw_config.get('_meta', {})
             self.version = meta.get('config_version', 'unknown')
             self.customer = meta.get('customer', 'unknown')
-            print(f"Configuration loaded successfully.")
-            print(f"Detected bundled config version: {self.version}")
+            logger.info(f"Configuration loaded successfully.")
+            logger.info(f"Detected bundled config version: {self.version}")
             
             # Parse main sections
             self._processing = self.raw_config.get('processing', {})
@@ -69,7 +71,7 @@ class BundledConfigLoader:
             self._context = self.raw_config.get('context', {})
             
         except Exception as e:
-            print(f"Error loading configuration file {self.config_path}: {e}")
+            logger.error(f"Error loading configuration file {self.config_path}: {e}")
             raise
     
     # --- Public Interface ---

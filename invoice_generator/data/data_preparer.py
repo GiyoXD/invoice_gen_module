@@ -1,5 +1,7 @@
 from typing import Any, Union, Dict, List, Tuple
 from decimal import Decimal
+import logging
+logger = logging.getLogger(__name__)
 
 def parse_mapping_rules(
     mapping_rules: Dict[str, Any],
@@ -59,7 +61,7 @@ def parse_mapping_rules(
                 header_text = parsed_result["static_column_header_name"]
                 parsed_result["apply_special_border_rule"] = header_text and header_text.strip() in ["Mark & Nº", "Mark & N °"]
             else:
-                print(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
+                logger.warning(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
             continue
 
         # For all other rules, get the target column index using the RELIABLE ID
@@ -74,14 +76,14 @@ def parse_mapping_rules(
                     "input_ids": rule_value.get("inputs", [])
                 }
             else:
-                print(f"Warning: Could not find target column for formula rule with id '{target_id}'.")
+                logger.warning(f"Warning: Could not find target column for formula rule with id '{target_id}'.")
 
         # --- Handler for Static Values ---
         elif "static_value" in rule_value:
             if target_col_idx:
                 parsed_result["static_value_map"][target_col_idx] = rule_value["static_value"]
             else:
-                print(f"Warning: Could not find target column for static_value rule with id '{target_id}'.")
+                logger.warning(f"Warning: Could not find target column for static_value rule with id '{target_id}'.")
         
         # --- Handler for top-level Dynamic Rules (used by 'aggregation') ---
         else:

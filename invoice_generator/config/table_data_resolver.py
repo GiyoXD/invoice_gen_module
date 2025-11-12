@@ -11,7 +11,7 @@ This eliminates data preparation logic from builders and centralizes it
 in a single, testable, reusable component.
 
 Pattern:
-    BundledConfigLoader → BuilderConfigResolver → TableDataResolver → Builder
+    BundledConfigLoader → BuilderConfigResolver →TableDataAdapter → Builder
 """
 
 from typing import Any, Dict, List, Tuple, Union, Optional
@@ -25,7 +25,7 @@ from invoice_generator.data.data_preparer import (
 )
 
 
-class TableDataResolver:
+class TableDataAdapter:
     """
     Resolves and prepares table-specific data for rendering.
     
@@ -41,7 +41,7 @@ class TableDataResolver:
     - Calculate pallet counts and metadata
     
     Usage:
-        resolver = TableDataResolver(
+        resolver =TableDataAdapter(
             data_source_type='aggregation',
             data_source=invoice_data['standard_aggregation_results'],
             mapping_rules=config['mappings'],
@@ -232,9 +232,9 @@ class TableDataResolver:
     def create_from_bundles(
         data_config: Dict[str, Any],
         context_config: Dict[str, Any]
-    ) -> 'TableDataResolver':
+    ) -> 'TableDataAdapter':
         """
-        Factory method to create TableDataResolver from bundle configs.
+        Factory method to createTableDataAdapter from bundle configs.
         
         This is the recommended way to instantiate the resolver when using
         the BuilderConfigResolver pattern.
@@ -244,13 +244,13 @@ class TableDataResolver:
             context_config: Context bundle from BuilderConfigResolver.get_context_bundle()
         
         Returns:
-            Configured TableDataResolver instance
+            ConfiguredTableDataAdapter instance
         """
         # Determine DAF mode
         args = context_config.get('args')
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
         
-        return TableDataResolver(
+        return TableDataAdapter(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
             mapping_rules=data_config.get('mapping_rules', {}),
@@ -260,6 +260,6 @@ class TableDataResolver:
         )
 
 
-class TableDataResolverError(Exception):
+class TableDataAdapterError(Exception):
     """Exception raised when table data resolution fails."""
     pass

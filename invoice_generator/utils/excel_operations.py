@@ -8,6 +8,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment
 from openpyxl.utils import range_boundaries, get_column_letter, column_index_from_string
 from typing import Dict, List, Optional, Tuple, Any
+import logging
+logger = logging.getLogger(__name__)
 
 center_alignment = Alignment(horizontal='center', vertical='center')
 
@@ -20,8 +22,8 @@ def store_original_merges(workbook: openpyxl.Workbook, sheet_names: List[str]) -
     WARNING: Does NOT store starting coordinates... (rest of docstring unchanged)
     """
     original_merges = {}
-    print("\nStoring original merge horizontal spans, top-left values, and row heights (NO coordinates)...")
-    print("  (Ignoring merges that start above row 16)") # Updated filter info
+    logger.debug("\nStoring original merge horizontal spans, top-left values, and row heights (NO coordinates)...")
+    logger.debug("  (Ignoring merges that start above row 16)") # Updated filter info
     for sheet_name in sheet_names:
         if sheet_name in workbook.sheetnames:
             worksheet: Worksheet = workbook[sheet_name] # Type hint for clarity
@@ -49,24 +51,24 @@ def store_original_merges(workbook: openpyxl.Workbook, sheet_names: List[str]) -
                     merges_data.append((col_span, top_left_value, row_height))
 
                 except KeyError:
-                     print(f"    Warning: Could not find row dimension for row {min_row} on sheet '{sheet_name}' while getting height. Storing height as None.")
+                     logger.warning(f"    Warning: Could not find row dimension for row {min_row} on sheet '{sheet_name}' while getting height. Storing height as None.")
                      try:
                          top_left_value = worksheet.cell(row=min_row, column=min_col).value
                      except Exception as val_e:
-                         print(f"    Warning: Also failed to get value for merge at ({min_row},{min_col}) on sheet '{sheet_name}'. Storing value as None. Error: {val_e}")
+                         logger.warning(f"    Warning: Also failed to get value for merge at ({min_row},{min_col}) on sheet '{sheet_name}'. Storing value as None. Error: {val_e}")
                          top_left_value = None
                      merges_data.append((col_span, top_left_value, None))
 
                 except Exception as e:
-                    print(f"    Warning: Could not get value/height for merge starting at ({min_row},{min_col}) on sheet '{sheet_name}'. Storing value/height as None. Error: {e}")
+                    logger.warning(f"    Warning: Could not get value/height for merge starting at ({min_row},{min_col}) on sheet '{sheet_name}'. Storing value/height as None. Error: {e}")
                     merges_data.append((col_span, None, None))
 
             original_merges[sheet_name] = merges_data
-            print(f"  Stored {len(original_merges[sheet_name])} horizontal merge span/value/height entries for sheet '{sheet_name}'.")
+            logger.debug(f"  Stored {len(original_merges[sheet_name])} horizontal merge span/value/height entries for sheet '{sheet_name}'.")
             if skipped_above_16_count > 0:
-                print(f"    (Skipped {skipped_above_16_count} merges starting above row 16)")
+                logger.debug(f"    (Skipped {skipped_above_16_count} merges starting above row 16)")
         else:
-             print(f"  Warning: Sheet '{sheet_name}' specified but not found during merge storage.")
+             logger.warning(f"  Warning: Sheet '{sheet_name}' specified but not found during merge storage.")
              original_merges[sheet_name] = []
     return original_merges
 
@@ -79,7 +81,7 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
     by searching for the value within a specified range (default A16:H200).
     This version is silent, with no detailed logging.
     """
-    print("Starting merge restoration process...")
+    logger.debug("Starting merge restoration process...")
 
     restored_count = 0
     failed_count = 0
@@ -89,7 +91,7 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
     try:
         search_min_col, search_min_row, search_max_col, search_max_row = range_boundaries(search_range_str)
     except Exception as e:
-        print(f"Error: Invalid search range string '{search_range_str}'. Cannot proceed with restoration. Error: {e}")
+        logger.error(f"Error: Invalid search range string '{search_range_str}'. Cannot proceed with restoration. Error: {e}")
         return
 
     for sheet_name in processed_sheet_names:
@@ -148,7 +150,7 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
                     if stored_value not in successfully_restored_values_on_sheet:
                         failed_count += 1
 
-    print("Merge restoration process finished.")
+    logger.debug("Merge restoration process finished.")
 def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
     """
     Applies horizontal merges to a specific row based on a dictionary of rules.
@@ -156,7 +158,7 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
     if not merge_rules:
         return
 
-    print(f"  Applying custom merge rules for row {row_num}...")
+    logger.debug(f"  Applying custom merge rules for row {row_num}...")
     for start_col_str, colspan_val in merge_rules.items():
         try:
             start_col = int(start_col_str)
@@ -172,7 +174,7 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
             worksheet.merge_cells(start_row=row_num, start_column=start_col, end_row=row_num, end_column=end_col)
             cell = worksheet.cell(row=row_num, column=start_col)
             cell.alignment = center_alignment
-            print(f"    - Merged row {row_num} from column {start_col} to {end_col}.")
+            logger.debug(f"    - Merged row {row_num} from column {start_col} to {end_col}.")
 
         except (ValueError, TypeError):
             continue

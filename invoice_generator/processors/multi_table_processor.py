@@ -1,5 +1,6 @@
 # invoice_generator/processors/multi_table_processor.py
 import sys
+import logging
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import FooterBuilderStyler
@@ -7,6 +8,8 @@ from ..styling.models import StylingConfigModel
 from ..config.builder_config_resolver import BuilderConfigResolver
 import traceback
 from openpyxl.utils import get_column_letter
+
+logger = logging.getLogger(__name__)
 
 class MultiTableProcessor(SheetProcessor):
     """
@@ -18,16 +21,16 @@ class MultiTableProcessor(SheetProcessor):
         """
         Executes the logic for processing a multi-table sheet using LayoutBuilder.
         """
-        print(f"Processing sheet '{self.sheet_name}' as multi-table/packing list.")
+        logger.info(f"Processing sheet '{self.sheet_name}' as multi-table/packing list")
         
         # Get all tables data
         all_tables_data = self.invoice_data.get('processed_tables_data', {})
         if not all_tables_data or not isinstance(all_tables_data, dict):
-            print(f"Warning: 'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'.")
+            logger.warning(f"'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'")
             return True  # Not a failure, just nothing to do
 
         table_keys = sorted(all_tables_data.keys(), key=lambda x: int(x) if str(x).isdigit() else float('inf'))
-        print(f"Found {len(table_keys)} tables to process: {table_keys}")
+        logger.info(f"Found {len(table_keys)} tables to process: {table_keys}")
         
         # Track the current row position as we build multiple tables
         # Start at header_row (where first table's header will be written)
@@ -44,7 +47,7 @@ class MultiTableProcessor(SheetProcessor):
         for i, table_key in enumerate(table_keys):
             is_first_table = (i == 0)
             is_last_table = (i == len(table_keys) - 1)
-            print(f"\n--- Processing table '{table_key}' ({i+1}/{len(table_keys)}) ---")
+            logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
             
             # Prepare invoice_data for this specific table
             table_invoice_data = {
@@ -65,7 +68,7 @@ class MultiTableProcessor(SheetProcessor):
             
             # Get the bundles
             style_config = resolver.get_style_bundle()
-            print(style_config)
+            logger.debug(f"Style config: {style_config}")
             context_config = resolver.get_context_bundle(
                 invoice_data=table_invoice_data,
                 enable_text_replacement=False
@@ -79,7 +82,8 @@ class MultiTableProcessor(SheetProcessor):
             layout_config['data_source'] = data_bundle.get('data_source')
             layout_config['data_source_type'] = data_bundle.get('data_source_type')
             layout_config['header_row'] = current_row  # Override with current position for this table's header
-            layout_config['skip_header_builder'] = True  # Using pre-constructed header_info
+            # NOTE: header_info from config is just column metadata, NOT styled Excel rows
+            # HeaderBuilder still needs to run to write the actual styled header rows
             layout_config['enable_text_replacement'] = False
             # For multi-table: Only restore template header/footer for FIRST table
             layout_config['skip_template_header_restoration'] = (not is_first_table)
@@ -102,7 +106,7 @@ class MultiTableProcessor(SheetProcessor):
                 template_state_builder = layout_builder.template_state_builder
             
             if not success:
-                print(f"Failed to build layout for table '{table_key}'.")
+                logger.error(f"Failed to build layout for table '{table_key}'")
                 return False
             
             # Update tracking variables
@@ -127,14 +131,14 @@ class MultiTableProcessor(SheetProcessor):
             table_pallets = sum(int(p) for p in pallet_counts if str(p).isdigit())
             grand_total_pallets += table_pallets
             
-            print(f"Table '{table_key}' complete. Next row: {current_row}, Pallets: {table_pallets}")
-            print(f"  layout_builder.next_row_after_footer: {layout_builder.next_row_after_footer}")
-            print(f"  layout_builder.data_start_row: {layout_builder.data_start_row}")
-            print(f"  layout_builder.data_end_row: {layout_builder.data_end_row}")
+            logger.debug(f"Table '{table_key}' complete. Next row: {current_row}, Pallets: {table_pallets}")
+            logger.debug(f"  next_row_after_footer: {layout_builder.next_row_after_footer}")
+            logger.debug(f"  data_start_row: {layout_builder.data_start_row}")
+            logger.debug(f"  data_end_row: {layout_builder.data_end_row}")
         
         # After all tables, add grand total row if needed
         if len(table_keys) > 1 and last_header_info:
-            print(f"\n--- Adding Grand Total Row ---")
+            logger.info("Adding Grand Total Row")
             grand_total_row = current_row
             
             # Create resolver for grand total footer (reuse last table's context)
@@ -157,7 +161,7 @@ class MultiTableProcessor(SheetProcessor):
                 try:
                     styling_model = StylingConfigModel(**styling_model)
                 except Exception as e:
-                    print(f"Warning: Could not create StylingConfigModel: {e}")
+                    logger.warning(f"Could not create StylingConfigModel: {e}")
                     styling_model = None
             
             # Get footer config and mappings from layout bundle
@@ -201,18 +205,18 @@ class MultiTableProcessor(SheetProcessor):
             )
             next_row = footer_builder.build()
             
-            print(f"Grand Total Row added at row {grand_total_row}: {grand_total_pallets} pallets")
+            logger.debug(f"Grand Total Row added at row {grand_total_row}: {grand_total_pallets} pallets")
             current_row = next_row  # Update current_row for template footer restoration
         
         # Restore template footer at the very end after all tables and grand total
         if template_state_builder:
-            print(f"\n--- Restoring Template Footer ---")
-            print(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+            logger.debug(f"\n--- Restoring Template Footer ---")
+            logger.info(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
             template_state_builder.restore_footer_only(
                 target_worksheet=self.output_worksheet,
                 footer_start_row=current_row
             )
-            print(f"[MultiTableProcessor] Template footer restored successfully")
+            logger.info(f"[MultiTableProcessor] Template footer restored successfully")
         
-        print(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
+        logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True

@@ -11,6 +11,8 @@ from openpyxl import load_workbook
 from invoice_generator.config.config_loader import BundledConfigLoader
 from invoice_generator.config.builder_config_resolver import BuilderConfigResolver
 from invoice_generator.builders.layout_builder import LayoutBuilder
+import logging
+logger = logging.getLogger(__name__)
 
 
 def build_invoice_with_resolver_pattern(config_path: Path, template_path: Path, invoice_data: dict, args):
@@ -61,11 +63,11 @@ def build_invoice_with_resolver_pattern(config_path: Path, template_path: Path, 
     success = layout_builder.build()
     
     if success:
-        print(f"✅ Layout built successfully using resolver pattern")
-        print(f"   Data source type: {layout_config.get('data_source_type')}")
-        print(f"   Next row after footer: {layout_builder.next_row_after_footer}")
+        logger.info(f"✅ Layout built successfully using resolver pattern")
+        logger.info(f"   Data source type: {layout_config.get('data_source_type')}")
+        logger.info(f"   Next row after footer: {layout_builder.next_row_after_footer}")
     else:
-        print(f"❌ Layout build failed")
+        logger.critical(f"❌ Layout build failed")
     
     return success
 
@@ -102,9 +104,9 @@ def build_invoice_legacy_approach(template_path: Path, sheet_config: dict, invoi
     
     # Build the layout (will use legacy path)
     success = layout_builder.build()
-    
-    print(f"⚠️ Used legacy approach - consider migrating to resolver pattern")
-    
+
+    logger.warning(f"⚠️ Used legacy approach - consider migrating to resolver pattern")
+
     return success
 
 
