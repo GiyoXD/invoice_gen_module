@@ -119,7 +119,16 @@ def _apply_fallback(
 ):
     """
     Applies a fallback value to the row_dict based on the DAF_mode.
+    
+    Supports both legacy format (fallback_on_DAF/fallback_on_none) and 
+    bundled config format (fallback).
     """
+    # Try bundled config format first (single 'fallback' key)
+    if 'fallback' in mapping_rule:
+        row_dict[target_col_idx] = mapping_rule['fallback']
+        return
+    
+    # Fall back to legacy format with mode-specific keys
     if DAF_mode:
         fallback_key = "fallback_on_DAF"
     else:

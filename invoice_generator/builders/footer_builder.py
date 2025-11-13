@@ -153,34 +153,65 @@ class FooterBuilderStyler(BundleAccessor):
 
     def build(self) -> int:
         if not self.footer_config or self.footer_row_num <= 0:
+            logger.warning(f"FooterBuilder.build() called with invalid config or row_num: config_exists={bool(self.footer_config)}, row_num={self.footer_row_num}")
             return -1
 
         try:
             current_footer_row = self.footer_row_num
+            initial_row = current_footer_row
+            
+            # Handle add_blank_before - insert blank row before footer
+            add_blank_before = self.footer_config.get("add_blank_before", False)
+            if add_blank_before:
+                logger.debug(f"Adding blank row before footer at row {current_footer_row}")
+                # Leave current_footer_row blank, move footer to next row
+                current_footer_row += 1
             
             footer_type = self.footer_config.get("type", "regular")
+            logger.debug(f"Building {footer_type} footer at row {current_footer_row}")
 
-            if footer_type == "regular":
-                self._build_regular_footer(current_footer_row)
-            elif footer_type == "grand_total":
-                self._build_grand_total_footer(current_footer_row)
+            try:
+                if footer_type == "regular":
+                    self._build_regular_footer(current_footer_row)
+                elif footer_type == "grand_total":
+                    self._build_grand_total_footer(current_footer_row)
+                else:
+                    logger.warning(f"Unknown footer type '{footer_type}', using regular footer")
+                    self._build_regular_footer(current_footer_row)
+            except Exception as footer_build_err:
+                logger.error(f"Error building {footer_type} footer at row {current_footer_row}: {footer_build_err}")
+                raise
 
             # Apply row height to the footer row
-            self._apply_footer_row_height(current_footer_row)
+            try:
+                self._apply_footer_row_height(current_footer_row)
+            except Exception as height_err:
+                logger.error(f"Error applying footer row height at row {current_footer_row}: {height_err}")
+                # Non-fatal, continue
             
             current_footer_row += 1
 
             # Handle add-ons
             add_ons = self.footer_config.get("add_ons", [])
             if "summary" in add_ons:
-                current_footer_row = self._build_summary_add_on(current_footer_row)
+                try:
+                    logger.debug(f"Building summary add-on starting at row {current_footer_row}")
+                    next_row = self._build_summary_add_on(current_footer_row)
+                    logger.debug(f"Summary add-on completed, next row: {next_row}")
+                    current_footer_row = next_row
+                except Exception as addon_err:
+                    logger.error(f"Error building summary add-on at row {current_footer_row}: {addon_err}")
+                    raise
 
-
+            total_rows = current_footer_row - initial_row
+            logger.debug(f"FooterBuilder complete - Started at {initial_row}, ended at {current_footer_row - 1}, total rows: {total_rows}")
 
             return current_footer_row
 
         except Exception as e:
-            logger.error(f"An error occurred during footer generation on row {self.footer_row_num}: {e}")
+            logger.error(f"Fatal error during footer generation starting at row {self.footer_row_num}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return -1
 
     def _build_regular_footer(self, current_footer_row: int):

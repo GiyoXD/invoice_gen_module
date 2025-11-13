@@ -17,7 +17,6 @@ from invoice_generator.styling.style_applier import apply_cell_style
 from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, FORMAT_GENERAL, FORMAT_TEXT, FORMAT_NUMBER_COMMA_SEPARATED1, FORMAT_NUMBER_COMMA_SEPARATED2
 
 
-# --- Constants for Number Formats ---
 
 from invoice_generator.styling.models import StylingConfigModel
 from .bundle_accessor import BundleAccessor
@@ -61,6 +60,10 @@ class DataTableBuilderStyler:
         
         self.col_id_map = header_info.get('column_id_map', {})
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
+        
+        # Static content is now injected into data_rows by TableDataResolver
+        # No need to handle it separately here
+        logger.debug(f"DataTableBuilder initialized with {len(self.data_rows)} total rows (including any static rows)")
 
     def build(self) -> Tuple[bool, int, int, int, int]:
         if not self.header_info or 'second_row_index' not in self.header_info:
@@ -86,7 +89,7 @@ class DataTableBuilderStyler:
                 
                 row_data = self.data_rows[i]
 
-                # Write data
+                # Write all columns for this row (including static if present in row_data)
                 for col_idx, value in row_data.items():
                     cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
                     if not isinstance(cell, MergedCell):
@@ -106,6 +109,9 @@ class DataTableBuilderStyler:
             return False, -1, -1, -1, 0
 
         local_chunk_pallets = sum(int(p) for p in self.pallet_counts if p is not None and str(p).isdigit())
+
+        # Log completion summary
+        logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows written (rows {data_start_row}-{data_end_row})")
 
         return True, footer_row_final, data_start_row, data_end_row, local_chunk_pallets
     

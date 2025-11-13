@@ -447,10 +447,20 @@ def main():
 
         if processing_successful:
             logger.info("Saving final workbook...")
+            # DEBUG: Check font before saving
+            if 'Invoice' in output_workbook.sheetnames:
+                ws_debug = output_workbook['Invoice']
+                cell_debug = ws_debug['A21']
+                logger.debug(f"BEFORE SAVE - A21 font: name={cell_debug.font.name}, size={cell_debug.font.size}, bold={cell_debug.font.bold}")
             output_workbook.save(output_path)
             logger.info(f"Workbook saved successfully: '{output_path}'")
         else:
             logger.error("--- Processing completed with errors. Saving workbook (may be incomplete). ---")
+            # DEBUG: Check font before saving
+            if 'Invoice' in output_workbook.sheetnames:
+                ws_debug = output_workbook['Invoice']
+                cell_debug = ws_debug['A21']
+                logger.debug(f"BEFORE SAVE - A21 font: name={cell_debug.font.name}, size={cell_debug.font.size}, bold={cell_debug.font.bold}")
             output_workbook.save(output_path)
 
     except Exception as e:

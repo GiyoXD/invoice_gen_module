@@ -135,10 +135,15 @@ class BuilderConfigResolver:
             }
         """
         layout_config = self._sheet_config.get('layout_config', {})
+        
+        # Extract static_content from the 'content' section
+        content_section = layout_config.get('content', {})
+        static_section = content_section.get('static', {})
+        
         return {
             'sheet_config': layout_config,
             'blanks': layout_config.get('blanks', {}),
-            'static_content': layout_config.get('static_content', {}),
+            'static_content': static_section,  # Extract from content.static
             'merge_rules': layout_config.get('merge_rules', {}),
         }
     
@@ -169,8 +174,17 @@ class BuilderConfigResolver:
         data_source = self._get_data_source_for_type(data_source_type)
         
         # For multi-table processing, extract the specific table's data
+        # IMPORTANT: Only extract if data_source contains multiple tables (not pre-filtered)
+        # Check if we have all_tables_data vs single_table_data:
+        # - If data_source has keys like '1', '2', '3', extract the specific table
+        # - If data_source is already a single table dict with keys like 'po', 'item', skip extraction
         if table_key and isinstance(data_source, dict):
-            data_source = data_source.get(str(table_key), {})
+            # Check if this looks like multi-table data (has numeric string keys)
+            has_table_keys = any(str(k).isdigit() for k in data_source.keys())
+            
+            if has_table_keys:
+                # Extract the specific table
+                data_source = data_source.get(str(table_key), {})
         
         # Construct header_info from layout_bundle.structure
         header_info = self._construct_header_info(layout_config)
@@ -273,15 +287,18 @@ class BuilderConfigResolver:
             # - pallet_counts: Pallet counts per row
             # - dynamic_desc_used: Metadata
             # - static_info: Column 1 static values, etc.
+            # - static_content: Static content from layout_bundle (e.g., col_static)
         """
         from .table_data_resolver import TableDataAdapter
         
         data_config = self.get_data_bundle(table_key=table_key)
         context_config = self.get_context_bundle()
+        layout_config = self.get_layout_bundle()
         
         return TableDataAdapter.create_from_bundles(
             data_config=data_config,
-            context_config=context_config
+            context_config=context_config,
+            layout_config=layout_config
         )
     
     def get_footer_bundles(
@@ -330,6 +347,7 @@ class BuilderConfigResolver:
         Construct header_info from layout_bundle.structure.
         
         Transforms bundled config format into the header_info structure builders expect.
+        Handles both simple columns and parent columns with children (for colspan headers).
         
         Args:
             layout_config: The layout configuration for the sheet
@@ -352,16 +370,42 @@ class BuilderConfigResolver:
         column_id_map = {}
         column_formats = {}
         
-        for idx, col_def in enumerate(columns, start=1):
-            col_id = col_def.get('id', f'col_{idx}')
+        current_idx = 1
+        
+        for col_def in columns:
+            col_id = col_def.get('id', f'col_{current_idx}')
             header = col_def.get('header', '')
             fmt = col_def.get('format')
+            children = col_def.get('children', [])
             
-            column_map[header] = idx
-            column_id_map[col_id] = idx
-            
-            if fmt:
-                column_formats[col_id] = fmt
+            # If column has children, process each child
+            if children:
+                # Parent column gets its own entry (for merged cell reference)
+                column_map[header] = current_idx
+                column_id_map[col_id] = current_idx
+                
+                # Process each child column
+                for child_def in children:
+                    child_id = child_def.get('id', f'col_{current_idx}')
+                    child_header = child_def.get('header', '')
+                    child_fmt = child_def.get('format')
+                    
+                    column_map[child_header] = current_idx
+                    column_id_map[child_id] = current_idx
+                    
+                    if child_fmt:
+                        column_formats[child_id] = child_fmt
+                    
+                    current_idx += 1
+            else:
+                # Simple column without children
+                column_map[header] = current_idx
+                column_id_map[col_id] = current_idx
+                
+                if fmt:
+                    column_formats[col_id] = fmt
+                
+                current_idx += 1
         
         # second_row_index represents the second row of the header (where data writing starts after)
         # If header is at row N, second row is at N+1
@@ -369,7 +413,7 @@ class BuilderConfigResolver:
             'second_row_index': header_row + 1,
             'column_map': column_map,
             'column_id_map': column_id_map,
-            'num_columns': len(columns),
+            'num_columns': current_idx - 1,  # Total columns processed
             'column_formats': column_formats
         }
     

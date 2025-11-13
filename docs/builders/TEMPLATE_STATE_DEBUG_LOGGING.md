@@ -38,7 +38,7 @@ A5: value='Invoice Number', font(name=Calibri, size=11, bold), fill(solid, FFFF0
 >>> DEBUG >>> [template_state_builder.py:240 in _capture_header()]     Style: A5: value='SELLER:', font(name=Calibri, size=11, bold)
 >>> DEBUG >>> [template_state_builder.py:240 in _capture_header()]     Style: B5: value='Company Name Ltd.', font(name=Calibri, size=11), border(B:thin)
 >>> DEBUG >>> [template_state_builder.py:248 in _capture_header()]   Captured 2 merged cells: A5:A6, G5:H5
->>> DEBUG >>> [template_state_builder.py:254 in _capture_header()]   ✓ Header capture complete: 21 rows, 2 merges
+>>> DEBUG >>> [template_state_builder.py:254 in _capture_header()]   [OK]OK] Header capture complete: 21 rows, 2 merges
 ```
 
 **What's Logged:**
@@ -67,7 +67,7 @@ A5: value='Invoice Number', font(name=Calibri, size=11, bold), fill(solid, FFFF0
 >>> DEBUG >>> [template_state_builder.py:314 in _capture_footer()]     Style: A42: value='Total Net Weight (KGS)', font(name=Calibri, size=10, bold), border(T:thin, B:thin)
 >>> DEBUG >>> [template_state_builder.py:314 in _capture_footer()]     Style: H42: value='1,234.56', font(name=Calibri, size=10), align(h=right)
 >>> DEBUG >>> [template_state_builder.py:325 in _capture_footer()]   Captured 1 merged cells: A42:G42
->>> DEBUG >>> [template_state_builder.py:333 in _capture_footer()]   ✓ Footer capture complete: 6 rows, 1 merges, template footer start: 42
+>>> DEBUG >>> [template_state_builder.py:333 in _capture_footer()]   [OK]OK]OK] Footer capture complete: 6 rows, 1 merges, template footer start: 42
 ```
 
 **What's Logged:**
@@ -99,14 +99,14 @@ python -m invoice_generator.generate_invoice CLW.json --output result.xlsx --log
     Style: A5: value='SELLER:', font(name=Calibri, size=11, bold)
     Style: B5: value='Company XYZ', font(name=Calibri, size=11)
   Captured 2 merged cells: A1:H1, A5:A6
-  ✓ Header capture complete: 21 rows, 2 merges
+  [OK]OK]OK] Header capture complete: 21 rows, 2 merges
 
 === CAPTURING FOOTER (starting from row 42) ===
   Max columns: 13, max search row: 180
   Footer ends at row 47 (6 footer rows)
   Row 42: A42='Total:', H42='$12,345.67'
     Style: A42: value='Total:', font(name=Calibri, size=10, bold), border(T:thin, B:double)
-  ✓ Footer capture complete: 6 rows, 1 merges, template footer start: 42
+  [OK]OK]OK] Footer capture complete: 6 rows, 1 merges, template footer start: 42
 ```
 
 ## Why This Matters

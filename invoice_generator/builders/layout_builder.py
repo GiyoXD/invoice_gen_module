@@ -70,6 +70,8 @@ class LayoutBuilder:
         skip_data_table_builder: bool = False,
         skip_footer_builder: bool = False,
         skip_template_footer_restoration: bool = False,
+        # Pre-captured template state (for multi-table efficiency)
+        template_state_builder = None,
         # Bundled config support (RECOMMENDED - use BuilderConfigResolver)
         style_config: Dict[str, Any] = None,
         context_config: Dict[str, Any] = None,
@@ -118,6 +120,9 @@ class LayoutBuilder:
         self.skip_data_table_builder = skip_data_table_builder
         self.skip_footer_builder = skip_footer_builder
         self.skip_template_footer_restoration = skip_template_footer_restoration
+        
+        # Pre-captured template state (for multi-table efficiency)
+        self.pre_captured_template_state = template_state_builder
         
         logger.debug(f"LayoutBuilder initialized: skip_data_table_builder={self.skip_data_table_builder}")
         
@@ -178,30 +183,42 @@ class LayoutBuilder:
         template_footer_start_row = table_header_row + 4  # table_header + 2-row header + ~2 data rows
         logger.debug(f"[LayoutBuilder DEBUG] template_header: rows {template_header_start_row}-{template_header_end_row}, table_header: row {table_header_row}, footer_start: row {template_footer_start_row}")
         
-        # 3. Template State Capture - Capture from template_worksheet
-        logger.info(f"Capturing template state from template worksheet")
-        try:
-            self.template_state_builder = TemplateStateBuilder(
-                worksheet=self.template_worksheet,  # Read from template
-                num_header_cols=num_header_cols,
-                header_end_row=template_header_end_row,  # Use template position, not output position
-                footer_start_row=template_footer_start_row  # Use template position, not output position
-            )
-            logger.debug(f"Template state captured successfully: {len(self.template_state_builder.header_state)} header rows, {len(self.template_state_builder.footer_state)} footer rows")
-        except Exception as e:
-            logger.critical(f"CRITICAL: TemplateStateBuilder initialization failed for sheet '{self.sheet_name}'")
-            logger.critical(f"Error: {e}", exc_info=True)
-            logger.critical(f"Template header range: rows 1-{template_header_end_row}, Footer start: row {template_footer_start_row}")
-            return False
+        # IMPORTANT: Use table_header_row for HeaderBuilder (where column headers go)
+        # This is different from header_row which might be a local/dynamic value
+        header_row_for_builder = table_header_row
+        
+        # 3. Template State Capture - Use pre-captured state if provided, otherwise capture new
+        if self.pre_captured_template_state:
+            logger.info(f"Using pre-captured template state (multi-table optimization)")
+            self.template_state_builder = self.pre_captured_template_state
+            logger.debug(f"Reusing template state: {len(self.template_state_builder.header_state)} header rows, {len(self.template_state_builder.footer_state)} footer rows")
+        else:
+            logger.info(f"Capturing template state from template worksheet")
+            try:
+                self.template_state_builder = TemplateStateBuilder(
+                    worksheet=self.template_worksheet,  # Read from template
+                    num_header_cols=num_header_cols,
+                    header_end_row=template_header_end_row,  # Use template position, not output position
+                    footer_start_row=template_footer_start_row  # Use template position, not output position
+                )
+                logger.debug(f"Template state captured successfully: {len(self.template_state_builder.header_state)} header rows, {len(self.template_state_builder.footer_state)} footer rows")
+            except Exception as e:
+                logger.critical(f"CRITICAL: TemplateStateBuilder initialization failed for sheet '{self.sheet_name}'")
+                logger.critical(f"Error: {e}", exc_info=True)
+                logger.critical(f"Template header range: rows 1-{template_header_end_row}, Footer start: row {template_footer_start_row}")
+                return False
         
         # 3b. Restore ONLY header to output worksheet (unless skipped)
         if not self.skip_template_header_restoration:
             logger.info(f"Restoring header from template to output worksheet")
             try:
+                template_header_rows = self.template_state_builder.header_end_row
+                logger.debug(f"Template header restoration - Expected range: rows 1-{template_header_rows}")
                 self.template_state_builder.restore_header_only(target_worksheet=self.worksheet)
-                logger.debug(f"Header restoration complete")
+                logger.debug(f"Template header restored successfully - rows 1-{template_header_rows}")
             except Exception as e:
                 logger.error(f"Failed to restore header from template for sheet '{self.sheet_name}'")
+                logger.error(f"Template header_end_row: {self.template_state_builder.header_end_row}")
                 logger.error(f"Error: {e}", exc_info=True)
                 return False
         else:
@@ -218,25 +235,45 @@ class LayoutBuilder:
                     logger.warning(f"Could not create StylingConfigModel: {e}")
                     styling_model = None
 
+            # Get bundled columns from sheet_config (bundled config v2.1 format)
+            # These are in layout_config -> sheet_config -> 'structure' -> 'columns'
+            bundled_columns = None
+            if self.sheet_config:
+                structure = self.sheet_config.get('structure', {})
+                bundled_columns = structure.get('columns', [])
+                if not bundled_columns:
+                    logger.warning(f"No columns found in sheet_config.structure for sheet '{self.sheet_name}'")
+
             try:
+                logger.debug(f"Creating HeaderBuilder at row {header_row_for_builder}")
+                logger.debug(f"HeaderBuilder input - bundled_columns: {len(bundled_columns) if bundled_columns else 0}, legacy_layout: {len(header_to_write) if header_to_write else 0}")
                 header_builder = HeaderBuilder(
                     worksheet=self.worksheet,
-                    header_row=header_row,
-                    header_layout_config=header_to_write,
+                    start_row=header_row_for_builder,  # Use table_header_row (row 21), NOT header_row (row 1)
+                    header_layout_config=header_to_write,  # Legacy format (if provided)
+                    bundled_columns=bundled_columns,  # Bundled format (preferred)
                     sheet_styling_config=styling_model,
                 )
+                logger.debug(f"Calling HeaderBuilder.build() starting at row {header_row_for_builder}")
                 self.header_info = header_builder.build()
                 
                 if not self.header_info or not self.header_info.get('column_map'):
                     logger.error(f"HeaderBuilder failed for sheet '{self.sheet_name}'")
                     logger.error(f"header_info or column_map is missing - HALTING EXECUTION")
+                    logger.error(f"start_row: {header_row_for_builder}, bundled_columns: {len(bundled_columns) if bundled_columns else 0}")
                     return False
                 
-                logger.debug(f"HeaderBuilder completed successfully: {len(self.header_info.get('column_map', {}))} columns")
+                header_end_row = self.header_info.get('second_row_index', header_row_for_builder)
+                logger.debug(f"HeaderBuilder completed - rows {header_row_for_builder}-{header_end_row}, {len(self.header_info.get('column_map', {}))} columns")
+                
+                # DEBUG: Check if font is still set after HeaderBuilder
+                if self.worksheet:
+                    debug_cell = self.worksheet.cell(row=header_row_for_builder, column=1)
+                    logger.debug(f"POST-HeaderBuilder - Cell({header_row_for_builder},1) font: name={debug_cell.font.name}, size={debug_cell.font.size}, bold={debug_cell.font.bold}")
             except Exception as e:
                 logger.error(f"HeaderBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
-                logger.error(f"header_row={header_row}, header_to_write={header_to_write}")
+                logger.error(f"header_row_for_builder={header_row_for_builder}, header_to_write={header_to_write}, bundled_columns={len(bundled_columns) if bundled_columns else 0}")
                 return False
         else:
             logger.info(f"Skipping header builder (skip_header_builder=True)")
@@ -353,6 +390,10 @@ class LayoutBuilder:
 
             # DataTableBuilder uses the new simplified interface
             try:
+                expected_row_start = self.header_info.get('second_row_index', 0) + 1
+                logger.debug(f"Creating DataTableBuilder - Expected to start at row {expected_row_start}")
+                logger.debug(f"DataTableBuilder input - data_source_type: {dtb_data_config.get('data_source_type')}, has_data: {bool(dtb_data_config.get('data_source'))}")
+                
                 data_table_builder = DataTableBuilder(
                     worksheet=self.worksheet,
                     header_info=self.header_info,
@@ -360,6 +401,7 @@ class LayoutBuilder:
                     sheet_styling_config=styling_model
                 )
 
+                logger.debug(f"Calling DataTableBuilder.build()")
                 fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
 
                 # Store data range for multi-table processors to access
@@ -370,14 +412,17 @@ class LayoutBuilder:
                 if not fill_success:
                     logger.error(f"DataTableBuilder failed for sheet '{self.sheet_name}'")
                     logger.error(f"Failed to fill table data - HALTING EXECUTION")
-                    logger.debug(f"footer_row_position={footer_row_position}, data_start_row={data_start_row}, data_end_row={data_end_row}")
+                    logger.error(f"footer_row_position={footer_row_position}, data_start_row={data_start_row}, data_end_row={data_end_row}")
+                    logger.error(f"expected_row_start={expected_row_start}, data_source_type={dtb_data_config.get('data_source_type')}")
                     return False
                 
-                logger.debug(f"DataTableBuilder completed: data rows {data_start_row}-{data_end_row}, footer at row {footer_row_position}")
+                rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
+                logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
             except Exception as e:
                 logger.error(f"DataTableBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
                 logger.error(f"header_info={self.header_info}")
+                logger.error(f"data_config keys: {list(dtb_data_config.keys())}")
                 return False
         else:
             logger.info(f"Skipping data table builder (skip_data_table_builder=True)")
@@ -401,8 +446,11 @@ class LayoutBuilder:
                 pallet_count = self.final_grand_total_pallets
 
             # Get footer config and sum ranges
-            footer_config = self.sheet_config.get('footer_configurations', {})
-            sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
+            # Support both bundled config format ('footer') and legacy format ('footer_configurations')
+            footer_config = self.sheet_config.get('footer', self.sheet_config.get('footer_configurations', {}))
+            # Support both bundled config format ('data_flow.mappings') and legacy format ('mappings')
+            data_flow = self.sheet_config.get('data_flow', {})
+            sheet_inner_mapping_rules_dict = data_flow.get('mappings', self.sheet_config.get('mappings', {}))
             data_range_to_sum = []
             if data_start_row > 0 and data_end_row >= data_start_row:
                 data_range_to_sum = [(data_start_row, data_end_row)]
@@ -431,6 +479,7 @@ class LayoutBuilder:
             }
 
             logger.debug(f"Creating FooterBuilder at row {footer_row_position}")
+            logger.debug(f"FooterBuilder input - footer_type: {footer_config.get('type', 'regular')}, add_blank_before: {footer_config.get('add_blank_before', False)}, pallet_count: {pallet_count}")
             
             try:
                 footer_builder = FooterBuilder(
@@ -442,20 +491,24 @@ class LayoutBuilder:
                 )
                 
                 logger.debug(f"Calling FooterBuilder.build() with footer_row_position={footer_row_position}")
+                footer_start = footer_row_position
                 self.next_row_after_footer = footer_builder.build()
-                logger.debug(f"FooterBuilder returned next_row: {self.next_row_after_footer}")
                 
                 # Validate footer builder result
                 if self.next_row_after_footer is None or self.next_row_after_footer <= 0:
                     logger.error(f"FooterBuilder failed for sheet '{self.sheet_name}'")
                     logger.error(f"Invalid next_row_after_footer={self.next_row_after_footer} - HALTING EXECUTION")
                     logger.error(f"footer_row_position={footer_row_position}, sum_ranges={data_range_to_sum}")
+                    logger.error(f"footer_config: {footer_config}")
                     return False
+                
+                footer_rows_written = self.next_row_after_footer - footer_start
+                logger.debug(f"FooterBuilder completed - rows {footer_start}-{self.next_row_after_footer - 1} ({footer_rows_written} rows), next available: {self.next_row_after_footer}")
             except Exception as e:
                 logger.error(f"FooterBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
                 logger.error(f"footer_row_position={footer_row_position}, pallet_count={pallet_count}")
-                return False
+                logger.error(f"footer_config: {footer_config}")
                 return False
             
             # Apply footer height to all footer rows (including add-ons like grand total)
@@ -483,17 +536,20 @@ class LayoutBuilder:
                 logger.error(f"This indicates a previous builder failed - HALTING EXECUTION")
                 return False
             
+            template_footer_rows = self.template_state_builder.max_row - self.template_state_builder.template_footer_start_row + 1
             logger.info(f"Restoring template footer after row {write_pointer_row}")
+            logger.debug(f"Template footer restoration - Source rows: {self.template_state_builder.template_footer_start_row}-{self.template_state_builder.max_row} ({template_footer_rows} rows), Target start: {write_pointer_row}")
             try:
                 self.template_state_builder.restore_footer_only(
                     target_worksheet=self.worksheet,  # Write to output worksheet
                     footer_start_row=write_pointer_row
                 )
-                logger.debug(f"Footer restoration complete at row {write_pointer_row}")
+                logger.debug(f"Template footer restored successfully - rows {write_pointer_row}-{write_pointer_row + template_footer_rows - 1}")
             except Exception as e:
                 logger.error(f"Failed to restore footer from template for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
                 logger.error(f"Attempted to restore footer at row {write_pointer_row}")
+                logger.error(f"Template footer range: {self.template_state_builder.template_footer_start_row}-{self.template_state_builder.max_row}")
                 return False
         else:
             logger.debug(f"Skipping template footer restoration (skip_template_footer_restoration=True)")

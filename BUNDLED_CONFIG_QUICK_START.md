@@ -10,7 +10,7 @@ python -m invoice_generator.generate_invoice JF.json
 ```
 
 **What happens:**
-1. Looks for `config_bundled/JF_bundled_v2.json` ✓
+1. Looks for `config_bundled/JF_bundled_v2.json` [OK]
 2. Falls back to `config/JF_config.json` if not found
 3. Auto-detects format and processes accordingly
 

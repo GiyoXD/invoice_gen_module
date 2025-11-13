@@ -57,17 +57,17 @@
     
     "Invoice": {
       "header": {
-        "font": {"bold": true, "size": 12, "name": "Calibri"},
+        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 35
       },
       "data": {
-        "font": {"size": 12, "name": "Calibri"},
+        "font": {"size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 35
       },
       "footer": {
-        "font": {"bold": true, "size": 12, "name": "Calibri"},
+        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center"},
         "row_height": 35
       },
@@ -90,17 +90,17 @@
     
     "Contract": {
       "header": {
-        "font": {"bold": true, "size": 16, "name": "Calibri"},
+        "font": {"bold": true, "size": 16, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 36
       },
       "data": {
-        "font": {"size": 14, "name": "Calibri"},
+        "font": {"size": 14, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 30
       },
       "footer": {
-        "font": {"bold": true, "size": 16, "name": "Calibri"},
+        "font": {"bold": true, "size": 16, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center"},
         "row_height": 36
       },
@@ -117,17 +117,17 @@
     
     "Packing list": {
       "header": {
-        "font": {"bold": true, "size": 12, "name": "Calibri"},
+        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 27
       },
       "data": {
-        "font": {"size": 12, "name": "Calibri"},
+        "font": {"size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
         "row_height": 27
       },
       "footer": {
-        "font": {"bold": true, "size": 12, "name": "Calibri"},
+        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
         "alignment": {"horizontal": "center", "vertical": "center"},
         "row_height": 27
       },

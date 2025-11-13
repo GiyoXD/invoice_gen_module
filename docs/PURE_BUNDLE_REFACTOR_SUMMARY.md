@@ -60,12 +60,12 @@ LayoutBuilder (Director)
     ├→ DataTableBuilder
     │     ↓ Stores bundles
     │     ↓ Accesses via @property
-    │     ✓ Uses: self.sheet_name
+    │     [OK]OK]OK]OK] Uses: self.sheet_name
     │
     └→ FooterBuilder
           ↓ Stores bundles
           ↓ Accesses via @property
-          ✓ Uses: self.header_info
+          [OK] Uses: self.header_info
 ```
 
 ### Constructor Pattern
@@ -198,12 +198,12 @@ class Builder:
 
 ### Unit Tests ✅
 ```
-✓ LayoutBuilder accepts template_worksheet parameter
-✓ Template worksheet reference stored correctly
-✓ Output worksheet reference stored correctly
-✓ Template unchanged during instantiation
-✓ No internal workbook creation
-✓ Clean separation between template (read) and output (write)
+[OK] LayoutBuilder accepts template_worksheet parameter
+[OK] Template worksheet reference stored correctly
+[OK] Output worksheet reference stored correctly
+[OK] Template unchanged during instantiation
+[OK] No internal workbook creation
+[OK] Clean separation between template (read) and output (write)
 ```
 
 ### Linter ✅

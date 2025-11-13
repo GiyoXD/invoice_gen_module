@@ -32,13 +32,37 @@ class MultiTableProcessor(SheetProcessor):
         table_keys = sorted(all_tables_data.keys(), key=lambda x: int(x) if str(x).isdigit() else float('inf'))
         logger.info(f"Found {len(table_keys)} tables to process: {table_keys}")
         
+        # Capture template state ONCE before loop (efficiency optimization)
+        from ..builders.template_state_builder import TemplateStateBuilder
+        logger.info(f"[MultiTableProcessor] Capturing template state once for all tables")
+        
+        # Get template dimensions from sheet_config
+        template_header_end_row = self.sheet_config.get('header_row', 20) if self.sheet_config else 20
+        template_footer_start_row = self.sheet_config.get('footer_row', 25) if self.sheet_config else 25
+        num_header_cols = 20  # Conservative estimate
+        
+        try:
+            template_state_builder = TemplateStateBuilder(
+                worksheet=self.template_worksheet,
+                num_header_cols=num_header_cols,
+                header_end_row=template_header_end_row,
+                footer_start_row=template_footer_start_row
+            )
+            logger.debug(f"Template state captured: {len(template_state_builder.header_state)} header rows, {len(template_state_builder.footer_state)} footer rows")
+        except Exception as e:
+            logger.error(f"Failed to capture template state: {e}")
+            return False
+        
         # Track the current row position as we build multiple tables
-        # Start at header_row (where first table's header will be written)
-        current_row = self.sheet_config.get('header_row', 1) if self.sheet_config else 1
+        # Start at table_header_row (where first table's column headers will be written)
+        # Get from the structure config, not the root-level header_row
+        structure_config = self.sheet_config.get('structure', {}) if self.sheet_config else {}
+        initial_table_row = structure_config.get('header_row', 21)  # Default to 21 if not found
+        current_row = initial_table_row
+        logger.debug(f"Multi-table processing starting at row {current_row}")
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
-        template_state_builder = None  # Save from first table for final footer restoration
         dynamic_desc_used = False  # Track if any table used dynamic description (for summary add-on)
         
         # Process each table using LayoutBuilder
@@ -75,13 +99,24 @@ class MultiTableProcessor(SheetProcessor):
             )
             layout_config = resolver.get_layout_bundle()
             
-            # Get data bundle to extract header_info
-            data_bundle = resolver.get_data_bundle(table_key=str(table_key))
-            layout_config['header_info'] = data_bundle.get('header_info', {})
-            layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
-            layout_config['data_source'] = data_bundle.get('data_source')
-            layout_config['data_source_type'] = data_bundle.get('data_source_type')
-            layout_config['header_row'] = current_row  # Override with current position for this table's header
+            # CRITICAL: Use TableDataResolver to prepare data instead of passing raw data
+            # DataTableBuilder expects resolved_data with data_rows, not raw data_source
+            table_data_resolver = resolver.get_table_data_resolver(table_key=str(table_key))
+            resolved_data = table_data_resolver.resolve()
+            
+            logger.debug(f"Resolved {len(resolved_data.get('data_rows', []))} data rows for table '{table_key}'")
+            
+            # Pass resolved_data to layout_config so LayoutBuilder can use it
+            layout_config['resolved_data'] = resolved_data
+            # CRITICAL: Override table_header_row to position this table at current_row
+            # Don't override header_row (that's for template positioning)
+            if not 'structure' in layout_config.get('sheet_config', {}):
+                if 'sheet_config' not in layout_config:
+                    layout_config['sheet_config'] = {}
+                layout_config['sheet_config']['structure'] = {}
+            layout_config['sheet_config']['structure']['header_row'] = current_row
+            logger.debug(f"Setting table '{table_key}' to start at row {current_row}")
+            
             # NOTE: header_info from config is just column metadata, NOT styled Excel rows
             # HeaderBuilder still needs to run to write the actual styled header rows
             layout_config['enable_text_replacement'] = False
@@ -95,15 +130,12 @@ class MultiTableProcessor(SheetProcessor):
                 self.template_worksheet,
                 style_config=style_config,
                 context_config=context_config,
-                layout_config=layout_config
+                layout_config=layout_config,
+                template_state_builder=template_state_builder  # Pass pre-captured state
             )
             
             # Build this table's layout
             success = layout_builder.build()
-            
-            # Save template state builder from first table for final footer restoration
-            if is_first_table:
-                template_state_builder = layout_builder.template_state_builder
             
             if not success:
                 logger.error(f"Failed to build layout for table '{table_key}'")

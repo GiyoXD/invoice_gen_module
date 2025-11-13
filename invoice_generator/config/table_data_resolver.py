@@ -14,6 +14,7 @@ Pattern:
     BundledConfigLoader → BuilderConfigResolver →TableDataAdapter → Builder
 """
 
+import logging
 from typing import Any, Dict, List, Tuple, Union, Optional
 from decimal import Decimal
 
@@ -23,6 +24,8 @@ from invoice_generator.data.data_preparer import (
     _to_numeric,
     _apply_fallback
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TableDataAdapter:
@@ -65,7 +68,8 @@ class TableDataAdapter:
         mapping_rules: Dict[str, Any],
         header_info: Dict[str, Any],
         DAF_mode: bool = False,
-        table_key: Optional[str] = None
+        table_key: Optional[str] = None,
+        static_content: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize the table data resolver.
@@ -78,6 +82,7 @@ class TableDataAdapter:
             header_info: Header information with column_map and column_id_map
             DAF_mode: Whether DAF mode is active
             table_key: Optional table key for multi-table data sources
+            static_content: Static content from layout_bundle (e.g., col_static values)
         """
         self.data_source_type = data_source_type
         self.data_source = data_source
@@ -85,6 +90,7 @@ class TableDataAdapter:
         self.header_info = header_info
         self.DAF_mode = DAF_mode
         self.table_key = table_key
+        self.static_content = static_content or {}
         
         # Extract helper maps from header_info
         self.column_id_map = header_info.get('column_id_map', {})
@@ -127,6 +133,23 @@ class TableDataAdapter:
             DAF_mode=self.DAF_mode
         )
         
+        # Merge static content with data rows (not prepend as separate rows)
+        # Static content from layout_bundle.content.static should be merged into the first N data rows
+        if self.static_content and 'col_static' in self.static_content:
+            static_values = self.static_content['col_static']
+            static_col_idx = self.column_id_map.get('col_static')
+            
+            if static_values and static_col_idx and len(data_rows) > 0:
+                # Merge static values into the first N data rows
+                num_static_values = len(static_values)
+                
+                for i, static_value in enumerate(static_values):
+                    if i < len(data_rows):
+                        # Add static value to the existing data row
+                        data_rows[i][static_col_idx] = static_value
+                
+                logger.info(f"Merged {num_static_values} static values into first {num_static_values} data rows")
+        
         return {
             'data_rows': data_rows,
             'pallet_counts': pallet_counts,
@@ -139,7 +162,8 @@ class TableDataAdapter:
                 'static_column_header_name': parsed['static_column_header_name'],
                 'apply_special_border_rule': parsed['apply_special_border_rule']
             },
-            'formula_rules': parsed['formula_rules']
+            'formula_rules': parsed['formula_rules'],
+            'static_content': self.static_content  # Pass through static content from layout_bundle
         }
     
     def _parse_mapping_rules(self) -> Dict[str, Any]:
@@ -161,7 +185,10 @@ class TableDataAdapter:
         Bundled format:
             {"po": {"column": "col_po", "source_key": 0}, ...}
         
-        Legacy format:
+        Legacy format for processed_tables_multi:
+            {"data_map": {"po": {"id": "col_po"}, ...}}
+            
+        Legacy format for aggregation:
             {"po": {"id": "col_po", "key_index": 0}, ...}
         """
         converted = {}
@@ -191,6 +218,10 @@ class TableDataAdapter:
                     legacy_value[other_key] = value[other_key]
             
             converted[key] = legacy_value
+        
+        # CRITICAL: For processed_tables_multi, wrap in 'data_map' as expected by parse_mapping_rules
+        if self.data_source_type in ['processed_tables', 'processed_tables_multi']:
+            return {'data_map': converted}
         
         return converted
     
@@ -231,7 +262,8 @@ class TableDataAdapter:
     @staticmethod
     def create_from_bundles(
         data_config: Dict[str, Any],
-        context_config: Dict[str, Any]
+        context_config: Dict[str, Any],
+        layout_config: Optional[Dict[str, Any]] = None
     ) -> 'TableDataAdapter':
         """
         Factory method to createTableDataAdapter from bundle configs.
@@ -242,6 +274,7 @@ class TableDataAdapter:
         Args:
             data_config: Data bundle from BuilderConfigResolver.get_data_bundle()
             context_config: Context bundle from BuilderConfigResolver.get_context_bundle()
+            layout_config: Optional layout bundle from BuilderConfigResolver.get_layout_bundle()
         
         Returns:
             ConfiguredTableDataAdapter instance
@@ -250,13 +283,19 @@ class TableDataAdapter:
         args = context_config.get('args')
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
         
+        # Extract static_content from layout_config if provided
+        static_content = {}
+        if layout_config:
+            static_content = layout_config.get('static_content', {})
+        
         return TableDataAdapter(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
             mapping_rules=data_config.get('mapping_rules', {}),
             header_info=data_config.get('header_info', {}),
             DAF_mode=DAF_mode,
-            table_key=data_config.get('table_key')
+            table_key=data_config.get('table_key'),
+            static_content=static_content
         )
 
 

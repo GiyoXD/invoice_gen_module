@@ -21,6 +21,9 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
     Applies all styles to a single cell, including fonts, alignments,
     and complex conditional borders, based on its context.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # --- Get Context ---
     col_id = context.get("col_id")
     col_idx = context.get("col_idx")
@@ -29,6 +32,13 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
     is_static_row = context.get("is_static_row", False)
     is_header = context.get("is_header", False)
     DAF_mode = context.get("DAF_mode", False)
+    
+    # Log what context we received
+    logger.debug(f"apply_cell_style: col_id={col_id}, col_idx={col_idx}, is_header={is_header}, is_static_row={is_static_row}")
+    
+    if not styling_config:
+        logger.warning(f"apply_cell_style: NO styling_config provided (col_id={col_id}, col_idx={col_idx})")
+        return
 
     # Handle static rows first
     if is_static_row:
@@ -46,7 +56,24 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
 
     # --- 1. Apply Font, Alignment, and Number Formats ---
     if col_id and styling_config:
-        col_specific_style = styling_config.columnIdStyles.get(col_id)
+        col_specific_style = styling_config.columnIdStyles.get(col_id) if styling_config.columnIdStyles else None
+        
+        if not col_specific_style:
+            logger.debug(f"No column-specific style for col_id={col_id}")
+            
+        # Check if we have ANY font source
+        has_col_font = col_specific_style and col_specific_style.font
+        has_default_font = styling_config.defaultFont
+        
+        if not has_col_font and not has_default_font:
+            logger.warning(f"NO font available for col_id={col_id} - neither column-specific nor default font exists")
+        
+        # Check if we have ANY alignment source
+        has_col_alignment = col_specific_style and col_specific_style.alignment
+        has_default_alignment = styling_config.defaultAlignment
+        
+        if not has_col_alignment and not has_default_alignment:
+            logger.warning(f"NO alignment available for col_id={col_id} - neither column-specific nor default alignment exists")
         
         if col_specific_style:
             if col_specific_style.font:
@@ -157,14 +184,42 @@ def apply_header_style(cell: Worksheet.cell, styling_config: StylingConfigModel)
     """
     Applies styling to a header cell, using config values with fallbacks.
     """
-    effective_header_font = BOLD_FONT
-    effective_header_align = CENTER_ALIGNMENT
-
-    if styling_config:
-        if styling_config.headerFont:
-            effective_header_font = Font(**styling_config.headerFont.model_dump(exclude_none=True))
-        if styling_config.headerAlignment:
-            effective_header_align = Alignment(**styling_config.headerAlignment.model_dump(exclude_none=True))
-
-    cell.font = effective_header_font
-    cell.alignment = effective_header_align
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not styling_config:
+        logger.warning(f"apply_header_style called with NO styling_config - cannot apply header styles")
+        return
+    
+    if not styling_config.headerFont:
+        logger.warning(f"apply_header_style: styling_config has NO headerFont - header will have no font styling")
+        logger.warning(f"  styling_config attributes: {list(styling_config.model_dump().keys())}")
+    else:
+        font_dict = styling_config.headerFont.model_dump(exclude_none=True)
+        logger.debug(f"Applying header font: {font_dict}")
+        
+        # Check for missing critical font properties
+        if not font_dict.get('name'):
+            logger.warning(f"headerFont missing 'name' property")
+        if not font_dict.get('size'):
+            logger.warning(f"headerFont missing 'size' property")
+        
+        # Create Font object explicitly
+        effective_header_font = Font(
+            name=font_dict.get('name'),
+            size=font_dict.get('size'),
+            bold=font_dict.get('bold'),
+            italic=font_dict.get('italic'),
+            color=font_dict.get('color'),
+            family=2,
+            scheme='minor'
+        )
+        cell.font = effective_header_font
+        logger.debug(f"Applied font: name={effective_header_font.name}, size={effective_header_font.size}, bold={effective_header_font.bold}")
+    
+    if not styling_config.headerAlignment:
+        logger.warning(f"apply_header_style: styling_config has NO headerAlignment - header will have no alignment")
+    else:
+        effective_header_align = Alignment(**styling_config.headerAlignment.model_dump(exclude_none=True))
+        cell.alignment = effective_header_align
+        logger.debug(f"Applied alignment: {effective_header_align.horizontal}, {effective_header_align.vertical}")

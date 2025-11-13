@@ -106,17 +106,73 @@ class BundledConfigLoader:
         }
     
     def get_styling_config(self, sheet_name: str) -> Dict[str, Any]:
-        """Get styling configuration for a sheet."""
+        """
+        Get styling configuration for a sheet, transformed to StylingConfigModel format.
+        
+        Transforms bundled config format:
+            {"header": {"font": {...}}, "data": {"font": {...}}}
+        Into StylingConfigModel format:
+            {"header_font": {...}, "default_font": {...}}
+        """
         # Get sheet-specific styling
         sheet_styling = self._styling_bundle.get(sheet_name, {})
         # Get default styling to use as fallback
         defaults = self._styling_bundle.get('defaults', {})
         
-        # Merge defaults with sheet-specific (sheet-specific overrides defaults)
-        return {
-            'defaults': defaults,
-            **sheet_styling
-        }
+        # Transform nested bundled format to flat StylingConfigModel format
+        transformed = {}
+        
+        # Extract header styling
+        if 'header' in sheet_styling:
+            header_cfg = sheet_styling['header']
+            if 'font' in header_cfg:
+                transformed['header_font'] = header_cfg['font']
+            if 'alignment' in header_cfg:
+                transformed['header_alignment'] = header_cfg['alignment']
+            if 'row_height' in header_cfg:
+                if 'row_heights' not in transformed:
+                    transformed['row_heights'] = {}
+                transformed['row_heights']['header'] = header_cfg['row_height']
+        
+        # Extract data (default) styling
+        if 'data' in sheet_styling:
+            data_cfg = sheet_styling['data']
+            if 'font' in data_cfg:
+                transformed['default_font'] = data_cfg['font']
+            if 'alignment' in data_cfg:
+                transformed['default_alignment'] = data_cfg['alignment']
+            if 'row_height' in data_cfg:
+                if 'row_heights' not in transformed:
+                    transformed['row_heights'] = {}
+                transformed['row_heights']['data_default'] = data_cfg['row_height']
+        
+        # Extract footer styling
+        if 'footer' in sheet_styling:
+            footer_cfg = sheet_styling['footer']
+            if 'row_height' in footer_cfg:
+                if 'row_heights' not in transformed:
+                    transformed['row_heights'] = {}
+                transformed['row_heights']['footer'] = footer_cfg['row_height']
+        
+        # Extract column-specific styling
+        if 'column_specific' in sheet_styling:
+            col_styles = {}
+            for col_id, col_cfg in sheet_styling['column_specific'].items():
+                col_styles[col_id] = col_cfg
+            transformed['column_id_styles'] = col_styles
+        
+        # Extract dimensions (column widths)
+        if 'dimensions' in sheet_styling:
+            dims = sheet_styling['dimensions']
+            if 'column_widths' in dims:
+                transformed['column_id_widths'] = dims['column_widths']
+        
+        # Extract border configuration from defaults
+        if 'borders' in defaults:
+            # Borders are handled separately, just pass through
+            transformed['borders'] = defaults['borders']
+        
+        return transformed
     
     def get_layout_config(self, sheet_name: str) -> Dict[str, Any]:
         """Get layout configuration for a sheet (headers, blanks, static content, merges)."""

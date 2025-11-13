@@ -179,12 +179,12 @@ python test_layout_builder_update.py
 ```
 
 **Test Results:**
-- ✓ LayoutBuilder accepts template_worksheet parameter
-- ✓ Template worksheet reference stored correctly
-- ✓ Output worksheet reference stored correctly
-- ✓ Template unchanged during instantiation
-- ✓ No internal workbook creation
-- ✓ Clean separation between template (read) and output (write)
+- [OK] LayoutBuilder accepts template_worksheet parameter
+- [OK] Template worksheet reference stored correctly
+- [OK] Output worksheet reference stored correctly
+- [OK] Template unchanged during instantiation
+- [OK] No internal workbook creation
+- [OK] Clean separation between template (read) and output (write)
 
 ## Files Modified
 

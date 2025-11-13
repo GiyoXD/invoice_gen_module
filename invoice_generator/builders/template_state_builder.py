@@ -136,7 +136,9 @@ class TemplateStateBuilder:
         
         if cell_info.get('value'):
             val_str = str(cell_info['value'])
-            parts.append(f"value='{val_str[:30]}{'...' if len(val_str) > 30 else ''}'")
+            # Sanitize value to avoid encoding errors
+            safe_val = val_str.encode('ascii', 'replace').decode('ascii')
+            parts.append(f"value='{safe_val[:30]}{'...' if len(safe_val) > 30 else ''}'")
         
         if cell_info.get('font'):
             font = cell_info['font']
@@ -245,7 +247,9 @@ class TemplateStateBuilder:
                     cell_val = row_data[c_idx - 1]['value']
                     if cell_val is not None and cell_val != '':
                         col_letter = get_column_letter(c_idx)
-                        non_empty_cells.append(f"{col_letter}{r_idx}='{cell_val}'")
+                        # Sanitize cell value for logging to avoid encoding errors
+                        safe_val = str(cell_val).encode('ascii', 'replace').decode('ascii')[:50]
+                        non_empty_cells.append(f"{col_letter}{r_idx}='{safe_val}'")
                 
                 if non_empty_cells:
                     logger.debug(f"  Row {r_idx}: {', '.join(non_empty_cells[:5])}" + 
@@ -254,7 +258,9 @@ class TemplateStateBuilder:
                 # Show styled cells (limit to first 2 to avoid log spam)
                 if styled_cells[:2]:
                     for styled_cell in styled_cells[:2]:
-                        logger.debug(f"    Style: {styled_cell}")
+                        # Sanitize styled cell string for logging
+                        safe_styled = str(styled_cell).encode('ascii', 'replace').decode('ascii')[:200]
+                        logger.debug(f"    Style: {safe_styled}")
 
         # Capture merged cells within the header range
         header_merges = []
@@ -273,7 +279,7 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        logger.debug(f"  ✓ Header capture complete: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
+        logger.debug(f"  [OK] Header capture complete: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
 
     def _capture_footer(self, footer_start_row: int, max_possible_footer_row: int):
         """
@@ -348,7 +354,9 @@ class TemplateStateBuilder:
                     cell_val = row_data[c_idx - 1]['value']
                     if cell_val is not None and cell_val != '':
                         col_letter = get_column_letter(c_idx)
-                        non_empty_cells.append(f"{col_letter}{r_idx}='{cell_val}'")
+                        # Sanitize cell value for logging to avoid encoding errors
+                        safe_val = str(cell_val).encode('ascii', 'replace').decode('ascii')[:50]
+                        non_empty_cells.append(f"{col_letter}{r_idx}='{safe_val}'")
                 
                 if non_empty_cells:
                     logger.debug(f"  Row {r_idx}: {', '.join(non_empty_cells[:5])}" + 
@@ -357,7 +365,9 @@ class TemplateStateBuilder:
                 # Show styled cells (limit to first 2 to avoid log spam)
                 if styled_cells[:2]:
                     for styled_cell in styled_cells[:2]:
-                        logger.debug(f"    Style: {styled_cell}")
+                        # Sanitize styled cell string for logging
+                        safe_styled = str(styled_cell).encode('ascii', 'replace').decode('ascii')[:200]
+                        logger.debug(f"    Style: {safe_styled}")
 
         # Capture merged cells within the footer range
         footer_merges = []
@@ -376,7 +386,7 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        logger.debug(f"  ✓ Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}")
+        logger.debug(f"  [OK] Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}")
 
     def restore_header_only(self, target_worksheet: Worksheet):
         """
