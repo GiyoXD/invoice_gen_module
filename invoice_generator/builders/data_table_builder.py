@@ -12,7 +12,7 @@ from invoice_generator.data.data_preparer import prepare_data_rows, parse_mappin
 from invoice_generator.utils.layout import apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
-from invoice_generator.styling.style_applier import apply_cell_style
+# Legacy apply_cell_style removed - using only StyleRegistry + CellStyler
 from invoice_generator.styling.style_registry import StyleRegistry
 from invoice_generator.styling.cell_styler import CellStyler
 # FooterBuilder is now called by LayoutBuilder (proper Director pattern)
@@ -87,6 +87,9 @@ class DataTableBuilderStyler:
         # Static content is now injected into data_rows by TableDataResolver
         # No need to handle it separately here
         logger.debug(f"DataTableBuilder initialized with {len(self.data_rows)} total rows (including any static rows)")
+        
+        # Track rows that have had height applied to avoid redundant operations
+        self._rows_with_height_applied = set()
 
     def build(self) -> Tuple[bool, int, int, int, int]:
         if not self.header_info or 'second_row_index' not in self.header_info:
@@ -135,30 +138,27 @@ class DataTableBuilderStyler:
                             logger.error(f"   This cell will have NO styling applied!")
                             continue
                         
-                        if self.style_registry:
-                            try:
-                                # Check if column is defined
-                                if not self.style_registry.has_column(col_id):
-                                    logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry! Available: {list(self.style_registry.columns.keys())}")
-                                    logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{col_id}")
-                                
-                                # Use 'data' context for regular data rows
-                                style = self.style_registry.get_style(col_id, context='data')
-                                # Validate critical styling properties
-                                if 'alignment' not in style or style['alignment'] is None:
-                                    logger.warning(f"⚠️  [{self.worksheet.title}] Row {current_row_idx} Cell {cell.coordinate} ({col_id}): NO alignment in style!")
-                                    logger.warning(f"   → Fix: Add 'alignment' to styling_bundle.{self.worksheet.title}.columns.{col_id}")
-                                    logger.warning(f"   → Example: \"alignment\": \"center\" or \"left\" or \"right\"")
-                                self.cell_styler.apply(cell, style)
-                            except Exception as style_err:
-                                logger.debug(f"StyleRegistry failed for data cell {col_id}, fallback: {style_err}")
-                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
-                                apply_cell_style(cell, self.sheet_styling_config, context)
-                        else:
-                            # Legacy styling fallback
-                            if col_id:
-                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
-                                apply_cell_style(cell, self.sheet_styling_config, context)
+                        if not self.style_registry:
+                            logger.error(f"❌ CRITICAL: StyleRegistry not initialized! Cannot apply styling to cell {cell.coordinate}")
+                            logger.error(f"   → Ensure config uses bundled format with 'columns' and 'row_contexts'")
+                            continue
+                        
+                        # Check if column is defined
+                        if not self.style_registry.has_column(col_id):
+                            logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry! Available: {list(self.style_registry.columns.keys())}")
+                            logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{col_id}")
+                        
+                        # Use 'data' context for regular data rows
+                        style = self.style_registry.get_style(col_id, context='data')
+                        self.cell_styler.apply(cell, style)
+                        
+                        # Apply row height ONCE per row (only on first column processed)
+                        if current_row_idx not in self._rows_with_height_applied:
+                            row_height = self.style_registry.get_row_height('data')
+                            if row_height:
+                                self.cell_styler.apply_row_height(self.worksheet, current_row_idx, row_height)
+                                logger.debug(f"Applied row height {row_height} to row {current_row_idx}")
+                            self._rows_with_height_applied.add(current_row_idx)
                 
                 # Handle columns defined in header but missing from row_data (auto-number columns)
                 all_column_indices = set(self.col_id_map.values())
@@ -173,16 +173,12 @@ class DataTableBuilderStyler:
                             cell.value = i + 1
                             
                             # Apply styling
-                            if self.style_registry:
-                                try:
-                                    style = self.style_registry.get_style(col_id, context='data')
-                                    self.cell_styler.apply(cell, style)
-                                except Exception as style_err:
-                                    logger.debug(f"StyleRegistry failed for auto-numbered cell {col_id}: {style_err}")
-                            else:
-                                # Legacy styling fallback
-                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
-                                apply_cell_style(cell, self.sheet_styling_config, context)
+                            if not self.style_registry:
+                                logger.error(f"❌ CRITICAL: StyleRegistry not initialized for auto-number column {col_id}")
+                                continue
+                            
+                            style = self.style_registry.get_style(col_id, context='data')
+                            self.cell_styler.apply(cell, style)
 
             # --- Merging and other logic can be added here if needed ---
 

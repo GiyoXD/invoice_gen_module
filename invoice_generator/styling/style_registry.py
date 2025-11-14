@@ -25,6 +25,7 @@ class ColumnStyle:
     col_id: str
     format: Optional[str] = None  # Number format: "@", "0.00", "#,##0", etc.
     alignment: Optional[str] = None  # "left", "center", "right"
+    vertical_alignment: Optional[str] = None  # "top", "center", "bottom"
     width: Optional[int] = None  # Column width
     wrap_text: bool = False
     
@@ -33,6 +34,7 @@ class ColumnStyle:
         return {
             'format': self.format,
             'alignment': self.alignment,
+            'vertical_alignment': self.vertical_alignment,
             'width': self.width,
             'wrap_text': self.wrap_text
         }
@@ -106,9 +108,11 @@ class StyleRegistry:
                 col_id=col_id,
                 format=col_def.get('format'),
                 alignment=col_def.get('alignment'),
+                vertical_alignment=col_def.get('vertical_alignment'),
                 width=col_def.get('width'),
                 wrap_text=col_def.get('wrap_text', False)
             )
+            logger.debug(f"Loaded column '{col_id}': alignment={col_def.get('alignment')}, vertical_alignment={col_def.get('vertical_alignment')}")
         
         logger.debug(f"Loaded {len(self.columns)} column styles: {list(self.columns.keys())}")
     
@@ -163,12 +167,14 @@ class StyleRegistry:
         merged_style = {}
         
         # Define column-owned properties (NEVER override these from context)
-        COLUMN_OWNED = {'format', 'alignment', 'width', 'wrap_text'}
+        COLUMN_OWNED = {'format', 'alignment', 'vertical_alignment', 'width', 'wrap_text'}
         
         # 1. Get column base style (WHAT: format, alignment)
         if col_id in self.columns:
             col_style = self.columns[col_id].to_dict()
+            logger.debug(f"Column '{col_id}' style dict: {col_style}")
             merged_style.update({k: v for k, v in col_style.items() if v is not None})
+            logger.debug(f"After column merge: {merged_style}")
         else:
             logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry!")
             logger.warning(f"   Available columns: {list(self.columns.keys())}")
@@ -190,13 +196,25 @@ class StyleRegistry:
         if overrides:
             merged_style.update(overrides)
         
-        # 4. Validate critical properties and warn if missing
-        if 'alignment' not in merged_style or merged_style['alignment'] is None:
-            logger.warning(f"⚠️  StyleRegistry.get_style(col_id='{col_id}', context='{context}'): NO alignment!")
-            logger.warning(f"   → Add 'alignment' to styling_bundle.Sheet.columns.{col_id}")
+        # 4. STRICT VALIDATION: Verify all required properties exist
+        required_props = {
+            'alignment': f"Add 'alignment' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.columns.{col_id}",
+            'format': f"Add 'format' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.columns.{col_id}",
+            'font_name': f"Add 'font_name' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.row_contexts.{context}",
+            'font_size': f"Add 'font_size' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.row_contexts.{context}"
+        }
         
-        if 'format' not in merged_style or merged_style['format'] is None:
-            logger.debug(f"ℹ️  StyleRegistry.get_style(col_id='{col_id}', context='{context}'): NO format (using default)")
+        missing_props = []
+        for prop, instruction in required_props.items():
+            if prop not in merged_style or merged_style[prop] is None:
+                missing_props.append(prop)
+                logger.warning(f"❌ StyleRegistry.get_style(col_id='{col_id}', context='{context}'): Missing required '{prop}'")
+                logger.warning(f"   → {instruction}")
+        
+        if missing_props:
+            logger.error(f"💥 INCOMPLETE STYLE: col_id='{col_id}', context='{context}' - missing {missing_props}")
+            logger.error(f"   → Merged style keys: {list(merged_style.keys())}")
+            logger.error(f"   → This will cause CellStyler to skip applying this style!")
         
         return merged_style
     

@@ -263,11 +263,18 @@ class MultiTableProcessor(SheetProcessor):
         if template_state_builder:
             logger.debug(f"\n--- Restoring Template Footer ---")
             logger.info(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
-            template_state_builder.restore_footer_only(
-                target_worksheet=self.output_worksheet,
-                footer_start_row=current_row
-            )
-            logger.info(f"[MultiTableProcessor] Template footer restored successfully")
+            try:
+                template_state_builder.restore_footer_only(
+                    target_worksheet=self.output_worksheet,
+                    footer_start_row=current_row
+                )
+                logger.info(f"[MultiTableProcessor] Template footer restored successfully at row {current_row}")
+            except Exception as e:
+                logger.error(f"❌ Failed to restore template footer: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+        else:
+            logger.error(f"❌ CRITICAL: template_state_builder is None! Cannot restore footer!")
         
         logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True

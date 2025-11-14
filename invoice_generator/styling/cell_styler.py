@@ -77,6 +77,15 @@ class CellStyler:
         """Apply font properties to cell."""
         font_kwargs = {}
         
+        # Check for required font properties
+        required_font_props = ['font_name', 'font_size']
+        missing_font_props = [prop for prop in required_font_props if not style.get(prop)]
+        
+        if missing_font_props:
+            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required font properties: {missing_font_props}")
+            logger.warning(f"   → Available style keys: {list(style.keys())}")
+            return
+        
         if style.get('bold') is not None:
             font_kwargs['bold'] = style['bold']
         
@@ -90,43 +99,29 @@ class CellStyler:
             font_kwargs['name'] = style['font_name']
         
         if font_kwargs:
-            # Preserve existing font properties if not overridden
-            existing_font = cell.font
-            if existing_font:
-                font_kwargs = {
-                    'name': font_kwargs.get('name', existing_font.name),
-                    'size': font_kwargs.get('size', existing_font.size),
-                    'bold': font_kwargs.get('bold', existing_font.bold),
-                    'italic': font_kwargs.get('italic', existing_font.italic)
-                }
-            
             cell.font = Font(**font_kwargs)
     
     def _apply_alignment(self, cell: Cell, style: Dict[str, Any]):
         """Apply alignment properties to cell."""
         alignment_kwargs = {}
         
+        # Check for required alignment property
+        if not style.get('alignment'):
+            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required alignment property")
+            logger.warning(f"   → Available style keys: {list(style.keys())}")
+            return
+        
         if style.get('alignment'):
             alignment_kwargs['horizontal'] = style['alignment']
         
-        if style.get('vertical_alignment'):
-            alignment_kwargs['vertical'] = style['vertical_alignment']
+        # Always default to center for vertical alignment
+        alignment_kwargs['vertical'] = style.get('vertical_alignment', 'center')
         
         if style.get('wrap_text') is not None:
             alignment_kwargs['wrap_text'] = style['wrap_text']
         
         if alignment_kwargs:
-            # Preserve existing alignment if not overridden
-            existing_alignment = cell.alignment
-            if existing_alignment:
-                alignment_kwargs = {
-                    'horizontal': alignment_kwargs.get('horizontal', existing_alignment.horizontal),
-                    'vertical': alignment_kwargs.get('vertical', existing_alignment.vertical),
-                    'wrap_text': alignment_kwargs.get('wrap_text', existing_alignment.wrap_text)
-                }
-            
             cell.alignment = Alignment(**alignment_kwargs)
-        # Note: Alignment warnings are now logged by builders with more context
     
     def _apply_fill(self, cell: Cell, style: Dict[str, Any]):
         """Apply fill color to cell."""
@@ -165,6 +160,12 @@ class CellStyler:
     
     def _apply_format(self, cell: Cell, style: Dict[str, Any]):
         """Apply number format to cell."""
+        # Check for required format property
+        if not style.get('format'):
+            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required format property")
+            logger.warning(f"   → Available style keys: {list(style.keys())}")
+            return
+        
         if style.get('format'):
             cell.number_format = style['format']
     

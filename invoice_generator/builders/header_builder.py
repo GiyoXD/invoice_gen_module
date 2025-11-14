@@ -5,7 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
-from ..styling.style_applier import apply_header_style, apply_cell_style
+from ..styling.style_applier import apply_header_style  # apply_cell_style removed - using StyleRegistry only
 from ..styling.style_registry import StyleRegistry
 from ..styling.cell_styler import CellStyler
 from ..utils.layout import calculate_header_dimensions
@@ -63,6 +63,9 @@ class HeaderBuilderStyler:
         else:
             logger.warning(f"Using legacy config")
             self.header_layout_config = header_layout_config or []
+        
+        # Track rows that have had height applied to avoid redundant operations
+        self._rows_with_height_applied = set()
 
     def build(self) -> Optional[Dict[str, Any]]:
         if not self.header_layout_config or self.start_row <= 0:
@@ -92,32 +95,29 @@ class HeaderBuilderStyler:
 
             cell = self.worksheet.cell(row=cell_row, column=cell_col, value=text)
             
-            # Use StyleRegistry if available, otherwise fall back to legacy styling
-            if self.style_registry and cell_id:
-                try:
-                    # Check if column is defined
-                    if not self.style_registry.has_column(cell_id):
-                        logger.warning(f"❌ Column '{cell_id}' not found in StyleRegistry! Available columns: {list(self.style_registry.columns.keys())}")
-                        logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{cell_id}")
-                    
-                    # Get column-specific header style (column base + header context)
-                    style = self.style_registry.get_style(cell_id, context='header')
-                    # Validate alignment for header cells
-                    if 'alignment' not in style or style['alignment'] is None:
-                        logger.warning(f"⚠️  [{self.worksheet.title}] HEADER Cell {cell.coordinate} ({cell_id}): NO alignment!")
-                        logger.warning(f"   → Add 'alignment' to styling_bundle.{self.worksheet.title}.columns.{cell_id}")
-                    self.cell_styler.apply(cell, style)
-                    logger.debug(f"Applied StyleRegistry style to header cell {cell_id}")
-                except Exception as style_err:
-                    logger.warning(f"StyleRegistry failed for header cell {cell_id}, falling back to legacy: {style_err}")
-                    apply_header_style(cell, self.sheet_styling_config)
-                    context = {"col_id": cell_id, "col_idx": cell_col, "is_header": True}
-                    apply_cell_style(cell, self.sheet_styling_config, context)
-            else:
-                # Legacy styling path
-                apply_header_style(cell, self.sheet_styling_config)
-                context = {"col_id": cell_id, "col_idx": cell_col, "is_header": True}
-                apply_cell_style(cell, self.sheet_styling_config, context)
+            # Use StyleRegistry (strict - no legacy fallback)
+            if not self.style_registry or not cell_id:
+                logger.error(f"❌ CRITICAL: StyleRegistry not initialized or no cell_id for header cell {cell.coordinate}")
+                logger.error(f"   → Ensure config uses bundled format with 'columns' and 'row_contexts'")
+                continue
+            
+            # Check if column is defined
+            if not self.style_registry.has_column(cell_id):
+                logger.warning(f"❌ Column '{cell_id}' not found in StyleRegistry! Available columns: {list(self.style_registry.columns.keys())}")
+                logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{cell_id}")
+            
+            # Get column-specific header style (column base + header context)
+            style = self.style_registry.get_style(cell_id, context='header')
+            self.cell_styler.apply(cell, style)
+            logger.debug(f"Applied StyleRegistry style to header cell {cell_id}")
+            
+            # Apply row height ONCE per row (only on first column processed for each row)
+            if cell_row not in self._rows_with_height_applied:
+                row_height = self.style_registry.get_row_height('header')
+                if row_height:
+                    self.cell_styler.apply_row_height(self.worksheet, cell_row, row_height)
+                    logger.debug(f"Applied header row height {row_height} to row {cell_row}")
+                self._rows_with_height_applied.add(cell_row)
 
             if cell_id:
                 column_map[text] = get_column_letter(cell_col)
