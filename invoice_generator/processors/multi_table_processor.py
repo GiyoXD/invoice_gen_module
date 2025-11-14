@@ -216,12 +216,15 @@ class MultiTableProcessor(SheetProcessor):
                         styling_model = None
             
             # Get footer config and mappings from layout bundle
-            footer_config = gt_layout_config.get('footer', {})
+            # Footer config is inside sheet_config key!
+            sheet_config = gt_layout_config.get('sheet_config', {})
+            footer_config = sheet_config.get('footer', {})
             footer_config_copy = footer_config.copy()
             footer_config_copy["type"] = "grand_total"  # Mark as grand total type
             
             # Add summary add-on if enabled in layout config
-            if gt_layout_config.get('content', {}).get("summary", False) and self.args.DAF:
+            content_section = sheet_config.get('content', {})
+            if content_section.get("summary", False) and self.args.DAF:
                 footer_config_copy["add_ons"] = ["summary"]
             
             # Bundle configs for FooterBuilder

@@ -305,10 +305,7 @@ class LayoutBuilder:
             sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
             add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
             static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
-            add_blank_before_ftr_flag = self.sheet_config.get("add_blank_before_footer", False)
-            static_content_before_ftr_dict = self.sheet_config.get("static_content_before_footer", {})
             merge_rules_after_hdr = self.sheet_config.get("merge_rules_after_header", {})
-            merge_rules_before_ftr = self.sheet_config.get("merge_rules_before_footer", {})
             merge_rules_footer = self.sheet_config.get("merge_rules_footer", {})
             data_cell_merging_rules = self.sheet_config.get("data_cell_merging_rule", None)
             
