@@ -130,7 +130,7 @@ class FooterBuilderStyler(BundleAccessor):
         """Dynamic description used flag from context config."""
         return self.context_config.get('dynamic_desc_used', False)
 
-    def _apply_footer_cell_style(self, cell, col_id, row_context='footer'):
+    def _apply_footer_cell_style(self, cell, col_id, row_context='footer', apply_border=True):
         """
         Apply footer cell style to a single cell using StyleRegistry (strict - no legacy fallback).
         
@@ -138,6 +138,7 @@ class FooterBuilderStyler(BundleAccessor):
             cell: The cell to apply styling to
             col_id: The column ID for this cell
             row_context: The row context to use (default 'footer', can be 'before_footer')
+            apply_border: Whether to apply borders (default True, set False for grand_total)
         """
         if not self.style_registry or not col_id:
             logger.error(f"❌ CRITICAL: StyleRegistry not initialized or no col_id for footer cell {cell.coordinate}")
@@ -146,8 +147,15 @@ class FooterBuilderStyler(BundleAccessor):
         
         # Use specified context for row styling
         style = self.style_registry.get_style(col_id, context=row_context)
+        
+        # Remove borders if requested (for grand_total footers)
+        if not apply_border:
+            from copy import deepcopy
+            style = deepcopy(style)
+            style['border_style'] = None
+        
         self.cell_styler.apply(cell, style)
-        logger.debug(f"Applied StyleRegistry style to {row_context} cell {col_id}")
+        logger.debug(f"Applied StyleRegistry style to {row_context} cell {col_id} (borders={'yes' if apply_border else 'no'})")
         
         # Apply row height ONCE per row (only on first column processed)
         row_num = cell.row
@@ -226,7 +234,7 @@ class FooterBuilderStyler(BundleAccessor):
             if before_footer_enabled and footer_type == "regular":
                 try:
                     logger.debug(f"Building before_footer row at row {current_footer_row}")
-                    self._build_before_footer(current_footer_row, before_footer_addon)
+                    self._build_before_footer(current_footer_row, before_footer_addon, footer_type)
                     logger.debug(f"before_footer row complete at row {current_footer_row}")
                     current_footer_row += 1
                 except Exception as bf_err:
@@ -289,10 +297,10 @@ class FooterBuilderStyler(BundleAccessor):
         """Build regular footer with TOTAL: text."""
         logger.debug(f"[FooterBuilder._build_regular_footer] Starting at row {current_footer_row}")
         default_total_text = self.footer_config.get("total_text", "TOTAL:")
-        self._build_footer_common(current_footer_row, default_total_text)
+        self._build_footer_common(current_footer_row, default_total_text, footer_type="regular")
         logger.debug(f"[FooterBuilder._build_regular_footer] Complete")
 
-    def _build_before_footer(self, row: int, before_footer_config: Dict[str, Any]):
+    def _build_before_footer(self, row: int, before_footer_config: Dict[str, Any], footer_type: str = "regular"):
         """
         Build before_footer row - a row with text that appears BEFORE the main footer.
         Example: "HS.CODE: 4107.12.00" or "LEATHER (HS.CODE: 4107.12.00)"
@@ -300,8 +308,9 @@ class FooterBuilderStyler(BundleAccessor):
         Args:
             row: The row number to write to
             before_footer_config: Config dict with 'column_id', 'text', and optional 'merge'
+            footer_type: Type of footer ('regular' or 'grand_total') - grand_total skips borders
         """
-        logger.debug(f"[FooterBuilder._build_before_footer] Row {row}, config={before_footer_config}")
+        logger.debug(f"[FooterBuilder._build_before_footer] Row {row}, config={before_footer_config}, footer_type={footer_type}")
         
         num_columns = self.header_info.get('num_columns', 1)
         column_map_by_id = self.header_info.get('column_id_map', {})
@@ -342,27 +351,57 @@ class FooterBuilderStyler(BundleAccessor):
                 logger.warning(f"Could not merge cells {merge_range}: {e}")
         
         # Apply styling and borders to all cells in the row using footer row context
+        # Special case: col_static (column 1) gets only side borders (left/right), no top/bottom
+        # Note: For grand_total footers, no borders are applied to before_footer rows
+        from openpyxl.styles import Border, Side
+        
         idx_to_id_map = {v: k for k, v in column_map_by_id.items()}
         for c_idx in range(1, num_columns + 1):
             cell = self.worksheet.cell(row=row, column=c_idx)
             col_id = idx_to_id_map.get(c_idx)
-            self._apply_footer_cell_style(cell, col_id, row_context='footer')
+            
+            # Skip border application for grand_total footers
+            if footer_type == "grand_total":
+                # Apply styling without borders for grand_total
+                if self.style_registry and col_id:
+                    style = self.style_registry.get_style(col_id, context='footer')
+                    # Apply style but override to remove borders
+                    from copy import deepcopy
+                    style_no_border = deepcopy(style)
+                    style_no_border['border_style'] = None
+                    self.cell_styler.apply(cell, style_no_border)
+                logger.debug(f"[FooterBuilder._build_before_footer] Applied styling WITHOUT borders to {cell.coordinate} (grand_total)")
+            else:
+                # Apply normal footer styling first
+                self._apply_footer_cell_style(cell, col_id, row_context='footer')
+                
+                # Override borders for col_static (column 1) - only left and right borders
+                if col_id == 'col_static':
+                    style = self.style_registry.get_style(col_id, context='footer')
+                    border_style_name = style.get('border_style', 'thin')
+                    side = Side(style=border_style_name, color='000000')
+                    cell.border = Border(left=side, right=side)
+                    logger.debug(f"[FooterBuilder._build_before_footer] Applied side-only borders to {cell.coordinate}")
+                else:
+                    # For other columns in before_footer, apply full borders
+                    pass
         
         logger.debug(f"[FooterBuilder._build_before_footer] Complete")
 
     def _build_grand_total_footer(self, current_footer_row: int):
-        """Build grand total footer with TOTAL OF: text."""
+        """Build grand total footer with TOTAL OF: text - NO BORDERS."""
         logger.debug(f"[FooterBuilder._build_grand_total_footer] Starting at row {current_footer_row}")
-        self._build_footer_common(current_footer_row, "TOTAL OF:")
+        self._build_footer_common(current_footer_row, "TOTAL OF:", footer_type="grand_total")
         logger.debug(f"[FooterBuilder._build_grand_total_footer] Complete")
     
-    def _build_footer_common(self, current_footer_row: int, default_total_text: str):
+    def _build_footer_common(self, current_footer_row: int, default_total_text: str, footer_type: str = "regular"):
         """
         Common footer building logic for both regular and grand total footers.
         
         Args:
             current_footer_row: The row to build the footer in
             default_total_text: Default text to use for total label
+            footer_type: Type of footer ('regular' or 'grand_total') - grand_total skips borders
         """
         logger.debug(f"[FooterBuilder._build_footer_common] Row {current_footer_row}, text='{default_total_text}'")
         
@@ -384,7 +423,7 @@ class FooterBuilderStyler(BundleAccessor):
         
         if total_text_col_idx:
             cell = self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
-            self._apply_footer_cell_style(cell, total_text_col_id)
+            self._apply_footer_cell_style(cell, total_text_col_id, apply_border=(footer_type != "grand_total"))
             logger.info(f"[FooterBuilder._build_footer_common] WROTE TOTAL TEXT to {cell.coordinate} value='{cell.value}'")
         else:
             logger.error(f"[FooterBuilder._build_footer_common] MISSING total_text_column_id in footer config!")
@@ -401,7 +440,7 @@ class FooterBuilderStyler(BundleAccessor):
         if pallet_col_idx and self.pallet_count > 0:
             pallet_text = f"{self.pallet_count} PALLET{'S' if self.pallet_count != 1 else ''}"
             cell = self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
-            self._apply_footer_cell_style(cell, pallet_col_id)
+            self._apply_footer_cell_style(cell, pallet_col_id, apply_border=(footer_type != "grand_total"))
             logger.debug(f"[FooterBuilder._build_footer_common] Wrote pallet text to {cell.coordinate}")
 
         # Write sum formulas
@@ -416,16 +455,17 @@ class FooterBuilderStyler(BundleAccessor):
                     sum_parts = [f"{col_letter}{start}:{col_letter}{end}" for start, end in self.sum_ranges]
                     formula = f"=SUM({','.join(sum_parts)})"
                     cell = self.worksheet.cell(row=current_footer_row, column=col_idx, value=formula)
-                    self._apply_footer_cell_style(cell, col_id)
+                    self._apply_footer_cell_style(cell, col_id, apply_border=(footer_type != "grand_total"))
                     logger.debug(f"[FooterBuilder._build_footer_common] Wrote formula to {cell.coordinate}: {formula}")
         
         # Apply styling to all footer cells
+        # For grand_total footers, skip borders
         idx_to_id_map = {v: k for k, v in column_map_by_id.items()}
         cells_styled = 0
         for c_idx in range(1, num_columns + 1):
             cell = self.worksheet.cell(row=current_footer_row, column=c_idx)
             col_id = idx_to_id_map.get(c_idx)
-            self._apply_footer_cell_style(cell, col_id)
+            self._apply_footer_cell_style(cell, col_id, apply_border=(footer_type != "grand_total"))
             cells_styled += 1
         
         logger.debug(f"[FooterBuilder._build_footer_common] Applied styling to {cells_styled} cells")
@@ -454,6 +494,8 @@ class FooterBuilderStyler(BundleAccessor):
                 mapping_rules=self.mapping_rules,
                 styling_config=self.sheet_styling_config,
                 DAF_mode=self.DAF_mode,
-                grand_total_pallets=self.pallet_count
+                grand_total_pallets=self.pallet_count,
+                style_registry=self.style_registry,
+                cell_styler=self.cell_styler
             )
         return current_footer_row

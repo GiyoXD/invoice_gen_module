@@ -244,13 +244,19 @@ def write_summary_rows(
     mapping_rules: Dict[str, Any],
     styling_config: Optional[StylingConfigModel] = None,
     DAF_mode: Optional[bool] = False,
-    grand_total_pallets: int = 0
+    grand_total_pallets: int = 0,
+    style_registry=None,
+    cell_styler=None
 ) -> int:
     """
     Calculates and writes ID-driven summary rows for different leather types.
     This function is specifically designed to handle "BUFFALO LEATHER" and "COW LEATHER"
     summaries, calculating totals for specified numeric columns and pallet counts.
-    It applies styling based on the provided styling configuration.
+    It applies styling based on StyleRegistry (modern) or falls back to legacy styling.
+    
+    Args:
+        style_registry: StyleRegistry instance for modern ID-driven styling
+        cell_styler: CellStyler instance for applying styles
     """
     buffalo_summary_row = start_row
     leather_summary_row = start_row + 1
@@ -327,34 +333,48 @@ def write_summary_rows(
         num_columns = header_info['num_columns']
         desc_col_idx = column_id_map.get("col_desc")
         label_col_idx = column_id_map.get("col_pallet") or 2
+        
+        # Helper function to apply styling without borders
+        def apply_summary_style(cell, col_id):
+            """Apply styling without borders for summary rows"""
+            if style_registry and cell_styler and col_id:
+                style = style_registry.get_style(col_id, context='footer')
+                # Remove borders by setting border_style to None
+                from copy import deepcopy
+                style_no_border = deepcopy(style)
+                style_no_border['border_style'] = None
+                cell_styler.apply(cell, style_no_border)
+            elif styling_config:
+                # Legacy fallback
+                apply_cell_style(cell, styling_config, {"col_id": col_id, "col_idx": cell.column, "is_footer": True})
 
         # Write Buffalo Summary Row
         cell = worksheet.cell(row=buffalo_summary_row, column=label_col_idx, value="TOTAL OF:")
-        apply_cell_style(cell, styling_config, {"col_id": "col_pallet", "col_idx": label_col_idx, "is_footer": True})
+        apply_summary_style(cell, "col_pallet")
         cell = worksheet.cell(row=buffalo_summary_row, column=label_col_idx + 1, value="BUFFALO LEATHER")
-        apply_cell_style(cell, styling_config, {"col_id": "col_pallet", "col_idx": label_col_idx + 1, "is_footer": True})
+        apply_summary_style(cell, "col_pallet")
         if desc_col_idx:
             cell = worksheet.cell(row=buffalo_summary_row, column=desc_col_idx, value=f"{buffalo_pallet_total} PALLETS")
-            apply_cell_style(cell, styling_config, {"col_id": "col_desc", "col_idx": desc_col_idx, "is_footer": True})
+            apply_summary_style(cell, "col_desc")
         for col_id, total_value in buffalo_totals.items():
             col_idx = column_id_map.get(col_id)
             if col_idx:
                 cell = worksheet.cell(row=buffalo_summary_row, column=col_idx, value=total_value)
-                apply_cell_style(cell, styling_config, {"col_id": col_id, "col_idx": col_idx, "is_footer": True})
+                apply_summary_style(cell, col_id)
 
         # Write Cow Leather Summary Row
         cell = worksheet.cell(row=leather_summary_row, column=label_col_idx, value="TOTAL OF:")
-        apply_cell_style(cell, styling_config, {"col_id": "col_pallet", "col_idx": label_col_idx, "is_footer": True})
+        apply_summary_style(cell, "col_pallet")
         cell = worksheet.cell(row=leather_summary_row, column=label_col_idx + 1, value="COW LEATHER")
-        apply_cell_style(cell, styling_config, {"col_id": "col_pallet", "col_idx": label_col_idx + 1, "is_footer": True})
+        apply_summary_style(cell, "col_pallet")
         if desc_col_idx:
             cell = worksheet.cell(row=leather_summary_row, column=desc_col_idx, value=f"{cow_pallet_total} PALLETS")
-            apply_cell_style(cell, styling_config, {"col_id": "col_desc", "col_idx": desc_col_idx, "is_footer": True})
+            apply_summary_style(cell, "col_desc")
         for col_id, total_value in cow_totals.items():
             col_idx = column_id_map.get(col_id)
             if col_idx:
                 cell = worksheet.cell(row=leather_summary_row, column=col_idx, value=total_value)
-                apply_cell_style(cell, styling_config, {"col_id": col_id, "col_idx": col_idx, "is_footer": True})
+                apply_summary_style(cell, col_id)
 
         return next_available_row
 
