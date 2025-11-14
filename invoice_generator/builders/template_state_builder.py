@@ -386,7 +386,21 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        logger.debug(f"  [OK] Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}")
+        # Validate footer capture - warn if all rows are empty
+        total_non_empty_cells = sum(
+            1 for row_data in self.footer_state 
+            for cell_info in row_data 
+            if cell_info['value'] is not None and cell_info['value'] != ''
+        )
+        
+        if total_non_empty_cells == 0:
+            logger.warning(f"⚠️  WARNING: Template footer capture found NO content!")
+            logger.warning(f"   Footer range: rows {footer_start_row}-{footer_end_row} ({len(self.footer_state)} rows)")
+            logger.warning(f"   All {len(self.footer_state)} footer rows are EMPTY")
+            logger.warning(f"   Check if footer_row config points to the correct row in template")
+            logger.warning(f"   Template may have blank rows between header and actual footer content")
+        
+        logger.debug(f"  [OK] Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}, non-empty cells: {total_non_empty_cells}")
 
     def restore_header_only(self, target_worksheet: Worksheet):
         """

@@ -55,7 +55,8 @@ class MultiTableProcessor(SheetProcessor):
             return False
         
         template_header_end_row = structure_config['header_row']
-        template_footer_start_row = template_header_end_row + 1  # Footer starts right after header
+        # Use explicit footer_row if provided, otherwise assume footer starts after header
+        template_footer_start_row = structure_config.get('footer_row', template_header_end_row + 1)
         num_header_cols = 20  # Conservative estimate
         
         logger.debug(f"Template dimensions: header_end_row={template_header_end_row}, footer_start_row={template_footer_start_row}")
