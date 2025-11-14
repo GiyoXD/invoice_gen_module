@@ -8,8 +8,9 @@ from openpyxl.utils import get_column_letter
 logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
-
 from ..styling.style_applier import apply_cell_style
+from ..styling.style_registry import StyleRegistry
+from ..styling.cell_styler import CellStyler
 from .bundle_accessor import BundleAccessor
 
 class FooterBuilderStyler(BundleAccessor):
@@ -51,6 +52,22 @@ class FooterBuilderStyler(BundleAccessor):
         
         # Store FooterBuilder-specific attributes
         self.footer_row_num = footer_row_num
+        
+        # Initialize StyleRegistry and CellStyler for ID-driven styling
+        self.style_registry = None
+        self.cell_styler = CellStyler()
+        sheet_styling_config = style_config.get('styling_config')
+        if sheet_styling_config:
+            try:
+                styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
+                if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
+                    self.style_registry = StyleRegistry(styling_dict)
+                    logger.info("StyleRegistry initialized successfully for FooterBuilder")
+                else:
+                    logger.warning(f"⚠️  FooterBuilder: OLD format detected - StyleRegistry NOT initialized")
+                    logger.warning(f"   Falling back to legacy style_applier methods")
+            except Exception as e:
+                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
     
     # ========== Properties for Frequently Accessed Config Values ==========
     # Note: sheet_name, sheet_styling_config inherited from BundleAccessor
@@ -111,13 +128,26 @@ class FooterBuilderStyler(BundleAccessor):
         return self.context_config.get('dynamic_desc_used', False)
 
     def _apply_footer_cell_style(self, cell, col_id):
-        """Apply footer cell style to a single cell."""
-        context = {
-            "col_id": col_id,
-            "col_idx": cell.column,
-            "is_footer": True
-        }
-        apply_cell_style(cell, self.sheet_styling_config, context)
+        """Apply footer cell style to a single cell using StyleRegistry or fallback to legacy."""
+        # Use StyleRegistry if available
+        if self.style_registry and col_id:
+            try:
+                # Use 'footer' context for footer rows
+                style = self.style_registry.get_style(col_id, context='footer')
+                # Validate alignment for footer cells
+                if 'alignment' not in style or style['alignment'] is None:
+                    logger.warning(f"⚠️  [{self.worksheet.title}] FOOTER Cell {cell.coordinate} ({col_id}): NO alignment!")
+                    logger.warning(f"   → Add 'alignment' to styling_bundle.{self.worksheet.title}.columns.{col_id}")
+                self.cell_styler.apply(cell, style)
+                logger.debug(f"Applied StyleRegistry style to footer cell {col_id}")
+            except Exception as style_err:
+                logger.debug(f"StyleRegistry failed for footer cell {col_id}, fallback: {style_err}")
+                context = {"col_id": col_id, "col_idx": cell.column, "is_footer": True}
+                apply_cell_style(cell, self.sheet_styling_config, context)
+        else:
+            # Legacy styling fallback
+            context = {"col_id": col_id, "col_idx": cell.column, "is_footer": True}
+            apply_cell_style(cell, self.sheet_styling_config, context)
     
     def _resolve_column_index(self, col_id, column_map_by_id: Dict[str, int]) -> Optional[int]:
         """

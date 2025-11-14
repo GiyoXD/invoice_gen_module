@@ -87,10 +87,24 @@ class BuilderConfigResolver:
             {
                 'styling_config': StylingConfigModel or dict
             }
+        
+        NOTE: If sheet config has 'columns' and 'row_contexts' (new format),
+        those are passed directly as the styling_config.
         """
-        return {
-            'styling_config': self._sheet_config.get('styling_config', {})
-        }
+        # Check if using new format (columns + row_contexts at sheet level)
+        if 'columns' in self._sheet_config and 'row_contexts' in self._sheet_config:
+            # New format: return entire sheet config as styling_config
+            return {
+                'styling_config': {
+                    'columns': self._sheet_config['columns'],
+                    'row_contexts': self._sheet_config['row_contexts']
+                }
+            }
+        else:
+            # Old format: look for nested styling_config key
+            return {
+                'styling_config': self._sheet_config.get('styling_config', {})
+            }
     
     def get_context_bundle(self, **additional_context) -> Dict[str, Any]:
         """
@@ -266,7 +280,7 @@ class BuilderConfigResolver:
     
     def get_table_data_resolver(self, table_key: Optional[str] = None):
         """
-        Create aTableDataAdapter for preparing table-specific data.
+        Create a TableDataAdapter for preparing table-specific data.
         
         This method provides a high-level interface to data preparation logic,
         eliminating the need for builders to handle data transformation directly.
@@ -275,7 +289,7 @@ class BuilderConfigResolver:
             table_key: Optional table key for multi-table scenarios
         
         Returns:
-            ConfiguredTableDataAdapter instance
+            TableDataAdapter instance
         
         Example:
             resolver = BuilderConfigResolver(...)
@@ -289,7 +303,7 @@ class BuilderConfigResolver:
             # - static_info: Column 1 static values, etc.
             # - static_content: Static content from layout_bundle (e.g., col_static)
         """
-        from .table_data_resolver import TableDataAdapter
+        from .multi_table_data_adapter import TableDataAdapter
         
         data_config = self.get_data_bundle(table_key=table_key)
         context_config = self.get_context_bundle()

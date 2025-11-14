@@ -113,9 +113,21 @@ class BundledConfigLoader:
             {"header": {"font": {...}}, "data": {"font": {...}}}
         Into StylingConfigModel format:
             {"header_font": {...}, "default_font": {...}}
+        
+        OR if new format is detected (columns + row_contexts), returns them as-is.
         """
         # Get sheet-specific styling
         sheet_styling = self._styling_bundle.get(sheet_name, {})
+        
+        # Check if using NEW FORMAT (columns + row_contexts)
+        if 'columns' in sheet_styling and 'row_contexts' in sheet_styling:
+            # New format: return as-is, don't transform
+            return {
+                'columns': sheet_styling['columns'],
+                'row_contexts': sheet_styling['row_contexts']
+            }
+        
+        # OLD FORMAT: Transform nested bundled format to flat StylingConfigModel format
         # Get default styling to use as fallback
         defaults = self._styling_bundle.get('defaults', {})
         

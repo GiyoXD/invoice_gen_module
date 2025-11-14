@@ -1,12 +1,12 @@
 """
-Tests for TableDataResolver (Adapter Pattern)
+Tests for TableDataAdapter (Adapter Pattern)
 
 Tests the table data preparation logic that transforms raw invoice data
 into table-ready row dictionaries.
 
 Run these tests:
     python -m pytest tests/config/test_table_data_resolver.py -v
-    python -m pytest tests/config/test_table_data_resolver.py::TestTableDataResolver::test_resolve_with_real_invoice_config -v
+    python -m pytest tests/config/test_table_data_resolver.py::TestTableDataAdapter::test_resolve_with_real_invoice_config -v
 """
 import unittest
 from unittest.mock import Mock
@@ -14,11 +14,11 @@ from pathlib import Path
 
 from invoice_generator.config.config_loader import BundledConfigLoader
 from invoice_generator.config.builder_config_resolver import BuilderConfigResolver
-from invoice_generator.config.table_data_resolver import TableDataResolver
+from invoice_generator.config.multi_table_data_adapter import TableDataAdapter
 
 
-class TestTableDataResolver(unittest.TestCase):
-    """Test suite for TableDataResolver class."""
+class TestTableDataAdapter(unittest.TestCase):
+    """Test suite for TableDataAdapter class."""
     
     @classmethod
     def setUpClass(cls):
@@ -77,7 +77,7 @@ class TestTableDataResolver(unittest.TestCase):
             'column_id_map': {'col_po': 1, 'col_item': 2, 'col_desc': 3}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source=self.invoice_data['standard_aggregation_results'],
             mapping_rules={},
@@ -96,7 +96,7 @@ class TestTableDataResolver(unittest.TestCase):
             'column_id_map': {}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='processed_tables',
             data_source=self.invoice_data['processed_tables_data']['1'],
             mapping_rules={},
@@ -126,12 +126,12 @@ class TestTableDataResolver(unittest.TestCase):
             'args': self.args
         }
         
-        resolver = TableDataResolver.create_from_bundles(
+        resolver = TableDataAdapter.create_from_bundles(
             data_config=data_config,
             context_config=context_config
         )
         
-        self.assertIsInstance(resolver, TableDataResolver)
+        self.assertIsInstance(resolver, TableDataAdapter)
         self.assertEqual(resolver.data_source_type, 'aggregation')
         self.assertFalse(resolver.DAF_mode)
     
@@ -147,7 +147,7 @@ class TestTableDataResolver(unittest.TestCase):
         args = Mock(DAF=True)
         context_config = {'args': args}
         
-        resolver = TableDataResolver.create_from_bundles(
+        resolver = TableDataAdapter.create_from_bundles(
             data_config=data_config,
             context_config=context_config
         )
@@ -157,7 +157,7 @@ class TestTableDataResolver(unittest.TestCase):
     # ========== Integration with BuilderConfigResolver ==========
     
     def test_get_table_data_resolver_from_builder_resolver(self):
-        """Test getting TableDataResolver from BuilderConfigResolver."""
+        """Test getting TableDataAdapter from BuilderConfigResolver."""
         from openpyxl import Workbook
         workbook = Workbook()
         worksheet = workbook.active
@@ -172,11 +172,11 @@ class TestTableDataResolver(unittest.TestCase):
         
         table_resolver = builder_resolver.get_table_data_resolver()
         
-        self.assertIsInstance(table_resolver, TableDataResolver)
+        self.assertIsInstance(table_resolver, TableDataAdapter)
         self.assertEqual(table_resolver.data_source_type, 'aggregation')
     
     def test_get_table_data_resolver_with_table_key(self):
-        """Test getting TableDataResolver for specific table."""
+        """Test getting TableDataAdapter for specific table."""
         from openpyxl import Workbook
         workbook = Workbook()
         worksheet = workbook.active
@@ -191,7 +191,7 @@ class TestTableDataResolver(unittest.TestCase):
         
         table_resolver = builder_resolver.get_table_data_resolver(table_key='1')
         
-        self.assertIsInstance(table_resolver, TableDataResolver)
+        self.assertIsInstance(table_resolver, TableDataAdapter)
         self.assertEqual(table_resolver.table_key, '1')
     
     # ========== Helper Method Tests ==========
@@ -203,7 +203,7 @@ class TestTableDataResolver(unittest.TestCase):
             'column_id_map': {'col_po': 1, 'col_item': 2, 'col_desc': 3}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules={},
@@ -222,7 +222,7 @@ class TestTableDataResolver(unittest.TestCase):
             'column_id_map': {'col_po': 1, 'col_desc': 3, 'col_item': 2}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules={},
@@ -244,7 +244,7 @@ class TestTableDataResolver(unittest.TestCase):
         # So table_1_data is already the table data (dict with column arrays), not a dict of tables
         table_1_data = self.invoice_data['processed_tables_data']['1']
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='processed_tables_multi',
             data_source=table_1_data,
             mapping_rules={},
@@ -338,7 +338,7 @@ class TestTableDataResolver(unittest.TestCase):
         self.assertIn('apply_special_border_rule', static_info)
 
 
-class TestTableDataResolverEdgeCases(unittest.TestCase):
+class TestTableDataAdapterEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
     
     def test_resolver_with_empty_data_source(self):
@@ -348,7 +348,7 @@ class TestTableDataResolverEdgeCases(unittest.TestCase):
             'column_id_map': {}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source=None,
             mapping_rules={},
@@ -362,7 +362,7 @@ class TestTableDataResolverEdgeCases(unittest.TestCase):
     
     def test_resolver_with_missing_header_info(self):
         """Test resolver handles missing header info gracefully."""
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules={},
@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
 # ========== Additional Isolated Unit Tests ==========
 
-class TestTableDataResolverIsolated(unittest.TestCase):
+class TestTableDataAdapterIsolated(unittest.TestCase):
     """Isolated unit tests that don't require real config files."""
     
     def test_bundled_to_legacy_mapping_conversion(self):
@@ -412,7 +412,7 @@ class TestTableDataResolverIsolated(unittest.TestCase):
             }
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules=bundled_mappings,
@@ -442,7 +442,7 @@ class TestTableDataResolverIsolated(unittest.TestCase):
         }
         
         # Test aggregation
-        resolver1 = TableDataResolver(
+        resolver1 = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules={},
@@ -452,7 +452,7 @@ class TestTableDataResolverIsolated(unittest.TestCase):
         self.assertEqual(resolver1.data_source_type, 'aggregation')
         
         # Test DAF_aggregation
-        resolver2 = TableDataResolver(
+        resolver2 = TableDataAdapter(
             data_source_type='DAF_aggregation',
             data_source={},
             mapping_rules={},
@@ -463,7 +463,7 @@ class TestTableDataResolverIsolated(unittest.TestCase):
         self.assertTrue(resolver2.DAF_mode)
         
         # Test processed_tables_multi
-        resolver3 = TableDataResolver(
+        resolver3 = TableDataAdapter(
             data_source_type='processed_tables_multi',
             data_source={'po': ['PO123']},
             mapping_rules={},
@@ -481,7 +481,7 @@ class TestTableDataResolverIsolated(unittest.TestCase):
             'column_id_map': {'col_po': 1}
         }
         
-        resolver = TableDataResolver(
+        resolver = TableDataAdapter(
             data_source_type='aggregation',
             data_source={},
             mapping_rules={'po': {'column': 'col_po', 'source_key': 0}},

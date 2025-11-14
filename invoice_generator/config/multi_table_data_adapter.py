@@ -1,17 +1,17 @@
 """
-Table Data Resolver
+Multi-Table Data Adapter
 
-This resolver is responsible for preparing table-specific data for rendering.
+This adapter is responsible for preparing table-specific data for rendering.
 It transforms raw invoice data into table-ready row dictionaries based on:
 - Data source type (aggregation, DAF_aggregation, custom, processed_tables)
 - Mapping rules (which columns get which data)
 - Column configurations (formats, IDs, etc.)
 
 This eliminates data preparation logic from builders and centralizes it
-in a single, testable, reusable component.
+in a single, testable, reusable adapter component.
 
 Pattern:
-    BundledConfigLoader → BuilderConfigResolver →TableDataAdapter → Builder
+    BundledConfigLoader → BuilderConfigResolver → TableDataAdapter → Builder
 """
 
 import logging
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class TableDataAdapter:
     """
-    Resolves and prepares table-specific data for rendering.
+    Adapter for preparing table-specific data for rendering.
     
     This class takes raw invoice data and configuration, then produces
     table-ready row dictionaries with proper formatting, formulas, and
@@ -44,7 +44,7 @@ class TableDataAdapter:
     - Calculate pallet counts and metadata
     
     Usage:
-        resolver =TableDataAdapter(
+        adapter = TableDataAdapter(
             data_source_type='aggregation',
             data_source=invoice_data['standard_aggregation_results'],
             mapping_rules=config['mappings'],
@@ -266,7 +266,7 @@ class TableDataAdapter:
         layout_config: Optional[Dict[str, Any]] = None
     ) -> 'TableDataAdapter':
         """
-        Factory method to createTableDataAdapter from bundle configs.
+        Factory method to create TableDataAdapter from bundle configs.
         
         This is the recommended way to instantiate the resolver when using
         the BuilderConfigResolver pattern.
@@ -277,7 +277,7 @@ class TableDataAdapter:
             layout_config: Optional layout bundle from BuilderConfigResolver.get_layout_bundle()
         
         Returns:
-            ConfiguredTableDataAdapter instance
+            TableDataAdapter instance
         """
         # Determine DAF mode
         args = context_config.get('args')

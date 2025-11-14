@@ -100,7 +100,7 @@ class LayoutBuilder:
         self.provided_data_source_type = layout_config.get('data_source_type') if layout_config else None
         self.provided_header_info = layout_config.get('header_info') if layout_config else None
         self.provided_mapping_rules = layout_config.get('mapping_rules') if layout_config else None
-        self.provided_resolved_data = layout_config.get('resolved_data') if layout_config else None  # NEW: Support resolved data fromTableDataAdapter
+        self.provided_resolved_data = layout_config.get('resolved_data') if layout_config else None  # NEW: Support resolved data from TableDataAdapter
         
         self.workbook = workbook  # Output workbook (writable)
         self.worksheet = worksheet  # Output worksheet (writable)
@@ -227,13 +227,25 @@ class LayoutBuilder:
         # 4. Header Builder - writes header data to NEW worksheet (unless skipped)
         if not self.skip_header_builder:
             # Convert styling_config dict to StylingConfigModel if needed
+            # BUT: If new format (columns + row_contexts), keep as dict!
             styling_model = self.styling_config
             if styling_model and not isinstance(styling_model, StylingConfigModel):
-                try:
-                    styling_model = StylingConfigModel(**styling_model)
-                except Exception as e:
-                    logger.warning(f"Could not create StylingConfigModel: {e}")
-                    styling_model = None
+                # Check if using NEW format (columns + row_contexts)
+                if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
+                    # New format: keep as dict, don't convert to model
+                    logger.info(f"Detected new styling format (columns + row_contexts) for {self.sheet_name}")
+                    pass  # Keep styling_model as dict
+                else:
+                    # Old format: convert to Pydantic model
+                    logger.warning(f"⚠️  Sheet '{self.sheet_name}' uses OLD styling format (header/data/footer sections)")
+                    logger.warning(f"   New ID-driven styling (StyleRegistry) only works with NEW format")
+                    logger.warning(f"   To enable new styling: Convert config to 'columns + row_contexts' format")
+                    logger.warning(f"   See styling_bundle.Invoice in config for NEW format example")
+                    try:
+                        styling_model = StylingConfigModel(**styling_model)
+                    except Exception as e:
+                        logger.warning(f"Could not create StylingConfigModel: {e}")
+                        styling_model = None
 
             # Get bundled columns from sheet_config (bundled config v2.1 format)
             # These are in layout_config -> sheet_config -> 'structure' -> 'columns'
@@ -308,7 +320,7 @@ class LayoutBuilder:
             logger.debug(f"[LayoutBuilder DEBUG] self.provided_data_source_type = {self.provided_data_source_type}")
             logger.debug(f"[LayoutBuilder DEBUG] self.provided_data_source = {type(self.provided_data_source) if self.provided_data_source is not None else None}")
             
-            # Primary path: UseTableDataAdapter-provided resolved_data (modern approach)
+            # Primary path: Use TableDataAdapter-provided resolved_data (modern approach)
             # This is the RECOMMENDED method - data is already prepared
             if self.provided_resolved_data:
                 logger.info(f"Using resolver-provided resolved_data (modern approach)")
@@ -333,8 +345,8 @@ class LayoutBuilder:
             else:
                 # LEGACY PATH - DEPRECATED
                 # This logic is maintained for backward compatibility but should be replaced
-                # by using BuilderConfigResolver +TableDataAdapter in all calling code
-                logger.warning(f"Using legacy data source resolution. Consider using BuilderConfigResolver +TableDataAdapter instead")
+                # by using BuilderConfigResolver + TableDataAdapter in all calling code
+                logger.warning(f"Using legacy data source resolution. Consider using BuilderConfigResolver + TableDataAdapter instead")
                 data_source_indicator = self.sheet_config.get("data_source")
                 data_to_fill = None
                 data_source_type = None
@@ -560,7 +572,26 @@ class LayoutBuilder:
     
     def _apply_footer_row_height(self, footer_row: int, styling_config):
         """Helper method to apply footer height to a single footer row."""
-        if not styling_config or not styling_config.rowHeights:
+        if not styling_config:
+            return
+        
+        # Handle NEW format (dict with row_contexts)
+        if isinstance(styling_config, dict) and 'row_contexts' in styling_config:
+            row_contexts = styling_config.get('row_contexts', {})
+            footer_context = row_contexts.get('footer', {})
+            footer_height = footer_context.get('row_height')
+            
+            if footer_height is not None and footer_row > 0:
+                try:
+                    h_val = float(footer_height)
+                    if h_val > 0:
+                        self.worksheet.row_dimensions[footer_row].height = h_val
+                except (ValueError, TypeError):
+                    pass
+            return
+        
+        # Handle OLD format (Pydantic model with rowHeights)
+        if not hasattr(styling_config, 'rowHeights') or not styling_config.rowHeights:
             return
         
         row_heights_cfg = styling_config.rowHeights

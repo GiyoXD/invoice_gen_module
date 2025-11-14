@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
 from ..styling.style_applier import apply_header_style, apply_cell_style
+from ..styling.style_registry import StyleRegistry
+from ..styling.cell_styler import CellStyler
 from ..utils.layout import calculate_header_dimensions
 from openpyxl.utils import get_column_letter
 
@@ -31,6 +33,22 @@ class HeaderBuilderStyler:
         self.worksheet = worksheet
         self.start_row = start_row
         self.sheet_styling_config = sheet_styling_config
+        
+        # Initialize StyleRegistry and CellStyler for ID-driven styling
+        self.style_registry = None
+        self.cell_styler = CellStyler()
+        if sheet_styling_config:
+            try:
+                # Try to create registry from styling_config (if it has columns/row_contexts)
+                styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
+                if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
+                    self.style_registry = StyleRegistry(styling_dict)
+                    logger.info("StyleRegistry initialized successfully for HeaderBuilder")
+                else:
+                    logger.warning(f"⚠️  HeaderBuilder: OLD format detected - StyleRegistry NOT initialized")
+                    logger.warning(f"   Falling back to legacy style_applier methods")
+            except Exception as e:
+                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
         
         # Convert bundled columns to internal format if provided
         if bundled_columns:
@@ -73,14 +91,33 @@ class HeaderBuilderStyler:
             max_col = max(max_col, cell_col + colspan - 1)
 
             cell = self.worksheet.cell(row=cell_row, column=cell_col, value=text)
-            apply_header_style(cell, self.sheet_styling_config)
             
-            context = {
-                "col_id": cell_id,
-                "col_idx": cell_col,
-                "is_header": True
-            }
-            apply_cell_style(cell, self.sheet_styling_config, context)
+            # Use StyleRegistry if available, otherwise fall back to legacy styling
+            if self.style_registry and cell_id:
+                try:
+                    # Check if column is defined
+                    if not self.style_registry.has_column(cell_id):
+                        logger.warning(f"❌ Column '{cell_id}' not found in StyleRegistry! Available columns: {list(self.style_registry.columns.keys())}")
+                        logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{cell_id}")
+                    
+                    # Get column-specific header style (column base + header context)
+                    style = self.style_registry.get_style(cell_id, context='header')
+                    # Validate alignment for header cells
+                    if 'alignment' not in style or style['alignment'] is None:
+                        logger.warning(f"⚠️  [{self.worksheet.title}] HEADER Cell {cell.coordinate} ({cell_id}): NO alignment!")
+                        logger.warning(f"   → Add 'alignment' to styling_bundle.{self.worksheet.title}.columns.{cell_id}")
+                    self.cell_styler.apply(cell, style)
+                    logger.debug(f"Applied StyleRegistry style to header cell {cell_id}")
+                except Exception as style_err:
+                    logger.warning(f"StyleRegistry failed for header cell {cell_id}, falling back to legacy: {style_err}")
+                    apply_header_style(cell, self.sheet_styling_config)
+                    context = {"col_id": cell_id, "col_idx": cell_col, "is_header": True}
+                    apply_cell_style(cell, self.sheet_styling_config, context)
+            else:
+                # Legacy styling path
+                apply_header_style(cell, self.sheet_styling_config)
+                context = {"col_id": cell_id, "col_idx": cell_col, "is_header": True}
+                apply_cell_style(cell, self.sheet_styling_config, context)
 
             if cell_id:
                 column_map[text] = get_column_letter(cell_col)

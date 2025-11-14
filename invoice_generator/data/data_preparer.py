@@ -120,21 +120,30 @@ def _apply_fallback(
     """
     Applies a fallback value to the row_dict based on the DAF_mode.
     
-    Supports both legacy format (fallback_on_DAF/fallback_on_none) and 
-    bundled config format (fallback).
+    Supports multiple fallback formats:
+    1. Bundled config with mode-specific fallbacks:
+       "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"
+    2. Bundled config with single fallback (same for both modes):
+       "fallback": "LEATHER"
+    3. Legacy format (same as #1)
     """
-    # Try bundled config format first (single 'fallback' key)
+    # Priority 1: Check for mode-specific fallback keys (supports both DAF and non-DAF)
+    if DAF_mode:
+        if 'fallback_on_DAF' in mapping_rule:
+            row_dict[target_col_idx] = mapping_rule['fallback_on_DAF']
+            return
+    else:
+        if 'fallback_on_none' in mapping_rule:
+            row_dict[target_col_idx] = mapping_rule['fallback_on_none']
+            return
+    
+    # Priority 2: Try single 'fallback' key (same value for both modes)
     if 'fallback' in mapping_rule:
         row_dict[target_col_idx] = mapping_rule['fallback']
         return
     
-    # Fall back to legacy format with mode-specific keys
-    if DAF_mode:
-        fallback_key = "fallback_on_DAF"
-    else:
-        fallback_key = "fallback_on_none"
-        
-    row_dict[target_col_idx] = mapping_rule.get(fallback_key) or mapping_rule.get("fallback_on_none")
+    # Priority 3: Fallback to fallback_on_none if nothing else found
+    row_dict[target_col_idx] = mapping_rule.get("fallback_on_none")
 
 def prepare_data_rows(
     data_source_type: str,

@@ -13,6 +13,8 @@ from invoice_generator.utils.layout import apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
 from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
 from invoice_generator.styling.style_applier import apply_cell_style
+from invoice_generator.styling.style_registry import StyleRegistry
+from invoice_generator.styling.cell_styler import CellStyler
 # FooterBuilder is now called by LayoutBuilder (proper Director pattern)
 from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, FORMAT_GENERAL, FORMAT_TEXT, FORMAT_NUMBER_COMMA_SEPARATED1, FORMAT_NUMBER_COMMA_SEPARATED2
 
@@ -43,7 +45,7 @@ class DataTableBuilderStyler:
         Args:
             worksheet: The worksheet to write to.
             header_info: Header information with column maps.
-            resolved_data: The data prepared byTableDataAdapter.
+            resolved_data: The data prepared by TableDataAdapter.
             sheet_styling_config: The styling configuration for the sheet.
         """
         self.worksheet = worksheet
@@ -60,6 +62,27 @@ class DataTableBuilderStyler:
         
         self.col_id_map = header_info.get('column_id_map', {})
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
+        
+        # Initialize StyleRegistry and CellStyler for ID-driven styling
+        self.style_registry = None
+        self.cell_styler = CellStyler()
+        if sheet_styling_config:
+            try:
+                styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
+                if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
+                    self.style_registry = StyleRegistry(styling_dict)
+                    logger.info("StyleRegistry initialized successfully for DataTableBuilder")
+                else:
+                    logger.warning(f"⚠️  DataTableBuilder: OLD format detected - StyleRegistry NOT initialized")
+                    logger.warning(f"   Falling back to legacy style_applier methods")
+            except Exception as e:
+                logger.warning(f"Could not initialize StyleRegistry: {e}")
+                styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
+                if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
+                    self.style_registry = StyleRegistry(styling_dict)
+                    logger.info("StyleRegistry initialized successfully for DataTableBuilder")
+            except Exception as e:
+                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
         
         # Static content is now injected into data_rows by TableDataResolver
         # No need to handle it separately here
@@ -88,6 +111,9 @@ class DataTableBuilderStyler:
                 data_row_indices_written.append(current_row_idx)
                 
                 row_data = self.data_rows[i]
+                
+                # First, write columns that have data
+                columns_with_data = set(row_data.keys())
 
                 # Write all columns for this row (including static if present in row_data)
                 for col_idx, value in row_data.items():
@@ -100,7 +126,63 @@ class DataTableBuilderStyler:
                             cell.value = formula_str
                         else:
                             cell.value = value
-                    # apply_cell_style(...) # Styling logic can be added here
+                        
+                        # Apply styling using StyleRegistry if available
+                        col_id = self.idx_to_id_map.get(col_idx)
+                        if not col_id:
+                            logger.error(f"❌ CRITICAL: Column index {col_idx} has NO column ID mapping!")
+                            logger.error(f"   Available mappings: {self.col_id_map}")
+                            logger.error(f"   This cell will have NO styling applied!")
+                            continue
+                        
+                        if self.style_registry:
+                            try:
+                                # Check if column is defined
+                                if not self.style_registry.has_column(col_id):
+                                    logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry! Available: {list(self.style_registry.columns.keys())}")
+                                    logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{col_id}")
+                                
+                                # Use 'data' context for regular data rows
+                                style = self.style_registry.get_style(col_id, context='data')
+                                # Validate critical styling properties
+                                if 'alignment' not in style or style['alignment'] is None:
+                                    logger.warning(f"⚠️  [{self.worksheet.title}] Row {current_row_idx} Cell {cell.coordinate} ({col_id}): NO alignment in style!")
+                                    logger.warning(f"   → Fix: Add 'alignment' to styling_bundle.{self.worksheet.title}.columns.{col_id}")
+                                    logger.warning(f"   → Example: \"alignment\": \"center\" or \"left\" or \"right\"")
+                                self.cell_styler.apply(cell, style)
+                            except Exception as style_err:
+                                logger.debug(f"StyleRegistry failed for data cell {col_id}, fallback: {style_err}")
+                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
+                                apply_cell_style(cell, self.sheet_styling_config, context)
+                        else:
+                            # Legacy styling fallback
+                            if col_id:
+                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
+                                apply_cell_style(cell, self.sheet_styling_config, context)
+                
+                # Handle columns defined in header but missing from row_data (auto-number columns)
+                all_column_indices = set(self.col_id_map.values())
+                missing_columns = all_column_indices - columns_with_data
+                
+                for col_idx in missing_columns:
+                    col_id = self.idx_to_id_map.get(col_idx)
+                    if col_id and 'no' in col_id.lower():  # Auto-number columns like 'col_no'
+                        cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
+                        if not isinstance(cell, MergedCell):
+                            # Auto-number: row number starting from 1
+                            cell.value = i + 1
+                            
+                            # Apply styling
+                            if self.style_registry:
+                                try:
+                                    style = self.style_registry.get_style(col_id, context='data')
+                                    self.cell_styler.apply(cell, style)
+                                except Exception as style_err:
+                                    logger.debug(f"StyleRegistry failed for auto-numbered cell {col_id}: {style_err}")
+                            else:
+                                # Legacy styling fallback
+                                context = {"col_id": col_id, "col_idx": col_idx, "is_header": False}
+                                apply_cell_style(cell, self.sheet_styling_config, context)
 
             # --- Merging and other logic can be added here if needed ---
 

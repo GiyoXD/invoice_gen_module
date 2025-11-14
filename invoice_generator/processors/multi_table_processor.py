@@ -23,8 +23,18 @@ class MultiTableProcessor(SheetProcessor):
         """
         logger.info(f"Processing sheet '{self.sheet_name}' as multi-table/packing list")
         
-        # Get all tables data
-        all_tables_data = self.invoice_data.get('processed_tables_data', {})
+        # Create a resolver with FULL invoice_data (let resolver handle extraction)
+        initial_resolver = BuilderConfigResolver(
+            config_loader=self.config_loader,
+            sheet_name=self.sheet_name,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,  # Pass FULL data, not pre-sliced
+            pallets=0
+        )
+        
+        # Use resolver to get all tables data (proper architecture)
+        all_tables_data = initial_resolver._get_data_source_for_type('processed_tables_multi')
         if not all_tables_data or not isinstance(all_tables_data, dict):
             logger.warning(f"'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'")
             return True  # Not a failure, just nothing to do
@@ -36,10 +46,19 @@ class MultiTableProcessor(SheetProcessor):
         from ..builders.template_state_builder import TemplateStateBuilder
         logger.info(f"[MultiTableProcessor] Capturing template state once for all tables")
         
-        # Get template dimensions from sheet_config
-        template_header_end_row = self.sheet_config.get('header_row', 20) if self.sheet_config else 20
-        template_footer_start_row = self.sheet_config.get('footer_row', 25) if self.sheet_config else 25
+        # Get template header_row from sheet_config.layout_config.structure - this is CRITICAL
+        layout_config = self.sheet_config.get('layout_config', {}) if self.sheet_config else {}
+        structure_config = layout_config.get('structure', {})
+        
+        if 'header_row' not in structure_config:
+            logger.critical(f"CRITICAL: 'header_row' not found in sheet_config['layout_config']['structure'] for '{self.sheet_name}'. Cannot capture template state.")
+            return False
+        
+        template_header_end_row = structure_config['header_row']
+        template_footer_start_row = template_header_end_row + 1  # Footer starts right after header
         num_header_cols = 20  # Conservative estimate
+        
+        logger.debug(f"Template dimensions: header_end_row={template_header_end_row}, footer_start_row={template_footer_start_row}")
         
         try:
             template_state_builder = TemplateStateBuilder(
@@ -50,7 +69,7 @@ class MultiTableProcessor(SheetProcessor):
             )
             logger.debug(f"Template state captured: {len(template_state_builder.header_state)} header rows, {len(template_state_builder.footer_state)} footer rows")
         except Exception as e:
-            logger.error(f"Failed to capture template state: {e}")
+            logger.critical(f"CRITICAL: Failed to capture template state: {e}")
             return False
         
         # Track the current row position as we build multiple tables
@@ -73,34 +92,26 @@ class MultiTableProcessor(SheetProcessor):
             is_last_table = (i == len(table_keys) - 1)
             logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
             
-            # Prepare invoice_data for this specific table
-            table_invoice_data = {
-                'processed_tables_data': {
-                    str(table_key): all_tables_data[str(table_key)]
-                }
-            }
-            
-            # Use BuilderConfigResolver to prepare bundles for this table
+            # Create resolver for THIS table - resolver will extract table data automatically
             resolver = BuilderConfigResolver(
                 config_loader=self.config_loader,
                 sheet_name=self.sheet_name,
                 worksheet=self.output_worksheet,
                 args=self.args,
-                invoice_data=table_invoice_data,
+                invoice_data=self.invoice_data,  # Pass FULL data - resolver extracts table via table_key
                 pallets=0  # Per-table, not grand total
             )
             
             # Get the bundles
             style_config = resolver.get_style_bundle()
-            logger.debug(f"Style config: {style_config}")
             context_config = resolver.get_context_bundle(
-                invoice_data=table_invoice_data,
                 enable_text_replacement=False
             )
             layout_config = resolver.get_layout_bundle()
             
-            # CRITICAL: Use TableDataResolver to prepare data instead of passing raw data
-            # DataTableBuilder expects resolved_data with data_rows, not raw data_source
+            # CRITICAL: Use TableDataAdapter to prepare data
+            # Resolver's get_data_bundle(table_key) extracts just this table's data
+            # TableDataAdapter then transforms it into data_rows
             table_data_resolver = resolver.get_table_data_resolver(table_key=str(table_key))
             resolved_data = table_data_resolver.resolve()
             
@@ -188,13 +199,21 @@ class MultiTableProcessor(SheetProcessor):
             gt_layout_config = grand_total_resolver.get_layout_bundle()
             
             # Get styling model from style bundle
+            # IMPORTANT: Keep NEW format (columns + row_contexts) as dict, don't convert!
             styling_model = gt_style_config.get('styling_config')
             if styling_model and not isinstance(styling_model, StylingConfigModel):
-                try:
-                    styling_model = StylingConfigModel(**styling_model)
-                except Exception as e:
-                    logger.warning(f"Could not create StylingConfigModel: {e}")
-                    styling_model = None
+                # Check if NEW format (columns + row_contexts) - if so, keep as dict
+                if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
+                    # NEW format: keep as dict for StyleRegistry
+                    logger.debug("Grand Total Row: Using NEW styling format (columns + row_contexts)")
+                    pass  # Keep styling_model as dict
+                else:
+                    # OLD format: convert to model
+                    try:
+                        styling_model = StylingConfigModel(**styling_model)
+                    except Exception as e:
+                        logger.warning(f"Could not create StylingConfigModel: {e}")
+                        styling_model = None
             
             # Get footer config and mappings from layout bundle
             footer_config = gt_layout_config.get('footer', {})

@@ -55,12 +55,12 @@ class SingleTableProcessor(SheetProcessor):
         
         logger.debug(f"header_info keys: {list(data_bundle.get('header_info', {}).keys())}")
         
-        # NEW: UseTableDataAdapter to prepare data
+        # NEW: Use TableDataAdapter to prepare data
         try:
             table_resolver = resolver.get_table_data_resolver()
             resolved_data = table_resolver.resolve()
             layout_config['resolved_data'] = resolved_data
-            logger.info("Successfully resolved table data usingTableDataAdapter")
+            logger.info("Successfully resolved table data using TableDataAdapter")
         except Exception as e:
             logger.error(f"Error resolving table data: {e}")
             import traceback

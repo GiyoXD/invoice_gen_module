@@ -56,98 +56,210 @@
     },
     
     "Invoice": {
-      "header": {
-        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 35
-      },
-      "data": {
-        "font": {"size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 35
-      },
-      "footer": {
-        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center"},
-        "row_height": 35
-      },
-      "dimensions": {
-        "_comment": "Column widths - only specify to override template defaults",
-        "column_widths": {
-          "col_po": 28,
-          "col_desc": 20
-        }
-      },
-      "column_specific": {
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
         "col_static": {
-          "alignment": {"horizontal": "center", "vertical": "center"}
+          "format": "@",
+          "alignment": "center",
+          "width": 24.71
+        },
+        "col_po": {
+          "format": "@",
+          "alignment": "center",
+          "width": 28
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "width": 22.14
         },
         "col_desc": {
-          "alignment": {"horizontal": "center", "vertical": "center"}
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 20
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "right",
+          "width": 15
+        },
+        "col_unit_price": {
+          "format": "#,##0.00",
+          "alignment": "right",
+          "width": 15
+        },
+        "col_amount": {
+          "format": "#,##0.00",
+          "alignment": "right",
+          "width": 18
+        }
+      },
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35
         }
       }
     },
     
     "Contract": {
-      "header": {
-        "font": {"bold": true, "size": 16, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 36
-      },
-      "data": {
-        "font": {"size": 14, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 30
-      },
-      "footer": {
-        "font": {"bold": true, "size": 16, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center"},
-        "row_height": 36
-      },
-      "dimensions": {
-        "column_widths": {
-          "col_no": 14,
-          "col_qty_sf": 27,
-          "col_unit_price": 28,
-          "col_amount": 47
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
+        "col_no": {
+          "format": "@",
+          "alignment": "center",
+          "width": 14
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "width": 27
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 27
+        },
+        "col_unit_price": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 28
+        },
+        "col_amount": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 47
         }
       },
-      "column_specific": {}
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 16,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 36
+        },
+        "data": {
+          "bold": false,
+          "font_size": 14,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 30
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 16,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 36
+        }
+      }
     },
     
     "Packing list": {
-      "header": {
-        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 27
-      },
-      "data": {
-        "font": {"size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center", "wrap_text": true},
-        "row_height": 27
-      },
-      "footer": {
-        "font": {"bold": true, "size": 12, "name": "Times New Roman"},
-        "alignment": {"horizontal": "center", "vertical": "center"},
-        "row_height": 27
-      },
-      "before_footer": {
-        "row_height": 27
-      },
-      "dimensions": {
-        "column_widths": {
-          "col_static": 24.71,
-          "col_po": 17,
-          "col_item": 22.14,
-          "col_desc": 26,
-          "col_qty_pcs": 15,
-          "col_qty_sf": 15,
-          "col_net": 15,
-          "col_gross": 15,
-          "col_cbm": 15
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
+        "col_static": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 24.71
+        },
+        "col_po": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 17
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 22.14
+        },
+        "col_desc": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 26
+        },
+        "col_qty_header": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 15
+        },
+        "col_qty_pcs": {
+          "format": "#,##0",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_net": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_gross": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_cbm": {
+          "format": "0.00",
+          "alignment": "center",
+          "width": 15
         }
       },
-      "column_specific": {
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        },
+        "before_footer": {
+          "row_height": 27
+        }
+      },
+      "_legacy_column_specific": {
         "col_static": {
           "alignment": {"horizontal": "left", "vertical": "top"}
         }
@@ -178,7 +290,7 @@
         "mappings": {
           "po": {"column": "col_po", "source_key": 0},
           "item": {"column": "col_item", "source_key": 1},
-          "description": {"column": "col_desc", "source_key": 3, "fallback": "LEATHER"},
+          "description": {"column": "col_desc", "source_key": 3, "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"},
           "sqft": {"column": "col_qty_sf", "source_value": "sqft_sum"},
           "unit_price": {"column": "col_unit_price", "source_key": 2},
           "amount": {"column": "col_amount", "formula": "{col_qty_sf} * {col_unit_price}"}
@@ -228,7 +340,7 @@
         "mappings": {
           "po": {"column": "col_po", "source_key": 0},
           "item": {"column": "col_item", "source_key": 1},
-          "desc": {"column": "col_desc", "source_key": 3, "fallback": "LEATHER"},
+          "desc": {"column": "col_desc", "source_key": 3, "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"},
           "sqft": {"column": "col_qty_sf", "source_value": "sqft_sum"},
           "unit_price": {"column": "col_unit_price", "source_key": 2},
           "amount": {"column": "col_amount", "formula": "{col_qty_sf} * {col_unit_price}"}
@@ -277,7 +389,7 @@
         "mappings": {
           "po": {"column": "col_po"},
           "item": {"column": "col_item"},
-          "description": {"column": "col_desc", "fallback": "LEATHER"},
+          "description": {"column": "col_desc", "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"},
           "pcs": {"column": "col_qty_pcs"},
           "sqft": {"column": "col_qty_sf"},
           "net": {"column": "col_net"},
