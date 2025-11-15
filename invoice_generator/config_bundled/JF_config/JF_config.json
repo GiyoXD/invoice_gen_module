@@ -376,7 +376,7 @@
       "structure": {
         "header_row": 21,
         "columns": [
-          {"id": "col_static", "header": "Mark & Nº", "rowspan": 2},
+          {"id": "col_static", "header": "Mark & Nº", "rowspan": 2, "colspan": 2},
           {"id": "col_po", "header": "P.O Nº", "rowspan": 2, "format": "@"},
           {"id": "col_item", "header": "ITEM Nº", "rowspan": 2, "format": "@"},
           {"id": "col_desc", "header": "Description", "rowspan": 2, "format": "@"},

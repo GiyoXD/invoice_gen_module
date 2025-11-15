@@ -383,6 +383,7 @@ class BuilderConfigResolver:
         column_map = {}
         column_id_map = {}
         column_formats = {}
+        column_colspan = {}  # Track colspan for each column ID
         
         current_idx = 1
         
@@ -390,6 +391,7 @@ class BuilderConfigResolver:
             col_id = col_def.get('id', f'col_{current_idx}')
             header = col_def.get('header', '')
             fmt = col_def.get('format')
+            colspan = col_def.get('colspan', 1)
             children = col_def.get('children', [])
             
             # If column has children, process each child
@@ -397,6 +399,9 @@ class BuilderConfigResolver:
                 # Parent column gets its own entry (for merged cell reference)
                 column_map[header] = current_idx
                 column_id_map[col_id] = current_idx
+                
+                # Parent column spans across all children
+                column_colspan[col_id] = len(children)
                 
                 # Process each child column
                 for child_def in children:
@@ -410,6 +415,9 @@ class BuilderConfigResolver:
                     if child_fmt:
                         column_formats[child_id] = child_fmt
                     
+                    # Children columns don't span (colspan=1)
+                    column_colspan[child_id] = 1
+                    
                     current_idx += 1
             else:
                 # Simple column without children
@@ -419,7 +427,13 @@ class BuilderConfigResolver:
                 if fmt:
                     column_formats[col_id] = fmt
                 
-                current_idx += 1
+                # Store colspan for this column
+                column_colspan[col_id] = colspan
+                
+                # Increment by colspan to skip the physical columns occupied by the merge
+                # Example: col_static at column 1 with colspan=2 occupies columns 1-2,
+                # so next column (col_po) should start at column 3
+                current_idx += colspan
         
         # second_row_index represents the second row of the header (where data writing starts after)
         # If header is at row N, second row is at N+1
@@ -428,7 +442,8 @@ class BuilderConfigResolver:
             'column_map': column_map,
             'column_id_map': column_id_map,
             'num_columns': current_idx - 1,  # Total columns processed
-            'column_formats': column_formats
+            'column_formats': column_formats,
+            'column_colspan': column_colspan  # Colspan info for automatic merging
         }
     
     def _get_data_source_for_type(self, data_source_type: str) -> Any:

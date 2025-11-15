@@ -298,7 +298,7 @@ class TemplateStateBuilder:
         # Find the true max row with content by looking for contiguous ACTUAL content (values or merges)
         # Stop after finding N consecutive empty rows (indicates end of footer)
         # Only check for VALUES or MERGES, not just styling (to avoid capturing 180 styled-but-empty rows)
-        MAX_EMPTY_ROWS_BEFORE_STOP = 3
+        MAX_EMPTY_ROWS_BEFORE_STOP = 10
         consecutive_empty_rows = 0
         footer_end_row = footer_start_row
         
@@ -394,11 +394,8 @@ class TemplateStateBuilder:
         )
         
         if total_non_empty_cells == 0:
-            logger.warning(f"warning!!  WARNING: Template footer capture found NO content!")
-            logger.warning(f"   Footer range: rows {footer_start_row}-{footer_end_row} ({len(self.footer_state)} rows)")
-            logger.warning(f"   All {len(self.footer_state)} footer rows are EMPTY")
-            logger.warning(f"   Check if footer_row config points to the correct row in template")
-            logger.warning(f"   Template may have blank rows between header and actual footer content")
+            logger.debug(f"Template footer capture: {len(self.footer_state)} rows (all blank/empty)")
+            logger.debug(f"   This is OK - blank footer rows will be preserved and restored")
         
         logger.debug(f"  [OK] Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}, non-empty cells: {total_non_empty_cells}")
 

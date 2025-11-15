@@ -33,6 +33,7 @@ class HeaderBuilderStyler:
         self.worksheet = worksheet
         self.start_row = start_row
         self.sheet_styling_config = sheet_styling_config
+        self.bundled_columns_original = bundled_columns  # Store for later reference
         
         # Initialize StyleRegistry and CellStyler for ID-driven styling
         self.style_registry = None
@@ -86,6 +87,14 @@ class HeaderBuilderStyler:
         max_col = 0
         column_map = {}
         column_id_map = {}
+        column_colspan = {}  # Track colspan for each column ID (excluding parents with children)
+        
+        # Identify parent columns (those with children) - they should NOT be in column_colspan
+        parent_column_ids = set()
+        if self.bundled_columns_original:
+            for col in self.bundled_columns_original:
+                if 'children' in col and col['children']:
+                    parent_column_ids.add(col.get('id'))
 
         for cell_config in self.header_layout_config:
             row_offset = cell_config.get('row', 0)
@@ -101,7 +110,15 @@ class HeaderBuilderStyler:
             last_row_index = max(last_row_index, cell_row + rowspan - 1)
             max_col = max(max_col, cell_col + colspan - 1)
 
-            cell = self.worksheet.cell(row=cell_row, column=cell_col, value=text)
+            # Get cell (don't write value yet if it's going to be merged)
+            cell = self.worksheet.cell(row=cell_row, column=cell_col)
+            
+            # Only write value if cell is not already a MergedCell
+            from openpyxl.cell.cell import MergedCell
+            if not isinstance(cell, MergedCell):
+                cell.value = text
+            else:
+                logger.debug(f"Skipping value write to {cell.coordinate} - already a MergedCell")
             
             # Use StyleRegistry (strict - no legacy fallback)
             if not self.style_registry or not cell_id:
@@ -130,6 +147,9 @@ class HeaderBuilderStyler:
             if cell_id:
                 column_map[text] = get_column_letter(cell_col)
                 column_id_map[cell_id] = cell_col
+                # Only store colspan for NON-PARENT columns (parents with children shouldn't merge data/footer)
+                if cell_id not in parent_column_ids:
+                    column_colspan[cell_id] = colspan
 
             if rowspan > 1 or colspan > 1:
                 self.worksheet.merge_cells(start_row=cell_row, start_column=cell_col,
@@ -140,7 +160,8 @@ class HeaderBuilderStyler:
             'second_row_index': last_row_index,
             'column_map': column_map,
             'column_id_map': column_id_map,
-            'num_columns': max_col
+            'num_columns': max_col,
+            'column_colspan': column_colspan  # Add colspan info for automatic merging
         }
     
     def _convert_bundled_columns(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -194,6 +215,7 @@ class HeaderBuilderStyler:
                     'rowspan': rowspan,
                     'colspan': colspan
                 })
-                col_index += 1
+                # Increment by colspan to skip physical columns occupied by merge
+                col_index += colspan
         
         return headers

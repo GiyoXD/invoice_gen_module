@@ -65,6 +65,7 @@ class DataTableBuilderStyler:
         
         self.col_id_map = header_info.get('column_id_map', {})
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
+        self.column_colspan = header_info.get('column_colspan', {})  # Colspan for automatic merging
         
         # Initialize StyleRegistry and CellStyler for ID-driven styling
         self.style_registry = None
@@ -190,6 +191,24 @@ class DataTableBuilderStyler:
                             
                             style = self.style_registry.get_style(col_id, context='data')
                             self.cell_styler.apply(cell, style)
+
+            # --- Apply Horizontal Merges (based on colspan from header structure) ---
+            if self.column_colspan:
+                for row_idx in range(data_start_row, data_end_row + 1):
+                    for col_id, colspan in self.column_colspan.items():
+                        if colspan > 1:  # Only merge if colspan > 1
+                            col_idx = self.col_id_map.get(col_id)
+                            if col_idx:
+                                # Merge from col_idx to col_idx + colspan - 1
+                                start_col = col_idx
+                                end_col = col_idx + colspan - 1
+                                self.worksheet.merge_cells(
+                                    start_row=row_idx,
+                                    start_column=start_col,
+                                    end_row=row_idx,
+                                    end_column=end_col
+                                )
+                                logger.debug(f"Merged data row {row_idx}, columns {start_col}-{end_col} for {col_id} (colspan={colspan})")
 
             # --- Apply Vertical Merges ---
             if self.vertical_merge_columns and actual_rows_to_process > 0:

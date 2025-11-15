@@ -337,7 +337,23 @@ class FooterBuilderStyler(BundleAccessor):
         # Apply styling using footer row context (same as main footer)
         self._apply_footer_cell_style(cell, column_id, row_context='footer')
         
-        # Apply merge if specified
+        # Apply automatic horizontal merges based on header colspan (NEW - same as main footer)
+        column_colspan = self.header_info.get('column_colspan', {})
+        if column_colspan:
+            for col_id, colspan in column_colspan.items():
+                if colspan > 1:  # Only merge if colspan > 1
+                    c_idx = column_map_by_id.get(col_id)
+                    if c_idx:
+                        end_col = c_idx + colspan - 1
+                        self.worksheet.merge_cells(
+                            start_row=row,
+                            start_column=c_idx,
+                            end_row=row,
+                            end_column=end_col
+                        )
+                        logger.debug(f"Auto-merged before_footer row {row}, columns {c_idx}-{end_col} for {col_id} (colspan={colspan})")
+        
+        # Apply merge if specified (manual merge from config)
         if merge_span > 0:
             from openpyxl.utils.cell import get_column_letter
             # merge_span is the TOTAL number of columns to span (including current cell)
@@ -359,6 +375,11 @@ class FooterBuilderStyler(BundleAccessor):
         for c_idx in range(1, num_columns + 1):
             cell = self.worksheet.cell(row=row, column=c_idx)
             col_id = idx_to_id_map.get(c_idx)
+            
+            # Skip cells without col_id (they're part of a colspan merge)
+            if not col_id:
+                logger.debug(f"[FooterBuilder._build_before_footer] Skipping {cell.coordinate} - no col_id (part of merge)")
+                continue
             
             # Skip border application for grand_total footers
             if footer_type == "grand_total":
@@ -465,12 +486,34 @@ class FooterBuilderStyler(BundleAccessor):
         for c_idx in range(1, num_columns + 1):
             cell = self.worksheet.cell(row=current_footer_row, column=c_idx)
             col_id = idx_to_id_map.get(c_idx)
+            
+            # Skip cells without col_id (they're part of a colspan merge)
+            if not col_id:
+                logger.debug(f"[FooterBuilder._build_footer_common] Skipping {cell.coordinate} - no col_id (part of merge)")
+                continue
+                
             self._apply_footer_cell_style(cell, col_id, apply_border=(footer_type != "grand_total"))
             cells_styled += 1
         
         logger.debug(f"[FooterBuilder._build_footer_common] Applied styling to {cells_styled} cells")
 
-        # Apply merge rules
+        # Apply automatic horizontal merges based on header colspan
+        column_colspan = self.header_info.get('column_colspan', {})
+        if column_colspan:
+            for col_id, colspan in column_colspan.items():
+                if colspan > 1:  # Only merge if colspan > 1
+                    col_idx = column_map_by_id.get(col_id)
+                    if col_idx:
+                        end_col = col_idx + colspan - 1
+                        self.worksheet.merge_cells(
+                            start_row=current_footer_row,
+                            start_column=col_idx,
+                            end_row=current_footer_row,
+                            end_column=end_col
+                        )
+                        logger.debug(f"Auto-merged footer row {current_footer_row}, columns {col_idx}-{end_col} for {col_id} (colspan={colspan})")
+
+        # Apply manual merge rules (from config)
         merge_rules = self.footer_config.get("merge_rules", [])
         for rule in merge_rules:
             start_column_id = rule.get("start_column_id")
