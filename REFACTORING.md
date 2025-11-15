@@ -66,7 +66,7 @@ The logic currently in legacy files like `invoice_utils.py` will be migrated int
 | Main data writing loop in `fill_invoice_data` | `builders/table_builder.py` | **Content Writing:** This is the core logic for writing the main data table. |
 | `write_footer_row`, `write_summary_rows` | `builders/footer_builder.py` | **Footer Generation:** These functions construct the footer and summary sections. |
 | `_style_row_before_footer`, style constants | `styling/style_applier.py` | **Styling:** Centralizes all visual formatting logic. |
-| `safe_unmerge_block`, `apply_row_merges` | `utils/excel_operations.py` | **Generic Utilities:** Low-level, reusable `openpyxl` helper functions. |
+| `safe_unmerge_block`, `apply_horizontal_merge` | `utils/excel_operations.py` | **Generic Utilities:** Low-level, reusable `openpyxl` helper functions. |
 | `_to_numeric`, `_apply_fallback` | `utils/data_processing.py` | **Data Cleaning:** Small helpers for cleaning individual data points. |
 
 

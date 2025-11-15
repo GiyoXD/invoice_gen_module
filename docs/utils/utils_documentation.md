@@ -23,7 +23,7 @@ This is a large, multi-purpose module that acts as the primary toolkit for all E
 - **`unmerge_block(worksheet, start_row, end_row, num_cols)`**: Unmerges all cell ranges within a specified block of rows and columns.
 - **`safe_unmerge_block(...)`**: A safer version of `unmerge_block` that is more careful about not unmerging cells that are completely outside the target range.
 - **`merge_contiguous_cells_by_id(...)`**: A specialized function that finds and merges vertical cells within a single column that have the same value (e.g., merging all "Item A" cells in the "Item" column).
-- **`apply_row_merges(worksheet, row_num, ...)`**: Applies horizontal merges to a single row based on a set of rules from the configuration.
+- **`apply_horizontal_merge(worksheet, row_num, ...)`**: Applies horizontal merges to a single row based on a set of rules from the configuration.
 - **`apply_explicit_data_cell_merges_by_id(...)`**: Applies horizontal merges to data cells in a specific row, driven by column IDs.
 
 #### Styling and Formatting

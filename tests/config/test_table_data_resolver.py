@@ -14,7 +14,7 @@ from pathlib import Path
 
 from invoice_generator.config.config_loader import BundledConfigLoader
 from invoice_generator.config.builder_config_resolver import BuilderConfigResolver
-from invoice_generator.config.multi_table_data_adapter import TableDataAdapter
+from invoice_generator.config.table_value_adapter import TableDataAdapter
 
 
 class TestTableDataAdapter(unittest.TestCase):

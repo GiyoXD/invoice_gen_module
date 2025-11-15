@@ -48,106 +48,6 @@ def calculate_header_dimensions(header_layout: List[Dict[str, Any]]) -> Tuple[in
     num_cols = max(cell.get('col', 0) + cell.get('colspan', 1) for cell in header_layout)
     return (num_rows, num_cols)
 
-def fill_static_row(worksheet: Worksheet, row_num: int, num_cols: int, static_content_dict: Dict[str, Any], sheet_styling_config: Optional[StylingConfigModel] = None):
-    """
-    Fills a specific row with static content defined in a dictionary.
-    Delegates styling to the apply_cell_style function.
-
-    Args:
-        worksheet: The openpyxl Worksheet object.
-        row_num: The 1-based row index to fill.
-        num_cols: The total number of columns in the table context (for bounds checking).
-        static_content_dict: Dictionary where keys are column indices (as strings or ints)
-                             and values are the static content to write.
-        sheet_styling_config: The styling configuration for the sheet.
-    """
-    if not static_content_dict:
-        return  # Nothing to do
-    if row_num <= 0:
-        return
-
-    for col_key, value in static_content_dict.items():
-        target_col_index = None
-        try:
-            # Attempt to convert key to integer column index
-            target_col_index = int(col_key)
-            # Check if the column index is within the valid range
-            if 1 <= target_col_index <= num_cols:
-                cell = worksheet.cell(row=row_num, column=target_col_index)
-                cell.value = value
-                
-                # Delegate styling to apply_cell_style
-                context = {
-                    "col_idx": target_col_index,
-                    "is_static_row": True 
-                }
-                apply_cell_style(cell, sheet_styling_config, context)
-
-            else:
-                # Column index out of range, log warning?
-                pass
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid column key '{col_key}' in static content for row {row_num}: {e}")
-        except Exception as cell_err:
-            logger.error(f"Error writing static content to row {row_num}, column {target_col_index}: {cell_err}")
-
-def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
-    """
-    Applies horizontal merges to a specific row based on rules.
-
-    Args:
-        worksheet: The openpyxl Worksheet object.
-        row_num: The 1-based row index to apply merges to.
-        num_cols: The total number of columns in the table context.
-        merge_rules: Dictionary where keys are starting column indices (as strings or ints)
-                     and values are the number of columns to span (colspan).
-    """
-    if not merge_rules or row_num <= 0:
-        return # No rules or invalid row
-
-    try:
-        # Convert string keys to integers and sort for predictable application order
-        rules_with_int_keys = {int(k): v for k, v in merge_rules.items()}
-        sorted_keys = sorted(rules_with_int_keys.keys())
-    except (ValueError, TypeError) as e:
-        logger.warning(f"Invalid key format in merge_rules for row {row_num}: {e}. Keys must be numeric.")
-        return
-
-    for start_col in sorted_keys:
-        colspan_val = rules_with_int_keys[start_col]
-        try:
-            # Ensure colspan is an integer
-            colspan = int(colspan_val)
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid colspan value '{colspan_val}' for column {start_col} in row {row_num}. Must be numeric.")
-            continue
-
-        # Basic validation for start column and colspan
-        if not isinstance(start_col, int) or not isinstance(colspan, int) or start_col < 1 or colspan < 1:
-            continue
-
-        # Calculate end column, ensuring it doesn't exceed the table width
-        end_col = start_col + colspan - 1
-        if end_col > num_cols:
-            end_col = num_cols
-            # Check if clamping made the range invalid (start > end)
-            if start_col > end_col:
-                continue
-
-        try:
-            worksheet.merge_cells(start_row=row_num, start_column=start_col, end_row=row_num, end_column=end_col)
-            # Apply alignment to the top-left cell of the merged range
-            top_left_cell = worksheet.cell(row=row_num, column=start_col)
-            if not top_left_cell.alignment or top_left_cell.alignment.horizontal is None:
-                top_left_cell.alignment = CENTER_ALIGNMENT # Apply center alignment if none exists
-        except ValueError as ve:
-            # This can happen if trying to merge over an existing merged cell that wasn't properly unmerged
-            logger.warning(f"Failed to merge cells in row {row_num}, columns {start_col}-{end_col}: {ve}. "
-                          f"Cell range may already be merged or overlap with existing merge.")
-        except Exception as merge_err:
-            logger.error(f"Unexpected error merging cells in row {row_num}, columns {start_col}-{end_col}: {merge_err}")
-            traceback.print_exc()
-
 def merge_contiguous_cells_by_id(
     worksheet: Worksheet,
     start_row: int,
@@ -183,56 +83,6 @@ def merge_contiguous_cells_by_id(
             if row_idx <= end_row:
                 value_to_match = cell_value
 
-def apply_explicit_data_cell_merges_by_id(
-    worksheet: Worksheet,
-    row_num: int,
-    column_id_map: Dict[str, int],  # Maps column ID to its 1-based column index
-    num_total_columns: int,
-    merge_rules_data_cells: Dict[str, Dict[str, Any]], # e.g., {'col_item': {'rowspan': 2}}
-    sheet_styling_config: Optional[StylingConfigModel] = None,
-    DAF_mode: Optional[bool] = False
-):
-    """
-    Applies horizontal merges to data cells in a specific row based on column IDs.
-    """
-    if not merge_rules_data_cells or row_num <= 0:
-        return
-
-    # Loop through rules where the key is now the column ID
-    for col_id, rule_details in merge_rules_data_cells.items():
-        colspan_to_apply = rule_details.get("rowspan")
-
-        if not isinstance(colspan_to_apply, int) or colspan_to_apply <= 1:
-            continue
-        
-        # Get column index from the ID map
-        start_col_idx = column_id_map.get(col_id)
-        if not start_col_idx:
-            logger.warning(f"Warning: Could not find column for merge rule with ID '{col_id}'.")
-            continue
-            
-        end_col_idx = start_col_idx + colspan_to_apply - 1
-        end_col_idx = min(end_col_idx, num_total_columns)
-
-        if start_col_idx >= end_col_idx:
-            continue
-
-        try:
-            # Apply the new merge
-            worksheet.merge_cells(start_row=row_num, start_column=start_col_idx,
-                                  end_row=row_num, end_column=end_col_idx)
-            
-            # Style the anchor cell of the new merged range
-            anchor_cell = worksheet.cell(row=row_num, column=start_col_idx)
-            context = {
-                "col_id": col_id,
-                "col_idx": start_col_idx,
-                "DAF_mode": DAF_mode
-            }
-            apply_cell_style(anchor_cell, sheet_styling_config, context)
-
-        except Exception as e:
-            logger.error(f"Error applying explicit data cell merge for ID '{col_id}' on row {row_num}: {e}")
 
 def write_summary_rows(
     worksheet: Worksheet,
@@ -337,16 +187,16 @@ def write_summary_rows(
         # Helper function to apply styling without borders
         def apply_summary_style(cell, col_id):
             """Apply styling without borders for summary rows"""
-            if style_registry and cell_styler and col_id:
-                style = style_registry.get_style(col_id, context='footer')
-                # Remove borders by setting border_style to None
-                from copy import deepcopy
-                style_no_border = deepcopy(style)
-                style_no_border['border_style'] = None
-                cell_styler.apply(cell, style_no_border)
-            elif styling_config:
-                # Legacy fallback
-                apply_cell_style(cell, styling_config, {"col_id": col_id, "col_idx": cell.column, "is_footer": True})
+            if not style_registry or not cell_styler or not col_id:
+                logger.warning(f"Cannot apply summary style: style_registry={style_registry is not None}, cell_styler={cell_styler is not None}, col_id={col_id}")
+                return
+            
+            style = style_registry.get_style(col_id, context='footer')
+            # Remove borders by setting border_style to None
+            from copy import deepcopy
+            style_no_border = deepcopy(style)
+            style_no_border['border_style'] = None
+            cell_styler.apply(cell, style_no_border)
 
         # Write Buffalo Summary Row
         cell = worksheet.cell(row=buffalo_summary_row, column=label_col_idx, value="TOTAL OF:")

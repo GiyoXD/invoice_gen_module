@@ -34,7 +34,7 @@ This document provides a clear inventory of all functions within `invoice_utils.
     -   Assert that `worksheet.cell(row=row_num, column=1).value` is `'Label'`.
     -   Assert that `worksheet.cell(row=row_num, column=3).value` is `123`.
 
-#### **`apply_row_merges(worksheet, row_num, num_cols, merge_rules)`**
+#### **`apply_horizontal_merge(worksheet, row_num, num_cols, merge_rules)`**
 -   **Description:** Applies horizontal merges to a single row based on a configuration dictionary.
 -   **Testing Approach:**
     -   Provide a `merge_rules` dictionary (e.g., `{'1': 3}` to merge A:C).

@@ -212,7 +212,7 @@ class StyleRegistry:
                 logger.warning(f"   → {instruction}")
         
         if missing_props:
-            logger.error(f"💥 INCOMPLETE STYLE: col_id='{col_id}', context='{context}' - missing {missing_props}")
+            logger.error(f"BROKEN INCOMPLETE STYLE: col_id='{col_id}', context='{context}' - missing {missing_props}")
             logger.error(f"   → Merged style keys: {list(merged_style.keys())}")
             logger.error(f"   → This will cause CellStyler to skip applying this style!")
         

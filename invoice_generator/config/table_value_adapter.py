@@ -212,8 +212,8 @@ class TableDataAdapter:
             if 'source_value' in value:
                 legacy_value['value_key'] = value['source_value']
             
-            # Copy over other fields as-is
-            for other_key in ['fallback', 'type', 'formula_template', 'inputs', 'column_header_id', 'values', 'static_value']:
+            # Copy over other fields as-is (including fallback configurations)
+            for other_key in ['fallback', 'fallback_on_none', 'fallback_on_DAF', 'type', 'formula_template', 'inputs', 'column_header_id', 'values', 'static_value']:
                 if other_key in value:
                     legacy_value[other_key] = value[other_key]
             

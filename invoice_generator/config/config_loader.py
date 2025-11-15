@@ -119,15 +119,21 @@ class BundledConfigLoader:
         # Get sheet-specific styling
         sheet_styling = self._styling_bundle.get(sheet_name, {})
         
+        # DEBUG: Log what we're checking
+        logger.debug(f"get_styling_config for '{sheet_name}'")
+        logger.debug(f"Keys in sheet_styling: {list(sheet_styling.keys()) if isinstance(sheet_styling, dict) else 'NOT A DICT'}")
+        
         # Check if using NEW FORMAT (columns + row_contexts)
         if 'columns' in sheet_styling and 'row_contexts' in sheet_styling:
             # New format: return as-is, don't transform
+            logger.debug(f"NEW FORMAT detected - returning columns + row_contexts as-is")
             return {
                 'columns': sheet_styling['columns'],
                 'row_contexts': sheet_styling['row_contexts']
             }
         
         # OLD FORMAT: Transform nested bundled format to flat StylingConfigModel format
+        logger.debug(f"OLD FORMAT detected - transforming to StylingConfigModel format")
         # Get default styling to use as fallback
         defaults = self._styling_bundle.get('defaults', {})
         

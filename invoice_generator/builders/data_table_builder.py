@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 from invoice_generator.data.data_preparer import prepare_data_rows, parse_mapping_rules
 from invoice_generator.utils.layout import apply_column_widths
 from invoice_generator.styling.style_applier import apply_row_heights
-from invoice_generator.utils.layout import fill_static_row, apply_row_merges, merge_contiguous_cells_by_id, apply_explicit_data_cell_merges_by_id
+from invoice_generator.utils.layout import merge_contiguous_cells_by_id
+from invoice_generator.utils.merge_utils import merge_vertical_cells_in_range, apply_horizontal_merge_by_id
 # Legacy apply_cell_style removed - using only StyleRegistry + CellStyler
 from invoice_generator.styling.style_registry import StyleRegistry
 from invoice_generator.styling.cell_styler import CellStyler
@@ -37,7 +38,8 @@ class DataTableBuilderStyler:
         worksheet: Worksheet,
         header_info: Dict[str, Any],
         resolved_data: Dict[str, Any],
-        sheet_styling_config: Optional[StylingConfigModel] = None
+        sheet_styling_config: Optional[StylingConfigModel] = None,
+        vertical_merge_columns: Optional[List[str]] = None
     ):
         """
         Initialize the builder with resolved data.
@@ -52,6 +54,7 @@ class DataTableBuilderStyler:
         self.header_info = header_info
         self.resolved_data = resolved_data
         self.sheet_styling_config = sheet_styling_config
+        self.vertical_merge_columns = vertical_merge_columns or []
 
         # Extract commonly used values
         self.data_rows = resolved_data.get('data_rows', [])
@@ -180,7 +183,21 @@ class DataTableBuilderStyler:
                             style = self.style_registry.get_style(col_id, context='data')
                             self.cell_styler.apply(cell, style)
 
-            # --- Merging and other logic can be added here if needed ---
+            # --- Apply Vertical Merges ---
+            if self.vertical_merge_columns and actual_rows_to_process > 0:
+                logger.debug(f"Applying vertical merges to columns: {self.vertical_merge_columns}")
+                for col_id in self.vertical_merge_columns:
+                    col_idx = self.col_id_map.get(col_id)
+                    if col_idx:
+                        logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx}) from row {data_start_row} to {data_end_row}")
+                        merge_vertical_cells_in_range(
+                            worksheet=self.worksheet,
+                            scan_col=col_idx,
+                            start_row=data_start_row,
+                            end_row=data_end_row
+                        )
+                    else:
+                        logger.warning(f"⚠️  Vertical merge requested for column '{col_id}' but column not found in column_id_map")
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")

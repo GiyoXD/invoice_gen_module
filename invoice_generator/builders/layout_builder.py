@@ -227,20 +227,15 @@ class LayoutBuilder:
         # 4. Header Builder - writes header data to NEW worksheet (unless skipped)
         if not self.skip_header_builder:
             # Convert styling_config dict to StylingConfigModel if needed
-            # BUT: If new format (columns + row_contexts), keep as dict!
+            # BUT: If it's already in NEW format (has 'columns' and 'row_contexts'), keep it as-is!
             styling_model = self.styling_config
             if styling_model and not isinstance(styling_model, StylingConfigModel):
-                # Check if using NEW format (columns + row_contexts)
+                # Check if it's already in NEW format (columns + row_contexts)
                 if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
-                    # New format: keep as dict, don't convert to model
-                    logger.info(f"Detected new styling format (columns + row_contexts) for {self.sheet_name}")
-                    pass  # Keep styling_model as dict
+                    # NEW format: keep as dict, don't convert to StylingConfigModel
+                    logger.debug("Keeping NEW format styling (columns + row_contexts) as dict")
                 else:
-                    # Old format: convert to Pydantic model
-                    logger.warning(f"⚠️  Sheet '{self.sheet_name}' uses OLD styling format (header/data/footer sections)")
-                    logger.warning(f"   New ID-driven styling (StyleRegistry) only works with NEW format")
-                    logger.warning(f"   To enable new styling: Convert config to 'columns + row_contexts' format")
-                    logger.warning(f"   See styling_bundle.Invoice in config for NEW format example")
+                    # OLD format: convert to StylingConfigModel
                     try:
                         styling_model = StylingConfigModel(**styling_model)
                     except Exception as e:
@@ -305,7 +300,10 @@ class LayoutBuilder:
             sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
             add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
             static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
+            add_blank_before_ftr_flag = self.sheet_config.get("add_blank_before_footer", False)
+            static_content_before_ftr_dict = self.sheet_config.get("static_content_before_footer", {})
             merge_rules_after_hdr = self.sheet_config.get("merge_rules_after_header", {})
+            merge_rules_before_ftr = self.sheet_config.get("merge_rules_before_footer", {})
             merge_rules_footer = self.sheet_config.get("merge_rules_footer", {})
             data_cell_merging_rules = self.sheet_config.get("data_cell_merging_rule", None)
             
@@ -407,7 +405,8 @@ class LayoutBuilder:
                     worksheet=self.worksheet,
                     header_info=self.header_info,
                     resolved_data=dtb_data_config,
-                    sheet_styling_config=styling_model
+                    sheet_styling_config=styling_model,
+                    vertical_merge_columns=['col_desc']  # Always merge col_desc if all values are identical
                 )
 
                 logger.debug(f"Calling DataTableBuilder.build()")
@@ -572,26 +571,26 @@ class LayoutBuilder:
         if not styling_config:
             return
         
-        # Handle NEW format (dict with row_contexts)
-        if isinstance(styling_config, dict) and 'row_contexts' in styling_config:
-            row_contexts = styling_config.get('row_contexts', {})
-            footer_context = row_contexts.get('footer', {})
-            footer_height = footer_context.get('row_height')
-            
-            if footer_height is not None and footer_row > 0:
-                try:
-                    h_val = float(footer_height)
-                    if h_val > 0:
-                        self.worksheet.row_dimensions[footer_row].height = h_val
-                except (ValueError, TypeError):
-                    pass
+        # Handle both NEW format (dict with 'row_contexts') and OLD format (StylingConfigModel with rowHeights)
+        row_heights_cfg = None
+        if isinstance(styling_config, dict):
+            # NEW format: row heights are in row_contexts.footer.row_height
+            if 'row_contexts' in styling_config:
+                footer_context = styling_config['row_contexts'].get('footer', {})
+                if 'row_height' in footer_context:
+                    # NEW format stores height directly in context
+                    height = footer_context['row_height']
+                    if height:
+                        self.worksheet.row_dimensions[footer_row].height = height
+                        logger.debug(f"Applied footer height {height} to row {footer_row} (NEW format)")
+                return
+        elif hasattr(styling_config, 'rowHeights'):
+            # OLD format: StylingConfigModel with rowHeights attribute
+            row_heights_cfg = styling_config.rowHeights
+        
+        if not row_heights_cfg:
             return
         
-        # Handle OLD format (Pydantic model with rowHeights)
-        if not hasattr(styling_config, 'rowHeights') or not styling_config.rowHeights:
-            return
-        
-        row_heights_cfg = styling_config.rowHeights
         footer_height_config = row_heights_cfg.get("footer")
         match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
         

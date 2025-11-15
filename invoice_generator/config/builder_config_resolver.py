@@ -303,7 +303,7 @@ class BuilderConfigResolver:
             # - static_info: Column 1 static values, etc.
             # - static_content: Static content from layout_bundle (e.g., col_static)
         """
-        from .multi_table_data_adapter import TableDataAdapter
+        from .table_value_adapter import TableDataAdapter
         
         data_config = self.get_data_bundle(table_key=table_key)
         context_config = self.get_context_bundle()

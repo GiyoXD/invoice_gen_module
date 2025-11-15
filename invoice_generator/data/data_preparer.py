@@ -158,7 +158,28 @@ def prepare_data_rows(
 ) -> Tuple[List[Dict[int, Any]], List[int], bool, int]:
     """
     Corrected version with typo fix and improved fallback flexibility.
+    
+    Validates that description field has fallback values defined.
     """
+    # Validate description field has fallback - CRITICAL for proper invoice generation
+    desc_mapping = None
+    for field_name, mapping_rule in dynamic_mapping_rules.items():
+        # Find description field (can be named 'description', 'desc', etc.)
+        if 'desc' in field_name.lower() and isinstance(mapping_rule, dict):
+            desc_mapping = mapping_rule
+            break
+    
+    if desc_mapping:
+        has_fallback = any(key in desc_mapping for key in ['fallback_on_none', 'fallback_on_DAF', 'fallback'])
+        if not has_fallback:
+            logger.error(f"❌ CRITICAL: Description field '{field_name}' is missing fallback configuration!")
+            logger.error(f"   Description mapping: {desc_mapping}")
+            logger.error(f"   REQUIRED: At least one of 'fallback_on_none', 'fallback_on_DAF', or 'fallback' must be defined")
+            logger.error(f"   This can cause empty description cells when source data is None/missing")
+            logger.warning(f"⚠️  Add fallback to config: \"fallback_on_none\": \"LEATHER\", \"fallback_on_DAF\": \"LEATHER\"")
+    else:
+        logger.warning(f"⚠️  No description field found in dynamic_mapping_rules - this may cause issues")
+    
     data_rows_prepared = []
     pallet_counts_for_rows = []
     num_data_rows_from_source = 0

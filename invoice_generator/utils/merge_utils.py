@@ -201,7 +201,7 @@ def find_and_restore_merges_heuristic(workbook: openpyxl.Workbook,
 
     logger.info("Merge restoration process finished.")
 
-def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
+def apply_horizontal_merge(worksheet: Worksheet, row_num: int, num_cols: int, merge_rules: Optional[Dict[str, int]]):
     """
     Applies horizontal merges to a specific row based on a dictionary of rules.
     This is the only function needed for your request.
@@ -245,7 +245,11 @@ def apply_row_merges(worksheet: Worksheet, row_num: int, num_cols: int, merge_ru
 
 def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row: int, end_row: int):
     """
-    Scans a single column and merges adjacent cells that have the same value.
+    Merges all cells in a column range if ALL values are identical.
+    If any value differs, no merging occurs at all.
+    
+    This is an all-or-nothing merge - ensures visual consistency by only
+    merging when the entire column has the same value (e.g., all "LEATHER").
 
     Args:
         worksheet: The openpyxl Worksheet object.
@@ -256,39 +260,101 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
     if not all(isinstance(i, int) and i > 0 for i in [scan_col, start_row, end_row]) or start_row >= end_row:
         return
 
-    row_idx = start_row
-    while row_idx < end_row:
-        start_of_merge_row = row_idx
-        cell_to_match = worksheet.cell(row=start_of_merge_row, column=scan_col)
-        value_to_match = cell_to_match.value
+    # First pass: Check if ALL values in the range are identical
+    first_cell = worksheet.cell(row=start_row, column=scan_col)
+    first_value = first_cell.value
+    
+    # Skip if first value is None/empty
+    if first_value is None:
+        return
+    
+    # Check all remaining cells in range
+    for row_idx in range(start_row + 1, end_row + 1):
+        cell = worksheet.cell(row=row_idx, column=scan_col)
+        if cell.value != first_value:
+            # Found a different value - don't merge at all
+            return
+    
+    # All values are identical - merge the entire range
+    try:
+        worksheet.merge_cells(
+            start_row=start_row,
+            start_column=scan_col,
+            end_row=end_row,
+            end_column=scan_col
+        )
+        # Apply center alignment to the merged cell
+        first_cell.alignment = center_alignment
+        logger.debug(f"  Merged column {scan_col} rows {start_row}-{end_row} (all values = '{first_value}')")
+    except Exception as e:
+        logger.warning(f"  Failed to merge column {scan_col} rows {start_row}-{end_row}: {e}")
 
-        # Skip merging for empty cells
-        if value_to_match is None:
-            row_idx += 1
+
+def apply_horizontal_merge_by_id(
+    worksheet: Worksheet,
+    row_num: int,
+    column_id_map: Dict[str, int],
+    num_total_columns: int,
+    merge_rules: Dict[str, Dict[str, Any]],
+    style_registry=None,
+    cell_styler=None
+):
+    """
+    Applies horizontal merges to a specific row based on column IDs.
+    Modern ID-driven approach with StyleRegistry support.
+    
+    Args:
+        worksheet: The openpyxl Worksheet object
+        row_num: The 1-based row index to apply merges to
+        column_id_map: Maps column ID to 1-based column index (e.g., {'col_item': 3})
+        num_total_columns: Total number of columns for validation
+        merge_rules: Dict where keys are column IDs and values contain merge config
+                     e.g., {'col_item': {'rowspan': 2}} - 'rowspan' means horizontal colspan
+        style_registry: StyleRegistry instance for ID-driven styling (optional)
+        cell_styler: CellStyler instance for applying styles (optional)
+    
+    Note: 'rowspan' in merge_rules actually means horizontal colspan (legacy naming).
+    """
+    if not merge_rules or row_num <= 0:
+        return
+
+    for col_id, rule_details in merge_rules.items():
+        colspan = rule_details.get("rowspan")  # Legacy naming - actually horizontal span
+        
+        if not isinstance(colspan, int) or colspan <= 1:
             continue
-
-        # Scan downwards to find how many cells match
-        end_of_merge_row = start_of_merge_row
-        for next_row_idx in range(start_of_merge_row + 1, end_row + 1):
-            next_cell = worksheet.cell(row=next_row_idx, column=scan_col)
-            if next_cell.value == value_to_match:
-                end_of_merge_row = next_row_idx
+        
+        # Get starting column index from ID map
+        start_col_idx = column_id_map.get(col_id)
+        if not start_col_idx:
+            logger.warning(f"Cannot merge: column ID '{col_id}' not found in column_id_map")
+            continue
+        
+        # Calculate end column (respect table boundaries)
+        end_col_idx = min(start_col_idx + colspan - 1, num_total_columns)
+        
+        if start_col_idx >= end_col_idx:
+            continue
+        
+        try:
+            # Apply the merge
+            worksheet.merge_cells(
+                start_row=row_num,
+                start_column=start_col_idx,
+                end_row=row_num,
+                end_column=end_col_idx
+            )
+            
+            # Style the anchor cell
+            anchor_cell = worksheet.cell(row=row_num, column=start_col_idx)
+            if style_registry and cell_styler:
+                style = style_registry.get_style(col_id, context='data')
+                cell_styler.apply(anchor_cell, style)
             else:
-                break  # Stop when a different value is found
-
-        # If a sequence of 2 or more was found, perform the merge
-        if end_of_merge_row > start_of_merge_row:
-            try:
-                worksheet.merge_cells(
-                    start_row=start_of_merge_row,
-                    start_column=scan_col,
-                    end_row=end_of_merge_row,
-                    end_column=scan_col
-                )
-                # Apply center alignment to the merged cell
-                cell_to_match.alignment = center_alignment
-            except Exception:
-                pass  # Fails silently
-
-        # Move the main index past the just-scanned range
-        row_idx = end_of_merge_row + 1
+                # Fallback to simple center alignment
+                anchor_cell.alignment = center_alignment
+            
+            logger.debug(f"Merged row {row_num}, col_id '{col_id}' (cols {start_col_idx}-{end_col_idx})")
+            
+        except Exception as e:
+            logger.error(f"Error merging col_id '{col_id}' on row {row_num}: {e}")
