@@ -350,14 +350,9 @@ def main():
         if not sheets_to_process:
             logger.error("Error: No valid sheets to process."); sys.exit(1)
 
-        # Use TextReplacementBuilder instead of old utils
-        if args.DAF:
-            text_replacer = TextReplacementBuilder(workbook=workbook, invoice_data=invoice_data)
-            text_replacer.build()
-        else:
-            # Still run header replacement for non-DAF mode
-            text_replacer = TextReplacementBuilder(workbook=workbook, invoice_data=invoice_data)
-            text_replacer._replace_placeholders()  # Only run placeholder replacement
+        # Text replacement now happens at template state level (in LayoutBuilder/processors)
+        # This is more efficient and applies to the captured state before restoration
+        # Old workbook-level replacement is disabled to avoid double-replacement
 
         # Global pallet calculation remains the same
         final_grand_total_pallets = 0

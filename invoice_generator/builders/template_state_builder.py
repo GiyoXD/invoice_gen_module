@@ -609,3 +609,138 @@ class TemplateStateBuilder:
         
         if self.debug:
             logger.debug(f"Formatting restoration complete!")
+
+    def apply_text_replacements(self, replacement_rules: list, invoice_data: dict = None) -> int:
+        """
+        Apply text replacements to the stored template state (header and footer).
+        This modifies the stored 'value' and 'number_format' before restoration.
+        
+        Args:
+            replacement_rules: List of replacement rule dicts with keys:
+                - find: Text to find
+                - replace: Text to replace with (for hardcoded replacements)
+                - data_path: Path to data in invoice_data (for data-driven replacements)
+                - is_date: If True, format as date (optional)
+                - match_mode: 'exact' or 'substring' or 'contains' (optional, default='exact')
+            invoice_data: Invoice data dict for data-driven replacements
+        
+        Returns:
+            Number of replacements made
+        """
+        changes_made = 0
+        
+        # Apply to header state
+        for row_data in self.header_state:
+            for cell_info in row_data:
+                if cell_info.get('value') and isinstance(cell_info['value'], str):
+                    original_value = cell_info['value']
+                    new_value, format_changed = self._apply_rules_to_cell(
+                        cell_info['value'], 
+                        replacement_rules, 
+                        invoice_data
+                    )
+                    if new_value != original_value:
+                        cell_info['value'] = new_value
+                        if format_changed:
+                            # Reset number_format to General for text replacements
+                            cell_info['number_format'] = 'General'
+                        changes_made += 1
+        
+        # Apply to footer state
+        for row_data in self.footer_state:
+            for cell_info in row_data:
+                if cell_info.get('value') and isinstance(cell_info['value'], str):
+                    original_value = cell_info['value']
+                    new_value, format_changed = self._apply_rules_to_cell(
+                        cell_info['value'], 
+                        replacement_rules, 
+                        invoice_data
+                    )
+                    if new_value != original_value:
+                        cell_info['value'] = new_value
+                        if format_changed:
+                            # Reset number_format to General for text replacements
+                            cell_info['number_format'] = 'General'
+                        changes_made += 1
+        
+        logger.info(f"[TemplateStateBuilder] Text replacements complete: {changes_made} changes made")
+        return changes_made
+    
+    def _apply_rules_to_cell(self, text: str, rules: list, invoice_data: dict = None) -> tuple:
+        """
+        Apply replacement rules to a single text value.
+        
+        Returns:
+            Tuple of (new_value, format_changed)
+            - new_value: The replaced text
+            - format_changed: True if number_format should be reset to General
+        """
+        if not text:
+            return text, False
+        
+        for rule in rules:
+            find_text = rule.get('find', '')
+            if not find_text:
+                continue
+            
+            match_mode = rule.get('match_mode', 'exact')
+            is_match = False
+            
+            if match_mode == 'exact':
+                is_match = (text.strip() == find_text)
+            elif match_mode in ['substring', 'contains']:
+                is_match = (find_text in text)
+            
+            if is_match:
+                # Get replacement value
+                replacement_value = None
+                is_date = rule.get('is_date', False)
+                
+                if 'data_path' in rule and invoice_data:
+                    replacement_value = self._resolve_data_path(invoice_data, rule['data_path'])
+                    if replacement_value is not None and is_date:
+                        # Format date value
+                        replacement_value = self._format_date_value(replacement_value)
+                elif 'replace' in rule:
+                    replacement_value = rule['replace']
+                
+                if replacement_value is not None:
+                    # Perform replacement
+                    if match_mode == 'exact':
+                        return str(replacement_value), not is_date  # format_changed = True unless it's a date
+                    else:  # substring/contains
+                        return text.replace(find_text, str(replacement_value)), True
+        
+        return text, False
+    
+    def _resolve_data_path(self, data: dict, path: list) -> Any:
+        """Resolve nested data path like ["processed_tables_data", "1", "inv_no", 0]"""
+        current = data
+        try:
+            for key in path:
+                if isinstance(current, dict):
+                    current = current.get(key)
+                elif isinstance(current, list):
+                    current = current[int(key)]
+                else:
+                    return None
+                if current is None:
+                    return None
+            return current
+        except (KeyError, IndexError, ValueError, TypeError):
+            return None
+    
+    def _format_date_value(self, value: Any) -> str:
+        """Format date value for display"""
+        import datetime
+        if isinstance(value, (datetime.datetime, datetime.date)):
+            return value.strftime('%d/%m/%Y')
+        elif isinstance(value, str):
+            # Try to parse and format
+            try:
+                from dateutil.parser import parse
+                parsed = parse(value, dayfirst=True)
+                return parsed.strftime('%d/%m/%Y')
+            except:
+                return str(value)
+        return str(value)

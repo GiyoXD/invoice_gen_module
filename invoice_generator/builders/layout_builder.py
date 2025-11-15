@@ -207,6 +207,21 @@ class LayoutBuilder:
                 logger.critical(f"Error: {e}", exc_info=True)
                 logger.critical(f"Template header range: rows 1-{template_header_end_row}, Footer start: row {template_footer_start_row}")
                 return False
+            
+            # Apply text replacements to captured state (once, before restoration)
+            if self.args and self.invoice_data:
+                logger.info(f"Applying text replacements to template state")
+                try:
+                    replacement_rules = self._build_replacement_rules()
+                    changes = self.template_state_builder.apply_text_replacements(
+                        replacement_rules=replacement_rules,
+                        invoice_data=self.invoice_data
+                    )
+                    logger.info(f"Text replacements applied to template state: {changes} changes made")
+                except Exception as e:
+                    logger.error(f"Failed to apply text replacements: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
         
         # 3b. Restore ONLY header to output worksheet (unless skipped)
         if not self.skip_template_header_restoration:
@@ -612,3 +627,43 @@ class LayoutBuilder:
                     self.worksheet.row_dimensions[footer_row].height = h_val
             except (ValueError, TypeError):
                 pass
+
+    def _build_replacement_rules(self) -> list:
+        """
+        Build text replacement rules for template state.
+        
+        Returns:
+            List of replacement rule dicts
+        """
+        rules = []
+        
+        # Standard placeholder rules
+        rules.extend([
+            {"find": "JFINV", "data_path": ["processed_tables_data", "1", "inv_no", 0], "match_mode": "exact"},
+            {"find": "JFTIME", "data_path": ["processed_tables_data", "1", "inv_date", 0], "is_date": True, "match_mode": "exact"},
+            {"find": "JFREF", "data_path": ["processed_tables_data", "1", "inv_ref", 0], "match_mode": "exact"},
+            {"find": "[[CUSTOMER_NAME]]", "data_path": ["customer_info", "name"], "match_mode": "exact"},
+            {"find": "[[CUSTOMER_ADDRESS]]", "data_path": ["customer_info", "address"], "match_mode": "exact"}
+        ])
+        
+        # DAF-specific rules (if DAF mode enabled)
+        if self.args and self.args.DAF:
+            rules.extend([
+                {"find": "BINH PHUOC", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "BAVET, SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "BAVET,SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "BAVET, SVAYRIENG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "BINH DUONG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "FCA  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
+                {"find": "FCA: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
+                {"find": "DAF  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
+                {"find": "DAF: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
+                {"find": "SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "PORT KLANG", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "HCM", "replace": "BAVET", "match_mode": "exact"},
+                {"find": "DAP", "replace": "DAF", "match_mode": "substring"},
+                {"find": "FCA", "replace": "DAF", "match_mode": "substring"},
+                {"find": "CIF", "replace": "DAF", "match_mode": "substring"},
+            ])
+        
+        return rules
