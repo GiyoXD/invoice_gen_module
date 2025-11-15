@@ -76,7 +76,7 @@ class DataTableBuilderStyler:
                     self.style_registry = StyleRegistry(styling_dict)
                     logger.info("StyleRegistry initialized successfully for DataTableBuilder")
                 else:
-                    logger.warning(f"⚠️  DataTableBuilder: OLD format detected - StyleRegistry NOT initialized")
+                    logger.warning(f"warning!!  DataTableBuilder: OLD format detected - StyleRegistry NOT initialized")
                     logger.warning(f"   Falling back to legacy style_applier methods")
             except Exception as e:
                 logger.warning(f"Could not initialize StyleRegistry: {e}")
@@ -205,7 +205,7 @@ class DataTableBuilderStyler:
                             end_row=data_end_row
                         )
                     else:
-                        logger.warning(f"⚠️  Vertical merge requested for column '{col_id}' but column not found in column_id_map")
+                        logger.warning(f"warning!!  Vertical merge requested for column '{col_id}' but column not found in column_id_map")
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")

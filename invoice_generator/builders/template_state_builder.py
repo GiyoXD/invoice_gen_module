@@ -394,7 +394,7 @@ class TemplateStateBuilder:
         )
         
         if total_non_empty_cells == 0:
-            logger.warning(f"⚠️  WARNING: Template footer capture found NO content!")
+            logger.warning(f"warning!!  WARNING: Template footer capture found NO content!")
             logger.warning(f"   Footer range: rows {footer_start_row}-{footer_end_row} ({len(self.footer_state)} rows)")
             logger.warning(f"   All {len(self.footer_state)} footer rows are EMPTY")
             logger.warning(f"   Check if footer_row config points to the correct row in template")

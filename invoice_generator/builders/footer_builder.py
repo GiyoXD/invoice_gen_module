@@ -64,7 +64,7 @@ class FooterBuilderStyler(BundleAccessor):
                     self.style_registry = StyleRegistry(styling_dict)
                     logger.info("StyleRegistry initialized successfully for FooterBuilder")
                 else:
-                    logger.warning(f"⚠️  FooterBuilder: OLD format detected - StyleRegistry NOT initialized")
+                    logger.warning(f"warning!!  FooterBuilder: OLD format detected - StyleRegistry NOT initialized")
                     logger.warning(f"   Falling back to legacy style_applier methods")
             except Exception as e:
                 logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")

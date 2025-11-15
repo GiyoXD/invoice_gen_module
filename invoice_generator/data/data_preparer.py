@@ -176,9 +176,9 @@ def prepare_data_rows(
             logger.error(f"   Description mapping: {desc_mapping}")
             logger.error(f"   REQUIRED: At least one of 'fallback_on_none', 'fallback_on_DAF', or 'fallback' must be defined")
             logger.error(f"   This can cause empty description cells when source data is None/missing")
-            logger.warning(f"⚠️  Add fallback to config: \"fallback_on_none\": \"LEATHER\", \"fallback_on_DAF\": \"LEATHER\"")
+            logger.warning(f"warning!!  Add fallback to config: \"fallback_on_none\": \"LEATHER\", \"fallback_on_DAF\": \"LEATHER\"")
     else:
-        logger.warning(f"⚠️  No description field found in dynamic_mapping_rules - this may cause issues")
+        logger.warning(f"warning!!  No description field found in dynamic_mapping_rules - this may cause issues")
     
     data_rows_prepared = []
     pallet_counts_for_rows = []

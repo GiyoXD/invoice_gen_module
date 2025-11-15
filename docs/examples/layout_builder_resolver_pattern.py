@@ -79,7 +79,7 @@ def build_invoice_legacy_approach(template_path: Path, sheet_config: dict, invoi
     This approach requires passing individual parameters and relies on
     LayoutBuilder to extract data sources using legacy logic.
     
-    ⚠️ NOT RECOMMENDED - Use resolver pattern above instead
+    warning!! NOT RECOMMENDED - Use resolver pattern above instead
     """
     # Load workbook
     template_workbook = load_workbook(template_path)
@@ -105,7 +105,7 @@ def build_invoice_legacy_approach(template_path: Path, sheet_config: dict, invoi
     # Build the layout (will use legacy path)
     success = layout_builder.build()
 
-    logger.warning(f"⚠️ Used legacy approach - consider migrating to resolver pattern")
+    logger.warning(f"warning!! Used legacy approach - consider migrating to resolver pattern")
 
     return success
 
@@ -208,8 +208,8 @@ if __name__ == '__main__':
     print("  [OK]OK]OK] Supports bundled config v2.1+")
     print()
     print("LEGACY APPROACH (Deprecated):")
-    print("  ⚠️ Direct parameter passing with individual dicts")
-    print("  ⚠️ Triggers legacy data source resolution in LayoutBuilder")
-    print("  ⚠️ Harder to maintain and test")
+    print("  warning!! Direct parameter passing with individual dicts")
+    print("  warning!! Triggers legacy data source resolution in LayoutBuilder")
+    print("  warning!! Harder to maintain and test")
     print()
     print("=" * 70)

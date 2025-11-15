@@ -48,14 +48,14 @@ class CellStyler:
             style: Style dictionary from StyleRegistry
         """
         if not style:
-            logger.warning(f"⚠️  Cell {cell.coordinate}: NO style dictionary provided!")
+            logger.warning(f"warning!!  Cell {cell.coordinate}: NO style dictionary provided!")
             return
         
         # Validate expected style properties
         expected_props = ['alignment', 'format', 'font_name', 'font_size']
         missing_props = [prop for prop in expected_props if prop not in style or style[prop] is None]
         if missing_props:
-            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing style properties: {missing_props}")
+            logger.warning(f"warning!!  Cell {cell.coordinate}: Missing style properties: {missing_props}")
             logger.warning(f"   → Style dict keys: {list(style.keys())}")
         
         # Apply font properties (bold, italic, size, name)
@@ -82,7 +82,7 @@ class CellStyler:
         missing_font_props = [prop for prop in required_font_props if not style.get(prop)]
         
         if missing_font_props:
-            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required font properties: {missing_font_props}")
+            logger.warning(f"warning!!  Cell {cell.coordinate}: Missing required font properties: {missing_font_props}")
             logger.warning(f"   → Available style keys: {list(style.keys())}")
             return
         
@@ -107,7 +107,7 @@ class CellStyler:
         
         # Check for required alignment property
         if not style.get('alignment'):
-            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required alignment property")
+            logger.warning(f"warning!!  Cell {cell.coordinate}: Missing required alignment property")
             logger.warning(f"   → Available style keys: {list(style.keys())}")
             return
         
@@ -179,7 +179,7 @@ class CellStyler:
         """Apply number format to cell."""
         # Check for required format property
         if not style.get('format'):
-            logger.warning(f"⚠️  Cell {cell.coordinate}: Missing required format property")
+            logger.warning(f"warning!!  Cell {cell.coordinate}: Missing required format property")
             logger.warning(f"   → Available style keys: {list(style.keys())}")
             return
         
