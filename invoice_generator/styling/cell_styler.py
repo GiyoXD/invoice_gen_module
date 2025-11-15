@@ -148,13 +148,30 @@ class CellStyler:
             # Create border sides
             side = Side(style=openpyxl_style, color='000000')
             
-            # Apply to all sides (can be customized per side if needed)
-            cell.border = Border(
-                left=side,
-                right=side,
-                top=side,
-                bottom=side
-            )
+            # Special case: no_bottom border (for static content rows)
+            if border_style_name == 'no_bottom':
+                cell.border = Border(
+                    left=side,
+                    right=side,
+                    top=side,
+                    bottom=Side(style=None)  # No bottom border
+                )
+            # Special case: sides_only border (for col_static column)
+            elif border_style_name == 'sides_only':
+                cell.border = Border(
+                    left=side,
+                    right=side,
+                    top=Side(style=None),     # No top border
+                    bottom=Side(style=None)   # No bottom border
+                )
+            else:
+                # Apply to all sides (standard behavior)
+                cell.border = Border(
+                    left=side,
+                    right=side,
+                    top=side,
+                    bottom=side
+                )
         # Note: If border_style not in style dict, no borders are applied
         # This is expected behavior - borders are optional styling
     

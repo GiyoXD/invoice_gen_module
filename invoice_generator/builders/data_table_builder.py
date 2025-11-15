@@ -153,6 +153,14 @@ class DataTableBuilderStyler:
                         
                         # Use 'data' context for regular data rows
                         style = self.style_registry.get_style(col_id, context='data')
+                        
+                        # For col_static column, apply side borders only (no top/bottom)
+                        if col_id == 'col_static':
+                            from copy import deepcopy
+                            style = deepcopy(style)
+                            # Apply side borders only
+                            style['border_style'] = 'sides_only'
+                        
                         self.cell_styler.apply(cell, style)
                         
                         # Apply row height ONCE per row (only on first column processed)
