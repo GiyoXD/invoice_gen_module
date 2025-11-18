@@ -103,6 +103,10 @@ class LayoutBuilder:
         self.provided_mapping_rules = layout_config.get('mapping_rules') if layout_config else None
         self.provided_resolved_data = layout_config.get('resolved_data') if layout_config else None  # NEW: Support resolved data from TableDataAdapter
         
+        # Store weight totals from context (if provided by processor)
+        self.total_net_weight = context_config.get('total_net_weight') if context_config else None
+        self.total_gross_weight = context_config.get('total_gross_weight') if context_config else None
+        
         self.workbook = workbook  # Output workbook (writable)
         self.worksheet = worksheet  # Output worksheet (writable)
         self.template_worksheet = template_worksheet  # Template worksheet (read-only usage)
@@ -574,7 +578,10 @@ class LayoutBuilder:
                 'pallet_count': pallet_count,
                 'sheet_name': self.sheet_name,
                 'is_last_table': True,
-                'dynamic_desc_used': False  # TODO: Track this if needed
+                'dynamic_desc_used': False,  # TODO: Track this if needed
+                # Pass through weight totals from processor context (if available)
+                'total_net_weight': self.total_net_weight,
+                'total_gross_weight': self.total_gross_weight
             }
             
             fb_data_config = {

@@ -138,6 +138,10 @@ class BuilderConfigResolver:
             'all_sheet_configs': self.config_loader.get_raw_config().get('layout_bundle', {}),
         }
         
+        # Add processed_tables_data separately for features that need raw data (e.g., weight_summary)
+        if self.invoice_data and 'processed_tables_data' in self.invoice_data:
+            base_context['processed_tables_data'] = self.invoice_data['processed_tables_data']
+        
         # Merge in any overrides and additional context
         base_context.update(self.context_overrides)
         base_context.update(additional_context)

@@ -118,7 +118,7 @@
           "row_height": 35,
           "add_ons": {
             "weight_summary": {
-              "enabled": false,
+              "enabled": true,
               "label_col_id": "col_po",
               "value_col_id": "col_item",
               "mode": ["daf", "standard"]
@@ -315,7 +315,7 @@
         "merge_rules": [],
         "add_ons": {
           "before_footer": {
-            "enabled": true,
+            "enabled": false,
             "column_id": "col_po",
             "text": "HS.CODE: 4107.12.00"
           },
@@ -443,7 +443,7 @@
             "mode": ["daf", "standard"]
           },
           "leather_summary": {
-            "enabled": true,
+            "enabled": false,
             "mode": ["daf", "standard"]
           }
 

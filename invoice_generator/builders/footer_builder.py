@@ -228,8 +228,10 @@ class FooterBuilderStyler(BundleAccessor):
             
             # Handle before_footer add-on - ONLY for regular footers, not grand_total
             add_ons = self.footer_config.get("add_ons", {})
+            logger.debug(f"[DEBUG] footer_config add_ons: {add_ons}")
             before_footer_addon = add_ons.get("before_footer", {})
             before_footer_enabled = before_footer_addon.get("enabled", False)
+            logger.debug(f"[DEBUG] before_footer enabled: {before_footer_enabled}")
             
             if before_footer_enabled and footer_type == "regular":
                 try:
@@ -270,17 +272,10 @@ class FooterBuilderStyler(BundleAccessor):
             
             current_footer_row += 1
 
-            # Handle add-ons
-            add_ons = self.footer_config.get("add_ons", [])
-            if "summary" in add_ons:
-                try:
-                    logger.debug(f"Building summary add-on starting at row {current_footer_row}")
-                    next_row = self._build_summary_add_on(current_footer_row)
-                    logger.debug(f"Summary add-on completed, next row: {next_row}")
-                    current_footer_row = next_row
-                except Exception as addon_err:
-                    logger.error(f"Error building summary add-on at row {current_footer_row}: {addon_err}")
-                    raise
+            # Handle add-ons (dict format only)
+            add_ons = self.footer_config.get("add_ons", {})
+            if add_ons:
+                current_footer_row = self._process_footer_addons(current_footer_row, add_ons)
 
             total_rows = current_footer_row - initial_row
             logger.info(f"[FooterBuilder] COMPLETE - Started at {initial_row}, ended at {current_footer_row - 1}, total rows: {total_rows}")
@@ -299,6 +294,40 @@ class FooterBuilderStyler(BundleAccessor):
         default_total_text = self.footer_config.get("total_text", "TOTAL:")
         self._build_footer_common(current_footer_row, default_total_text, footer_type="regular")
         logger.debug(f"[FooterBuilder._build_regular_footer] Complete")
+
+    def _process_footer_addons(self, start_row: int, add_ons: dict) -> int:
+        """Process all footer add-ons in order.
+        
+        Args:
+            start_row: Row to start building add-ons
+            add_ons: Dict of add-on configs {"weight_summary": {...}, "leather_summary": {...}}
+            
+        Returns:
+            Next available row after all add-ons
+        """
+        current_row = start_row
+        
+        # Weight Summary Add-on
+        weight_summary_config = add_ons.get("weight_summary", {})
+        if weight_summary_config.get("enabled"):
+            try:
+                logger.debug(f"Building weight_summary add-on at row {current_row}")
+                current_row = self._build_weight_summary_addon(current_row, weight_summary_config)
+            except Exception as e:
+                logger.error(f"Error building weight_summary add-on: {e}")
+                raise
+        
+        # Leather Summary Add-on
+        leather_summary_config = add_ons.get("leather_summary", {})
+        if leather_summary_config.get("enabled"):
+            try:
+                logger.debug(f"Building leather_summary add-on at row {current_row}")
+                current_row = self._build_summary_add_on(current_row)
+            except Exception as e:
+                logger.error(f"Error building leather_summary add-on: {e}")
+                raise
+        
+        return current_row
 
     def _build_before_footer(self, row: int, before_footer_config: Dict[str, Any], footer_type: str = "regular"):
         """
@@ -542,3 +571,149 @@ class FooterBuilderStyler(BundleAccessor):
                 cell_styler=self.cell_styler
             )
         return current_footer_row
+
+    def _build_weight_summary_addon(self, current_footer_row: int, weight_config: Dict[str, Any]) -> int:
+        """
+        Build weight summary rows showing total N.W (Net Weight) and G.W (Gross Weight).
+        
+        Writes 2 rows:
+        - Row 1: Label="NW(KGS)" at label_col_id, Value=sum of all net weights at value_col_id
+        - Row 2: Label="GW(KGS):" at label_col_id, Value=sum of all gross weights at value_col_id
+        
+        Args:
+            current_footer_row: Row number to start writing
+            weight_config: Config dict with 'label_col_id', 'value_col_id', optional 'mode'
+            
+        Returns:
+            Next available row number (current_footer_row + 2)
+        """
+        from decimal import Decimal, InvalidOperation
+        
+        logger.debug(f"[FooterBuilder._build_weight_summary_addon] Starting at row {current_footer_row}")
+        
+        # Get column mapping
+        col_id_map = self.header_info.get("column_id_map", {})
+        label_col_idx = col_id_map.get(weight_config.get("label_col_id"))
+        value_col_idx = col_id_map.get(weight_config.get("value_col_id"))
+        
+        if not label_col_idx or not value_col_idx:
+            logger.warning(f"Weight summary skipped: label_col_id or value_col_id not found in column map")
+            return current_footer_row
+        
+        # Calculate totals from all tables data
+        grand_total_net = Decimal('0')
+        grand_total_gross = Decimal('0')
+        
+        # First, check if totals were pre-calculated by processor (for single-table sheets)
+        precalc_net = self.context_config.get('total_net_weight')
+        precalc_gross = self.context_config.get('total_gross_weight')
+        
+        logger.debug(f"Weight summary context check: total_net_weight={precalc_net}, total_gross_weight={precalc_gross}, all_tables_data={'present' if self.all_tables_data else 'None'}")
+        
+        if precalc_net is not None and precalc_gross is not None:
+            # Use pre-calculated totals from processor
+            grand_total_net = Decimal(str(precalc_net))
+            grand_total_gross = Decimal(str(precalc_gross))
+            logger.debug(f"Using pre-calculated weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")
+        
+        elif self.all_tables_data:
+            # Multi-table scenario (e.g., Packing list with multiple tables) - calculate from all_tables_data
+            logger.debug(f"Multi-table weight calc - using all_tables_data with {len(self.all_tables_data)} tables")
+            for table_data in self.all_tables_data.values():
+                net_weights = table_data.get("net", [])
+                gross_weights = table_data.get("gross", [])
+                
+                for weight in net_weights:
+                    try:
+                        grand_total_net += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+                
+                for weight in gross_weights:
+                    try:
+                        grand_total_gross += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+        
+        else:
+            # Fallback: try to get from processed_tables_data in context (shouldn't normally happen)
+            processed_tables = self.context_config.get('processed_tables_data', {})
+            
+            if processed_tables:
+                logger.debug(f"Fallback weight calc - processed_tables keys: {list(processed_tables.keys())}")
+                first_table_key = list(processed_tables.keys())[0]
+                table_data = processed_tables[first_table_key]
+                net_weights = table_data.get("net", [])
+                gross_weights = table_data.get("gross", [])
+                
+                for weight in net_weights:
+                    try:
+                        grand_total_net += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+                
+                for weight in gross_weights:
+                    try:
+                        grand_total_gross += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+            else:
+                logger.debug("No weight data available - weights will be 0")
+        
+        logger.debug(f"Weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")
+        
+        # Get column info for applying styles to all cells
+        col_id_map = self.header_info.get("column_id_map", {})
+        num_columns = self.header_info.get('num_columns', 1)
+        idx_to_id_map = {v: k for k, v in col_id_map.items()}
+        
+        # Write N.W row
+        net_weight_row = current_footer_row
+        cell_net_label = self.worksheet.cell(row=net_weight_row, column=label_col_idx, value="NW(KGS)")
+        cell_net_value = self.worksheet.cell(row=net_weight_row, column=value_col_idx, value=float(grand_total_net))
+        
+        # Apply footer styling to label and value cells
+        label_col_id = weight_config.get("label_col_id")
+        value_col_id = weight_config.get("value_col_id")
+        self._apply_footer_cell_style(cell_net_label, label_col_id, row_context='footer')
+        self._apply_footer_cell_style(cell_net_value, value_col_id, row_context='footer')
+        
+        # Override number format for weight values (hardcoded)
+        cell_net_value.number_format = '#,##0.00'
+        
+        # Apply borders to all other cells in N.W row
+        for c_idx in range(1, num_columns + 1):
+            if c_idx not in [label_col_idx, value_col_idx]:
+                cell = self.worksheet.cell(row=net_weight_row, column=c_idx)
+                col_id = idx_to_id_map.get(c_idx)
+                if col_id:
+                    self._apply_footer_cell_style(cell, col_id, row_context='footer')
+        
+        self._apply_footer_row_height(net_weight_row)
+        
+        # Write G.W row
+        gross_weight_row = current_footer_row + 1
+        cell_gross_label = self.worksheet.cell(row=gross_weight_row, column=label_col_idx, value="GW(KGS):")
+        cell_gross_value = self.worksheet.cell(row=gross_weight_row, column=value_col_idx, value=float(grand_total_gross))
+        
+        # Apply footer styling to label and value cells
+        self._apply_footer_cell_style(cell_gross_label, label_col_id, row_context='footer')
+        self._apply_footer_cell_style(cell_gross_value, value_col_id, row_context='footer')
+        
+        # Override number format for weight values (hardcoded)
+        cell_gross_value.number_format = '#,##0.00'
+        
+        # Apply borders to all other cells in G.W row
+        for c_idx in range(1, num_columns + 1):
+            if c_idx not in [label_col_idx, value_col_idx]:
+                cell = self.worksheet.cell(row=gross_weight_row, column=c_idx)
+                col_id = idx_to_id_map.get(c_idx)
+                if col_id:
+                    self._apply_footer_cell_style(cell, col_id, row_context='footer')
+        
+        self._apply_footer_row_height(gross_weight_row)
+        
+        logger.debug(f"[FooterBuilder._build_weight_summary_addon] Complete - wrote rows {net_weight_row}-{gross_weight_row}")
+        
+        return current_footer_row + 2
+
