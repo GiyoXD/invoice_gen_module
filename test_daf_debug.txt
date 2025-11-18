@@ -1,0 +1,34 @@
+>>> [0mINFO[0m >>> === Starting Invoice Generation (Refactored) ===
+>>> [0mINFO[0m >>> Started at: 15:07:56
+>>> [0mINFO[0m >>> Deriving paths from input: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [0mINFO[0m >>> Found exact match for template and bundled config (subdir): C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+>>> [0mINFO[0m >>> Configuration loaded successfully.
+>>> [0mINFO[0m >>> Detected bundled config version: 2.1_developer_optimized
+>>> [0mINFO[0m >>> Loading data from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [0mINFO[0m >>> Template will be loaded as read-only for state capture
+>>> [0mINFO[0m >>> Loading template and creating new workbook...
+>>> [0mINFO[0m >>> Creating new workbook with 3 sheets
+>>> [0mINFO[0m >>> New workbook created successfully
+>>> [0mINFO[0m >>> Processing sheet 'Invoice'
+>>> [0mINFO[0m >>> Processing sheet 'Invoice' as single table/aggregation
+>>> ERROR >>> [generate_invoice.py:462 in main()] 
+--- UNHANDLED ERROR: name 'logger' is not defined ---
+Traceback (most recent call last):
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\generate_invoice.py", line 420, in main
+    processing_successful = processor.process()
+                            ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\processors\single_table_processor.py", line 48, in process
+    data_bundle = resolver.get_data_bundle()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config\builder_config_resolver.py", line 204, in get_data_bundle
+    header_info = self._construct_header_info(layout_config)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config\builder_config_resolver.py", line 386, in _construct_header_info
+    logger.info(f"[_construct_header_info] DAF_mode={DAF_mode}, custom_mode={custom_mode}, total_columns={len(columns)}")
+    ^^^^^^
+NameError: name 'logger' is not defined
+>>> [0mINFO[0m >>> === Invoice Generation Finished ===
+>>> [0mINFO[0m >>> Total Time: 0.10 seconds
+>>> [0mINFO[0m >>> Completed at: 15:07:56
+Running command: C:\Users\JPZ031127\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe -m invoice_generator.generate_invoice C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json --output C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx --templatedir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template --configdir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled --DAF --log-level INFO
+Invoice generated successfully at: C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx

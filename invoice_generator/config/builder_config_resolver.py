@@ -13,8 +13,11 @@ The resolver prevents builders from needing to understand the full config struct
 Each builder gets only its required arguments in the expected format.
 """
 
+import logging
 from typing import Any, Dict, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
+
+logger = logging.getLogger(__name__)
 
 
 class BuilderConfigResolver:
@@ -106,25 +109,31 @@ class BuilderConfigResolver:
                 'styling_config': self._sheet_config.get('styling_config', {})
             }
     
-    def get_context_bundle(self, **additional_context) -> Dict[str, Any]:
+    def get_context_bundle(self, table_key: Optional[str] = None, **additional_context) -> Dict[str, Any]:
         """
         Get the context bundle for builders.
         
         Args:
+            table_key: Optional table key for multi-table scenarios (e.g., '1', '2')
             **additional_context: Additional context to merge in
         
         Returns:
             {
                 'sheet_name': str,
                 'args': CLI args,
+                'invoice_data': dict,  # Adapted invoice_data with normalized structure for text replacements
                 'pallets': int,
                 'all_sheet_configs': dict,  # For cross-sheet references
                 ... (any additional context)
             }
         """
+        # Adapt invoice_data to normalize data paths for text replacements
+        adapted_invoice_data = self._adapt_invoice_data_for_sheet(table_key)
+        
         base_context = {
             'sheet_name': self.sheet_name,
             'args': self.args,
+            'invoice_data': adapted_invoice_data,  # Use adapted data with normalized paths
             'pallets': self.pallets,
             'all_sheet_configs': self.config_loader.get_raw_config().get('layout_bundle', {}),
         }
@@ -134,6 +143,56 @@ class BuilderConfigResolver:
         base_context.update(additional_context)
         
         return base_context
+    
+    def _adapt_invoice_data_for_sheet(self, table_key: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Adapt invoice_data to provide normalized data paths for text replacements.
+        
+        This ensures all sheets can use the same replacement rule paths like:
+        ["processed_tables_data", "1", "inv_no", 0]
+        
+        For sheets using 'aggregation' or 'DAF_aggregation', we create a synthetic
+        processed_tables_data structure pointing to the first row of actual processed_tables.
+        This allows Invoice and Contract sheets to access metadata (inv_no, inv_date, inv_ref)
+        using the same data paths as Packing list.
+        
+        Args:
+            table_key: Table key for multi-table sheets (e.g., '1', '2')
+        
+        Returns:
+            Adapted invoice_data dict with normalized structure
+        """
+        if not self.invoice_data:
+            return {}
+        
+        # Get the data source type for this sheet
+        data_source_type = self._sheet_config.get('data_source', 'aggregation')
+        
+        # If already using processed_tables_data/multi, return as-is (already has correct structure)
+        if data_source_type in ['processed_tables_multi', 'processed_tables']:
+            return self.invoice_data
+        
+        # For aggregation-based sheets (Invoice, Contract), ensure they can access metadata
+        # Copy the invoice_data (shallow copy to avoid modifying original)
+        adapted_data = dict(self.invoice_data)
+        
+        # Check if processed_tables_data exists with metadata fields
+        if 'processed_tables_data' not in self.invoice_data:
+            logger.warning(f"No processed_tables_data found for sheet {self.sheet_name}, text replacements for JFINV/JFREF/JFTIME will not work")
+            return adapted_data
+        
+        proc_tables = self.invoice_data['processed_tables_data']
+        source_table_key = table_key or '1'  # Default to table '1' for metadata
+        
+        if source_table_key not in proc_tables:
+            logger.warning(f"Table key '{source_table_key}' not found in processed_tables_data for sheet {self.sheet_name}")
+            return adapted_data
+        
+        # The structure is already correct - processed_tables_data['1'] has inv_no, inv_date, inv_ref
+        # No transformation needed, aggregation sheets can access the same metadata
+        logger.debug(f"Sheet {self.sheet_name} (data_source={data_source_type}) will use processed_tables_data['{source_table_key}'] for metadata (inv_no, inv_date, inv_ref)")
+        
+        return adapted_data
     
     def get_layout_bundle(self) -> Dict[str, Any]:
         """
@@ -262,7 +321,7 @@ class BuilderConfigResolver:
             where merged_layout_config contains both layout structure AND data resolution
         """
         style_config = self.get_style_bundle()
-        context_config = self.get_context_bundle()
+        context_config = self.get_context_bundle(table_key=table_key)  # Pass table_key for data adaptation
         layout_config = self.get_layout_bundle()
         data_config = self.get_data_bundle(table_key=table_key)
         
@@ -379,6 +438,28 @@ class BuilderConfigResolver:
         columns = structure.get('columns', [])
         header_row = structure.get('header_row', 1)
         
+        # Filter columns based on DAF/custom mode flags
+        DAF_mode = self.args.DAF if self.args and hasattr(self.args, 'DAF') else False
+        custom_mode = self.args.custom if self.args and hasattr(self.args, 'custom') else False
+        
+        filtered_columns = []
+        for col_def in columns:
+            col_id = col_def.get('id', 'unknown')
+            skip_in_daf = col_def.get('skip_in_daf', False)
+            skip_in_custom = col_def.get('skip_in_custom', False)
+            
+            # Skip column if it has skip_in_daf flag and we're in DAF mode
+            if DAF_mode and skip_in_daf:
+                logger.info(f"Filtering out column '{col_id}' (skip_in_daf=True, DAF_mode=True)")
+                continue
+            # Skip column if it has skip_in_custom flag and we're in custom mode
+            if custom_mode and skip_in_custom:
+                logger.info(f"Filtering out column '{col_id}' (skip_in_custom=True, custom_mode=True)")
+                continue
+            filtered_columns.append(col_def)
+        
+        logger.debug(f"Column filtering: {len(columns)} total → {len(filtered_columns)} after filtering (DAF={DAF_mode}, custom={custom_mode})")
+        
         # Build column_map (header_name -> index) and column_id_map (col_id -> index)
         column_map = {}
         column_id_map = {}
@@ -387,7 +468,7 @@ class BuilderConfigResolver:
         
         current_idx = 1
         
-        for col_def in columns:
+        for col_def in filtered_columns:
             col_id = col_def.get('id', f'col_{current_idx}')
             header = col_def.get('header', '')
             fmt = col_def.get('format')

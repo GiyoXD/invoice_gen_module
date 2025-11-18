@@ -9,6 +9,7 @@ from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import FooterBuilderStyler as FooterBuilder
 from .text_replacement_builder import TextReplacementBuilder
 from .template_state_builder import TemplateStateBuilder
+from ..utils.text_replacement_rules import build_replacement_rules
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -195,11 +196,15 @@ class LayoutBuilder:
         else:
             logger.info(f"Capturing template state from template worksheet")
             try:
+                # Enable debug mode if args has debug flag
+                debug_mode = getattr(self.args, 'debug', False) if self.args else False
+                
                 self.template_state_builder = TemplateStateBuilder(
                     worksheet=self.template_worksheet,  # Read from template
                     num_header_cols=num_header_cols,
                     header_end_row=template_header_end_row,  # Use template position, not output position
-                    footer_start_row=template_footer_start_row  # Use template position, not output position
+                    footer_start_row=template_footer_start_row,  # Use template position, not output position
+                    debug=debug_mode  # Pass debug flag
                 )
                 logger.debug(f"Template state captured successfully: {len(self.template_state_builder.header_state)} header rows, {len(self.template_state_builder.footer_state)} footer rows")
             except Exception as e:
@@ -212,7 +217,7 @@ class LayoutBuilder:
             if self.args and self.invoice_data:
                 logger.info(f"Applying text replacements to template state")
                 try:
-                    replacement_rules = self._build_replacement_rules()
+                    replacement_rules = build_replacement_rules(self.args)
                     changes = self.template_state_builder.apply_text_replacements(
                         replacement_rules=replacement_rules,
                         invoice_data=self.invoice_data
@@ -223,21 +228,9 @@ class LayoutBuilder:
                     import traceback
                     logger.error(traceback.format_exc())
         
-        # 3b. Restore ONLY header to output worksheet (unless skipped)
-        if not self.skip_template_header_restoration:
-            logger.info(f"Restoring header from template to output worksheet")
-            try:
-                template_header_rows = self.template_state_builder.header_end_row
-                logger.debug(f"Template header restoration - Expected range: rows 1-{template_header_rows}")
-                self.template_state_builder.restore_header_only(target_worksheet=self.worksheet)
-                logger.debug(f"Template header restored successfully - rows 1-{template_header_rows}")
-            except Exception as e:
-                logger.error(f"Failed to restore header from template for sheet '{self.sheet_name}'")
-                logger.error(f"Template header_end_row: {self.template_state_builder.header_end_row}")
-                logger.error(f"Error: {e}", exc_info=True)
-                return False
-        else:
-            logger.debug(f"Skipping template header restoration (skip_template_header_restoration=True)")
+        # 3b. Template header restoration DEFERRED - will be done AFTER table building
+        # This ensures template content aligns with actual column count after filtering
+        logger.debug(f"Deferring template header restoration until after table building")
         
         # 4. Header Builder - writes header data to NEW worksheet (unless skipped)
         if not self.skip_header_builder:
@@ -260,9 +253,69 @@ class LayoutBuilder:
             # Get bundled columns from sheet_config (bundled config v2.1 format)
             # These are in layout_config -> sheet_config -> 'structure' -> 'columns'
             bundled_columns = None
+            column_mapping = None  # For template state column shifting
+            
             if self.sheet_config:
                 structure = self.sheet_config.get('structure', {})
-                bundled_columns = structure.get('columns', [])
+                original_columns = structure.get('columns', [])
+                bundled_columns = original_columns
+                
+                # Filter columns based on DAF/custom mode flags
+                if bundled_columns:
+                    DAF_mode = self.args.DAF if self.args and hasattr(self.args, 'DAF') else False
+                    custom_mode = self.args.custom if self.args and hasattr(self.args, 'custom') else False
+                    
+                    # Build column mapping BEFORE filtering
+                    # Map each template Excel column position to its output position (or None if removed)
+                    if DAF_mode or custom_mode:
+                        column_mapping = {}
+                        template_excel_col = 1  # Current position in template
+                        output_excel_col = 1    # Current position in output
+                        
+                        for col_def in original_columns:
+                            col_id = col_def.get('id', '')
+                            skip_in_daf = col_def.get('skip_in_daf', False)
+                            skip_in_custom = col_def.get('skip_in_custom', False)
+                            colspan = col_def.get('colspan', 1)
+                            children = col_def.get('children', [])
+                            
+                            # Calculate actual Excel columns this definition occupies
+                            if children:
+                                # Parent with children: uses colspan number of Excel columns
+                                num_excel_cols = len(children)
+                            else:
+                                # Simple column: uses colspan
+                                num_excel_cols = colspan
+                            
+                            # Check if column should be skipped
+                            should_skip = (DAF_mode and skip_in_daf) or (custom_mode and skip_in_custom)
+                            
+                            if should_skip:
+                                # Mark all Excel columns occupied by this definition as removed
+                                for i in range(num_excel_cols):
+                                    column_mapping[template_excel_col + i] = None
+                                logger.debug(f"Column '{col_id}' removed: template cols {template_excel_col}-{template_excel_col + num_excel_cols - 1} → None")
+                            else:
+                                # Map all Excel columns to their new positions
+                                for i in range(num_excel_cols):
+                                    column_mapping[template_excel_col + i] = output_excel_col + i
+                                logger.debug(f"Column '{col_id}': template cols {template_excel_col}-{template_excel_col + num_excel_cols - 1} → output cols {output_excel_col}-{output_excel_col + num_excel_cols - 1}")
+                                output_excel_col += num_excel_cols
+                            
+                            template_excel_col += num_excel_cols
+                        
+                        logger.info(f"Built column mapping for template shifting: {len([v for v in column_mapping.values() if v])} active Excel columns")
+                    
+                    # Now filter the columns list
+                    original_count = len(bundled_columns)
+                    bundled_columns = [
+                        col for col in bundled_columns
+                        if not (DAF_mode and col.get('skip_in_daf', False))
+                        and not (custom_mode and col.get('skip_in_custom', False))
+                    ]
+                    if len(bundled_columns) < original_count:
+                        logger.info(f"Filtered bundled_columns: {original_count} → {len(bundled_columns)} (DAF={DAF_mode}, custom={custom_mode})")
+                
                 if not bundled_columns:
                     logger.warning(f"No columns found in sheet_config.structure for sheet '{self.sheet_name}'")
 
@@ -441,6 +494,39 @@ class LayoutBuilder:
                 
                 rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
                 logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
+                
+                # 5b. NOW restore template header - AFTER table is built
+                # This ensures template content aligns with actual number of columns used
+                # CRITICAL: This should only restore decorative header (rows 1 to table_header_row-1)
+                # It must NOT overwrite the table header row that HeaderBuilder styled
+                if not self.skip_template_header_restoration:
+                    logger.info(f"Restoring template header AFTER table build (correct column alignment)")
+                    try:
+                        # Get actual column count from header_info (this reflects filtered columns)
+                        actual_num_cols = self.header_info.get('num_columns', None)
+                        table_header_row_num = self.header_info.get('second_row_index', 0)
+                        logger.debug(f"Template header will use actual column count: {actual_num_cols}")
+                        logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
+                        logger.debug(f"Table header row is at: {table_header_row_num}")
+                        logger.debug(f"These should NOT overlap! (template_end < table_header)")
+                        
+                        # Set column mapping if columns were filtered
+                        if column_mapping:
+                            self.template_state_builder.set_column_mapping(column_mapping)
+                            logger.info(f"Applied column mapping to template state for filtered columns")
+                        
+                        self.template_state_builder.restore_header_only(
+                            target_worksheet=self.worksheet,
+                            actual_num_cols=actual_num_cols
+                        )
+                        logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
+                    except Exception as e:
+                        logger.error(f"Failed to restore template header after table build")
+                        logger.error(f"Error: {e}", exc_info=True)
+                        return False
+                else:
+                    logger.debug(f"Skipping template header restoration (skip_template_header_restoration=True)")
+                
             except Exception as e:
                 logger.error(f"DataTableBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
@@ -562,10 +648,25 @@ class LayoutBuilder:
             template_footer_rows = self.template_state_builder.max_row - self.template_state_builder.template_footer_start_row + 1
             logger.info(f"Restoring template footer after row {write_pointer_row}")
             logger.debug(f"Template footer restoration - Source rows: {self.template_state_builder.template_footer_start_row}-{self.template_state_builder.max_row} ({template_footer_rows} rows), Target start: {write_pointer_row}")
+            
+            # Calculate actual number of columns from bundled config
+            actual_num_cols = None
+            if self.sheet_config and 'structure' in self.sheet_config:
+                bundled_columns = self.sheet_config['structure'].get('columns', [])
+                if bundled_columns:
+                    actual_num_cols = len(bundled_columns)
+                    logger.debug(f"Using actual column count from config: {actual_num_cols}")
+            
+            # Set column mapping if columns were filtered
+            if column_mapping:
+                self.template_state_builder.set_column_mapping(column_mapping)
+                logger.info(f"Applied column mapping to template state for footer restoration")
+            
             try:
                 self.template_state_builder.restore_footer_only(
                     target_worksheet=self.worksheet,  # Write to output worksheet
-                    footer_start_row=write_pointer_row
+                    footer_start_row=write_pointer_row,
+                    actual_num_cols=actual_num_cols
                 )
                 logger.debug(f"Template footer restored successfully - rows {write_pointer_row}-{write_pointer_row + template_footer_rows - 1}")
             except Exception as e:
@@ -627,43 +728,3 @@ class LayoutBuilder:
                     self.worksheet.row_dimensions[footer_row].height = h_val
             except (ValueError, TypeError):
                 pass
-
-    def _build_replacement_rules(self) -> list:
-        """
-        Build text replacement rules for template state.
-        
-        Returns:
-            List of replacement rule dicts
-        """
-        rules = []
-        
-        # Standard placeholder rules
-        rules.extend([
-            {"find": "JFINV", "data_path": ["processed_tables_data", "1", "inv_no", 0], "match_mode": "exact"},
-            {"find": "JFTIME", "data_path": ["processed_tables_data", "1", "inv_date", 0], "is_date": True, "match_mode": "exact"},
-            {"find": "JFREF", "data_path": ["processed_tables_data", "1", "inv_ref", 0], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_NAME]]", "data_path": ["customer_info", "name"], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_ADDRESS]]", "data_path": ["customer_info", "address"], "match_mode": "exact"}
-        ])
-        
-        # DAF-specific rules (if DAF mode enabled)
-        if self.args and self.args.DAF:
-            rules.extend([
-                {"find": "BINH PHUOC", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET, SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET,SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET, SVAYRIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BINH DUONG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "FCA  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
-                {"find": "FCA: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
-                {"find": "DAF  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
-                {"find": "DAF: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
-                {"find": "SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "PORT KLANG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "HCM", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "DAP", "replace": "DAF", "match_mode": "substring"},
-                {"find": "FCA", "replace": "DAF", "match_mode": "substring"},
-                {"find": "CIF", "replace": "DAF", "match_mode": "substring"},
-            ])
-        
-        return rules

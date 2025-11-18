@@ -1,0 +1,173 @@
+>>> [0mINFO[0m >>> === Starting Invoice Generation (Refactored) ===
+>>> [0mINFO[0m >>> Started at: 15:43:06
+>>> [0mINFO[0m >>> Deriving paths from input: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [0mINFO[0m >>> Found exact match for template and bundled config (subdir): C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+>>> [0mINFO[0m >>> Configuration loaded successfully.
+>>> [0mINFO[0m >>> Detected bundled config version: 2.1_developer_optimized
+>>> [0mINFO[0m >>> Loading data from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [0mINFO[0m >>> Template will be loaded as read-only for state capture
+>>> [0mINFO[0m >>> Loading template and creating new workbook...
+>>> [0mINFO[0m >>> Creating new workbook with 3 sheets
+>>> [0mINFO[0m >>> New workbook created successfully
+>>> [0mINFO[0m >>> Processing sheet 'Invoice'
+>>> [0mINFO[0m >>> Processing sheet 'Invoice' as single table/aggregation
+>>> [0mINFO[0m >>> Merged 3 static values into first 3 data rows
+>>> [0mINFO[0m >>> Successfully resolved table data using TableDataAdapter
+>>> [0mINFO[0m >>> Building layout for sheet 'Invoice'
+>>> [0mINFO[0m >>> Capturing template state from template worksheet
+>>> [0mINFO[0m >>> Applying text replacements to template state
+>>> [0mINFO[0m >>> [TemplateStateBuilder] Text replacements complete: 2 changes made
+>>> [0mINFO[0m >>> Text replacements applied to template state: 2 changes made
+>>> [0mINFO[0m >>> Built column mapping for template shifting: 7 active Excel columns
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for HeaderBuilder
+>>> [0mINFO[0m >>> Using BUNDLED config (columns=7)
+>>> [0mINFO[0m >>> Entering data table builder block
+>>> [0mINFO[0m >>> Using resolver-provided resolved_data (modern approach)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for DataTableBuilder
+>>> [0mINFO[0m >>> DataTableBuilder completed: 15 data rows written (rows 22-36)
+>>> [0mINFO[0m >>> Restoring template header AFTER table build (correct column alignment)
+>>> [0mINFO[0m >>> Applied column mapping to template state for filtered columns
+>>> [0mINFO[0m >>> Template header restored successfully with 7 columns (rows 1-20)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for FooterBuilder
+>>> [0mINFO[0m >>> [FooterBuilder] build() called - footer_row_num=37
+>>> [0mINFO[0m >>> [FooterBuilder] Starting footer generation at row 37
+>>> [0mINFO[0m >>> [FooterBuilder._build_before_footer] Wrote text to B37: 'HS.CODE: 4107.12.00'
+>>> [0mINFO[0m >>> [FooterBuilder] Building regular footer at row 38
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:
+>>> [0mINFO[0m >>>    total_text='TOTAL:'
+>>> [0mINFO[0m >>>    total_text_col_id='col_po'
+>>> [0mINFO[0m >>>    total_text_col_idx=2
+>>> [0mINFO[0m >>>    column_map_by_id={'col_static': 1, 'col_po': 2, 'col_item': 3, 'col_desc': 4, 'col_qty_sf': 5, 'col_unit_price': 6, 'col_amount': 7}
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] WROTE TOTAL TEXT to B38 value='TOTAL:'
+>>> [0mINFO[0m >>> [FooterBuilder] Regular footer built successfully at row 38
+>>> [0mINFO[0m >>> [FooterBuilder] COMPLETE - Started at 37, ended at 38, total rows: 2
+>>> [0mINFO[0m >>> Restoring template footer after row 39
+>>> [0mINFO[0m >>> Applied column mapping to template state for footer restoration
+>>> [0mINFO[0m >>> Layout built successfully for sheet 'Invoice'
+>>> [0mINFO[0m >>> Successfully filled table data/footer for sheet 'Invoice'
+>>> [0mINFO[0m >>> Processing sheet 'Contract'
+>>> [0mINFO[0m >>> Processing sheet 'Contract' as single table/aggregation
+>>> [0mINFO[0m >>> Successfully resolved table data using TableDataAdapter
+>>> [0mINFO[0m >>> Building layout for sheet 'Contract'
+>>> [0mINFO[0m >>> Capturing template state from template worksheet
+>>> [0mINFO[0m >>> Applying text replacements to template state
+>>> [0mINFO[0m >>> [TemplateStateBuilder] Text replacements complete: 1 changes made
+>>> [0mINFO[0m >>> Text replacements applied to template state: 1 changes made
+>>> [0mINFO[0m >>> Built column mapping for template shifting: 5 active Excel columns
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for HeaderBuilder
+>>> [0mINFO[0m >>> Using BUNDLED config (columns=5)
+>>> [0mINFO[0m >>> Entering data table builder block
+>>> [0mINFO[0m >>> Using resolver-provided resolved_data (modern approach)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for DataTableBuilder
+>>> WARNING >>> [data_table_builder.py:232 in build()] warning!!  Vertical merge requested for column 'col_desc' but column not found in column_id_map
+>>> [0mINFO[0m >>> DataTableBuilder completed: 15 data rows written (rows 16-30)
+>>> [0mINFO[0m >>> Restoring template header AFTER table build (correct column alignment)
+>>> [0mINFO[0m >>> Applied column mapping to template state for filtered columns
+>>> [0mINFO[0m >>> Template header restored successfully with 5 columns (rows 1-14)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for FooterBuilder
+>>> [0mINFO[0m >>> [FooterBuilder] build() called - footer_row_num=31
+>>> [0mINFO[0m >>> [FooterBuilder] Starting footer generation at row 31
+>>> [0mINFO[0m >>> [FooterBuilder] Building regular footer at row 31
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:
+>>> [0mINFO[0m >>>    total_text='TOTAL:'
+>>> [0mINFO[0m >>>    total_text_col_id='col_no'
+>>> [0mINFO[0m >>>    total_text_col_idx=1
+>>> [0mINFO[0m >>>    column_map_by_id={'col_no': 1, 'col_item': 2, 'col_qty_sf': 3, 'col_unit_price': 4, 'col_amount': 5}
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] WROTE TOTAL TEXT to A31 value='TOTAL:'
+>>> [0mINFO[0m >>> [FooterBuilder] Regular footer built successfully at row 31
+>>> [0mINFO[0m >>> [FooterBuilder] COMPLETE - Started at 31, ended at 31, total rows: 1
+>>> [0mINFO[0m >>> Restoring template footer after row 32
+>>> [0mINFO[0m >>> Applied column mapping to template state for footer restoration
+>>> [0mINFO[0m >>> Layout built successfully for sheet 'Contract'
+>>> [0mINFO[0m >>> Successfully filled table data/footer for sheet 'Contract'
+>>> [0mINFO[0m >>> Processing sheet 'Packing list'
+>>> [0mINFO[0m >>> Processing sheet 'Packing list' as multi-table/packing list
+>>> [0mINFO[0m >>> Found 2 tables to process: ['1', '2']
+>>> [0mINFO[0m >>> [MultiTableProcessor] Capturing template state once for all tables
+>>> [0mINFO[0m >>> Applying text replacements to shared template state
+>>> [0mINFO[0m >>> [TemplateStateBuilder] Text replacements complete: 5 changes made
+>>> [0mINFO[0m >>> Text replacements applied to shared template state: 5 changes made
+>>> [0mINFO[0m >>> Processing table '1' (1/2)
+>>> [0mINFO[0m >>> Filtering out column 'col_blank_test' (skip_in_daf=True, DAF_mode=True)
+>>> [0mINFO[0m >>> Merged 4 static values into first 4 data rows
+>>> [0mINFO[0m >>> Building layout for sheet 'Packing list'
+>>> [0mINFO[0m >>> Using pre-captured template state (multi-table optimization)
+>>> [0mINFO[0m >>> Built column mapping for template shifting: 9 active Excel columns
+>>> [0mINFO[0m >>> Filtered bundled_columns: 9 → 8 (DAF=True, custom=False)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for HeaderBuilder
+>>> [0mINFO[0m >>> Using BUNDLED config (columns=8)
+>>> [0mINFO[0m >>> Entering data table builder block
+>>> [0mINFO[0m >>> Using resolver-provided resolved_data (modern approach)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for DataTableBuilder
+>>> [0mINFO[0m >>> DataTableBuilder completed: 30 data rows written (rows 23-52)
+>>> [0mINFO[0m >>> Restoring template header AFTER table build (correct column alignment)
+>>> [0mINFO[0m >>> Applied column mapping to template state for filtered columns
+>>> [0mINFO[0m >>> Template header restored successfully with 9 columns (rows 1-20)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for FooterBuilder
+>>> [0mINFO[0m >>> [FooterBuilder] build() called - footer_row_num=53
+>>> [0mINFO[0m >>> [FooterBuilder] Starting footer generation at row 53
+>>> [0mINFO[0m >>> [FooterBuilder._build_before_footer] Wrote text to B53: 'LEATHER (HS.CODE: 4107.12.00)'
+>>> [0mINFO[0m >>> [FooterBuilder] Building regular footer at row 54
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:
+>>> [0mINFO[0m >>>    total_text='TOTAL:'
+>>> [0mINFO[0m >>>    total_text_col_id='col_po'
+>>> [0mINFO[0m >>>    total_text_col_idx=2
+>>> [0mINFO[0m >>>    column_map_by_id={'col_static': 1, 'col_po': 2, 'col_item': 3, 'col_desc': 4, 'col_qty_header': 5, 'col_qty_pcs': 5, 'col_qty_sf': 6, 'col_net': 7, 'col_gross': 8, 'col_cbm': 9}
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] WROTE TOTAL TEXT to B54 value='TOTAL:'
+>>> [0mINFO[0m >>> [FooterBuilder] Regular footer built successfully at row 54
+>>> [0mINFO[0m >>> [FooterBuilder] COMPLETE - Started at 53, ended at 54, total rows: 2
+>>> [0mINFO[0m >>> Layout built successfully for sheet 'Packing list'
+>>> [0mINFO[0m >>> Processing table '2' (2/2)
+>>> [0mINFO[0m >>> Filtering out column 'col_blank_test' (skip_in_daf=True, DAF_mode=True)
+>>> [0mINFO[0m >>> Merged 4 static values into first 4 data rows
+>>> [0mINFO[0m >>> Building layout for sheet 'Packing list'
+>>> [0mINFO[0m >>> Using pre-captured template state (multi-table optimization)
+>>> [0mINFO[0m >>> Built column mapping for template shifting: 9 active Excel columns
+>>> [0mINFO[0m >>> Filtered bundled_columns: 9 → 8 (DAF=True, custom=False)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for HeaderBuilder
+>>> [0mINFO[0m >>> Using BUNDLED config (columns=8)
+>>> [0mINFO[0m >>> Entering data table builder block
+>>> [0mINFO[0m >>> Using resolver-provided resolved_data (modern approach)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for DataTableBuilder
+>>> [0mINFO[0m >>> DataTableBuilder completed: 14 data rows written (rows 58-71)
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for FooterBuilder
+>>> [0mINFO[0m >>> [FooterBuilder] build() called - footer_row_num=72
+>>> [0mINFO[0m >>> [FooterBuilder] Starting footer generation at row 72
+>>> [0mINFO[0m >>> [FooterBuilder._build_before_footer] Wrote text to B72: 'LEATHER (HS.CODE: 4107.12.00)'
+>>> [0mINFO[0m >>> [FooterBuilder] Building regular footer at row 73
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:
+>>> [0mINFO[0m >>>    total_text='TOTAL:'
+>>> [0mINFO[0m >>>    total_text_col_id='col_po'
+>>> [0mINFO[0m >>>    total_text_col_idx=2
+>>> [0mINFO[0m >>>    column_map_by_id={'col_static': 1, 'col_po': 2, 'col_item': 3, 'col_desc': 4, 'col_qty_header': 5, 'col_qty_pcs': 5, 'col_qty_sf': 6, 'col_net': 7, 'col_gross': 8, 'col_cbm': 9}
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] WROTE TOTAL TEXT to B73 value='TOTAL:'
+>>> [0mINFO[0m >>> [FooterBuilder] Regular footer built successfully at row 73
+>>> [0mINFO[0m >>> [FooterBuilder] COMPLETE - Started at 72, ended at 73, total rows: 2
+>>> [0mINFO[0m >>> Layout built successfully for sheet 'Packing list'
+>>> [0mINFO[0m >>> Adding Grand Total Row
+>>> [0mINFO[0m >>> StyleRegistry initialized successfully for FooterBuilder
+>>> [0mINFO[0m >>> [FooterBuilder] build() called - footer_row_num=74
+>>> [0mINFO[0m >>> [FooterBuilder] Starting footer generation at row 74
+>>> [0mINFO[0m >>> [FooterBuilder] Building grand_total footer at row 74
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:
+>>> [0mINFO[0m >>>    total_text='TOTAL OF:'
+>>> [0mINFO[0m >>>    total_text_col_id='col_po'
+>>> [0mINFO[0m >>>    total_text_col_idx=2
+>>> [0mINFO[0m >>>    column_map_by_id={'col_static': 1, 'col_po': 2, 'col_item': 3, 'col_desc': 4, 'col_qty_header': 5, 'col_qty_pcs': 5, 'col_qty_sf': 6, 'col_net': 7, 'col_gross': 8, 'col_cbm': 9}
+>>> [0mINFO[0m >>> [FooterBuilder._build_footer_common] WROTE TOTAL TEXT to B74 value='TOTAL OF:'
+>>> [0mINFO[0m >>> [FooterBuilder] Grand total footer built successfully at row 74
+>>> [0mINFO[0m >>> [FooterBuilder] COMPLETE - Started at 74, ended at 74, total rows: 1
+>>> [0mINFO[0m >>> [MultiTableProcessor] Restoring template footer after row 75
+>>> [0mINFO[0m >>> Filtering out column 'col_blank_test' (skip_in_daf=True, DAF_mode=True)
+>>> [0mINFO[0m >>> [MultiTableProcessor] Template footer restored successfully at row 75
+>>> [0mINFO[0m >>> Successfully processed 2 tables for sheet 'Packing list'.
+>>> [0mINFO[0m >>> === Processing Summary ===
+>>> [0mINFO[0m >>> Sheets processed successfully: 3/3
+>>> [0mINFO[0m >>>   Success: Invoice, Contract, Packing list
+>>> [0mINFO[0m >>> Saving final workbook...
+>>> [0mINFO[0m >>> Workbook saved successfully: 'C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx'
+>>> [0mINFO[0m >>> === Invoice Generation Finished ===
+>>> [0mINFO[0m >>> Total Time: 1.48 seconds
+>>> [0mINFO[0m >>> Completed at: 15:43:07
+Running command: C:\Users\JPZ031127\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe -m invoice_generator.generate_invoice C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json --output C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx --templatedir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template --configdir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled --DAF --log-level INFO
+Invoice generated successfully at: C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx

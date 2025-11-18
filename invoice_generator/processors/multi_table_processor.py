@@ -6,6 +6,7 @@ from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import FooterBuilderStyler
 from ..styling.models import StylingConfigModel
 from ..config.builder_config_resolver import BuilderConfigResolver
+from ..utils.text_replacement_rules import build_replacement_rules
 import traceback
 from openpyxl.utils import get_column_letter
 
@@ -54,19 +55,24 @@ class MultiTableProcessor(SheetProcessor):
             logger.critical(f"CRITICAL: 'header_row' not found in sheet_config['layout_config']['structure'] for '{self.sheet_name}'. Cannot capture template state.")
             return False
         
-        template_header_end_row = structure_config['header_row']
+        # header_row is where the TABLE HEADER goes (column names row)
+        # The decorative template header ends BEFORE the table header
+        table_header_row = structure_config['header_row']
+        template_header_end_row = table_header_row - 1  # Template header ends BEFORE table header
+        
         # Use explicit footer_row if provided, otherwise assume footer starts after header
-        template_footer_start_row = structure_config.get('footer_row', template_header_end_row + 1)
+        template_footer_start_row = structure_config.get('footer_row', table_header_row + 1)
         num_header_cols = 20  # Conservative estimate
         
-        logger.debug(f"Template dimensions: header_end_row={template_header_end_row}, footer_start_row={template_footer_start_row}")
+        logger.debug(f"Template dimensions: table_header_row={table_header_row}, template_header_end_row={template_header_end_row}, footer_start_row={template_footer_start_row}")
         
         try:
             template_state_builder = TemplateStateBuilder(
                 worksheet=self.template_worksheet,
                 num_header_cols=num_header_cols,
                 header_end_row=template_header_end_row,
-                footer_start_row=template_footer_start_row
+                footer_start_row=template_footer_start_row,
+                debug=getattr(self.args, 'debug', False)
             )
             logger.debug(f"Template state captured: {len(template_state_builder.header_state)} header rows, {len(template_state_builder.footer_state)} footer rows")
             
@@ -74,7 +80,7 @@ class MultiTableProcessor(SheetProcessor):
             if self.args and self.invoice_data:
                 logger.info(f"Applying text replacements to shared template state")
                 try:
-                    replacement_rules = self._build_replacement_rules()
+                    replacement_rules = build_replacement_rules(self.args)
                     changes = template_state_builder.apply_text_replacements(
                         replacement_rules=replacement_rules,
                         invoice_data=self.invoice_data
@@ -282,10 +288,30 @@ class MultiTableProcessor(SheetProcessor):
         if template_state_builder:
             logger.debug(f"\n--- Restoring Template Footer ---")
             logger.info(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+            
+            # Calculate actual number of columns from first table's config
+            actual_num_cols = None
+            first_table_key = table_keys[0] if table_keys else None
+            if first_table_key:
+                first_resolver = BuilderConfigResolver(
+                    config_loader=self.config_loader,
+                    sheet_name=self.sheet_name,
+                    worksheet=self.output_worksheet,
+                    args=self.args,
+                    invoice_data=self.invoice_data
+                )
+                _, _, first_layout_cfg = first_resolver.get_layout_bundles_with_data(table_key=first_table_key)
+                if first_layout_cfg and 'sheet_config' in first_layout_cfg:
+                    bundled_columns = first_layout_cfg['sheet_config'].get('structure', {}).get('columns', [])
+                    if bundled_columns:
+                        actual_num_cols = len(bundled_columns)
+                        logger.debug(f"Using actual column count from table '{first_table_key}': {actual_num_cols}")
+            
             try:
                 template_state_builder.restore_footer_only(
                     target_worksheet=self.output_worksheet,
-                    footer_start_row=current_row
+                    footer_start_row=current_row,
+                    actual_num_cols=actual_num_cols
                 )
                 logger.info(f"[MultiTableProcessor] Template footer restored successfully at row {current_row}")
             except Exception as e:
@@ -297,43 +323,3 @@ class MultiTableProcessor(SheetProcessor):
         
         logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True
-
-    def _build_replacement_rules(self) -> list:
-        """
-        Build text replacement rules for template state.
-        
-        Returns:
-            List of replacement rule dicts
-        """
-        rules = []
-        
-        # Standard placeholder rules
-        rules.extend([
-            {"find": "JFINV", "data_path": ["processed_tables_data", "1", "inv_no", 0], "match_mode": "exact"},
-            {"find": "JFTIME", "data_path": ["processed_tables_data", "1", "inv_date", 0], "is_date": True, "match_mode": "exact"},
-            {"find": "JFREF", "data_path": ["processed_tables_data", "1", "inv_ref", 0], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_NAME]]", "data_path": ["customer_info", "name"], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_ADDRESS]]", "data_path": ["customer_info", "address"], "match_mode": "exact"}
-        ])
-        
-        # DAF-specific rules (if DAF mode enabled)
-        if self.args and self.args.DAF:
-            rules.extend([
-                {"find": "BINH PHUOC", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET, SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET,SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BAVET, SVAYRIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "BINH DUONG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "FCA  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
-                {"find": "FCA: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
-                {"find": "DAF  BAVET,SVAYRIENG", "replace": "DAF BAVET", "match_mode": "exact"},
-                {"find": "DAF: BAVET,SVAYRIENG", "replace": "DAF: BAVET", "match_mode": "exact"},
-                {"find": "SVAY RIENG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "PORT KLANG", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "HCM", "replace": "BAVET", "match_mode": "exact"},
-                {"find": "DAP", "replace": "DAF", "match_mode": "substring"},
-                {"find": "FCA", "replace": "DAF", "match_mode": "substring"},
-                {"find": "CIF", "replace": "DAF", "match_mode": "substring"},
-            ])
-        
-        return rules

@@ -1,0 +1,60 @@
+>>> [0mINFO[0m >>> === Starting Invoice Generation (Refactored) ===
+>>> [0mINFO[0m >>> Started at: 11:15:20
+>>> [36mDEBUG[0m >>> [generate_invoice.py:285 in main()] Arguments: {'input_data_file': 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\JF.json', 'output': 'C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx', 'templatedir': 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\template', 'configdir': 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\config_bundled', 'DAF': True, 'custom': False, 'debug': True, 'log_level': 'INFO'}
+>>> [0mINFO[0m >>> Deriving paths from input: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [36mDEBUG[0m >>> [generate_invoice.py:68 in derive_paths()] Derived initial template name part: 'JF'
+>>> [36mDEBUG[0m >>> [generate_invoice.py:74 in derive_paths()] Checking for exact match: Template='C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template\JF.xlsx', Config='C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config.json'
+>>> [0mINFO[0m >>> Found exact match for template and bundled config (subdir): C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+>>> [36mDEBUG[0m >>> [config_loader.py:54 in _load()] Loading configuration from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled\JF_config\JF_config.json
+>>> [0mINFO[0m >>> Configuration loaded successfully.
+>>> [0mINFO[0m >>> Detected bundled config version: 2.1_developer_optimized
+>>> [0mINFO[0m >>> Loading data from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json
+>>> [0mINFO[0m >>> Template will be loaded as read-only for state capture
+>>> [0mINFO[0m >>> Loading template and creating new workbook...
+>>> [36mDEBUG[0m >>> [generate_invoice.py:320 in main()] Loading template from: C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template\JF.xlsx
+>>> [36mDEBUG[0m >>> [generate_invoice.py:325 in main()] Template loaded successfully (read_only=False)
+>>> [36mDEBUG[0m >>> [generate_invoice.py:326 in main()]    Template sheets: ['Contract', 'Invoice', 'Packing list']
+>>> [36mDEBUG[0m >>> [generate_invoice.py:330 in main()] Found 3 sheets in template
+>>> [36mDEBUG[0m >>> [generate_invoice.py:333 in main()] Creating new output workbook using WorkbookBuilder...
+>>> [0mINFO[0m >>> Creating new workbook with 3 sheets
+>>> [36mDEBUG[0m >>> [workbook_builder.py:45 in build()] Created sheet: 'Contract'
+>>> [36mDEBUG[0m >>> [workbook_builder.py:45 in build()] Created sheet: 'Invoice'
+>>> [36mDEBUG[0m >>> [workbook_builder.py:45 in build()] Created sheet: 'Packing list'
+>>> [0mINFO[0m >>> New workbook created successfully
+>>> [36mDEBUG[0m >>> [generate_invoice.py:338 in main()] New output workbook created with 3 sheets
+>>> [36mDEBUG[0m >>> [generate_invoice.py:344 in main()] Both template (read) and output (write) workbooks ready
+>>> [36mDEBUG[0m >>> [generate_invoice.py:363 in main()] DEBUG: Globally calculated final grand total pallets: 31
+>>> [0mINFO[0m >>> Processing sheet 'Invoice'
+>>> [36mDEBUG[0m >>> [config_loader.py:123 in get_styling_config()] get_styling_config for 'Invoice'
+>>> [36mDEBUG[0m >>> [config_loader.py:124 in get_styling_config()] Keys in sheet_styling: ['_comment', 'columns', 'row_contexts']
+>>> [36mDEBUG[0m >>> [config_loader.py:129 in get_styling_config()] NEW FORMAT detected - returning columns + row_contexts as-is
+>>> [0mINFO[0m >>> Processing sheet 'Invoice' as single table/aggregation
+>>> [36mDEBUG[0m >>> [config_loader.py:123 in get_styling_config()] get_styling_config for 'Invoice'
+>>> [36mDEBUG[0m >>> [config_loader.py:124 in get_styling_config()] Keys in sheet_styling: ['_comment', 'columns', 'row_contexts']
+>>> [36mDEBUG[0m >>> [config_loader.py:129 in get_styling_config()] NEW FORMAT detected - returning columns + row_contexts as-is
+>>> [36mDEBUG[0m >>> [single_table_processor.py:43 in process()] layout_config keys: ['sheet_config', 'blanks', 'static_content', 'merge_rules', 'enable_text_replacement', 'skip_data_table_builder']
+>>> [36mDEBUG[0m >>> [single_table_processor.py:44 in process()] skip_data_table_builder in layout_config: False
+>>> [36mDEBUG[0m >>> [single_table_processor.py:45 in process()] skip_data_table_builder in sheet_config: NOT SET
+>>> ERROR >>> [generate_invoice.py:462 in main()] 
+--- UNHANDLED ERROR: name 'logger' is not defined ---
+Traceback (most recent call last):
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\generate_invoice.py", line 420, in main
+    processing_successful = processor.process()
+                            ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\processors\single_table_processor.py", line 48, in process
+    data_bundle = resolver.get_data_bundle()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config\builder_config_resolver.py", line 205, in get_data_bundle
+    header_info = self._construct_header_info(layout_config)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config\builder_config_resolver.py", line 382, in _construct_header_info
+    logger.debug(f"[_construct_header_info] BEFORE filtering: {len(columns)} columns")
+    ^^^^^^
+NameError: name 'logger' is not defined
+>>> [36mDEBUG[0m >>> [generate_invoice.py:466 in main()] Template workbook closed.
+>>> [36mDEBUG[0m >>> [generate_invoice.py:469 in main()] Output workbook closed.
+>>> [0mINFO[0m >>> === Invoice Generation Finished ===
+>>> [0mINFO[0m >>> Total Time: 0.09 seconds
+>>> [0mINFO[0m >>> Completed at: 11:15:20
+Running command: C:\Users\JPZ031127\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe -m invoice_generator.generate_invoice C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json --output C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx --templatedir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template --configdir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled --DAF --debug
+Invoice generated successfully at: C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx

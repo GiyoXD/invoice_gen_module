@@ -45,6 +45,14 @@ class TemplateStateBuilder:
         self.min_col = 1
         self.num_header_cols = num_header_cols
         self.debug = debug or TemplateStateBuilder.DEBUG  # Use instance or class-level debug flag
+        
+        if self.debug:
+            logger.debug(f"TemplateStateBuilder init: worksheet={worksheet.title}, header_end={header_end_row}, footer_start={footer_start_row}")
+        
+        # Column mapping: template_col_index -> output_col_index
+        # Used to shift template content when columns are filtered/removed
+        # Default is 1:1 mapping (no shift)
+        self.column_mapping: Dict[int, int] = {}
 
         # Store default style objects for comparison
         default_workbook = openpyxl.Workbook()
@@ -67,6 +75,9 @@ class TemplateStateBuilder:
         self.max_col = max(max_col_with_content, self.num_header_cols) # Ensure it's at least num_header_cols
         self.max_row = max(max_row_with_content, self.max_row) # Update self.max_row with max_row_with_content
         
+        if self.debug:
+            logger.debug(f"Template dimensions: max_col={self.max_col}, max_row={self.max_row}, num_header_cols={self.num_header_cols}")
+        
         # Capture template state immediately during initialization
         if self.debug:
             logger.debug(f"Capturing template state during init")
@@ -75,6 +86,44 @@ class TemplateStateBuilder:
         self._capture_footer(footer_start_row, self.max_row)
         if self.debug:
             logger.debug(f"State captured: {len(self.header_state)} header rows, {len(self.footer_state)} footer rows")
+    
+    def set_column_mapping(self, mapping: Dict[int, int]):
+        """
+        Set the column mapping for restoration.
+        
+        This allows template content to be shifted when columns are filtered/removed.
+        For example, if template has 7 columns but output only uses 5 columns,
+        the mapping tells us where each template column should go in the output.
+        
+        Args:
+            mapping: Dict mapping template column index (1-based) to output column index (1-based)
+                    Example: {1: 1, 2: 2, 3: None, 4: 3, 5: 4, 6: None, 7: 5}
+                    None means the column was removed and content should be skipped
+        """
+        self.column_mapping = mapping
+        if self.debug:
+            active_mappings = {k: v for k, v in mapping.items() if v is not None}
+            skipped_cols = [k for k, v in mapping.items() if v is None]
+            logger.debug(f"Column mapping set: {len(active_mappings)} columns mapped")
+            logger.debug(f"  Active: {active_mappings}")
+            if skipped_cols:
+                logger.debug(f"  Skipped template columns: {skipped_cols}")
+    
+    def _get_mapped_column(self, template_col: int) -> int:
+        """
+        Get the output column index for a given template column.
+        
+        Args:
+            template_col: Template column index (1-based)
+            
+        Returns:
+            Output column index (1-based), or None if column was removed
+        """
+        if not self.column_mapping:
+            # No mapping set, use 1:1 mapping
+            return template_col
+        
+        return self.column_mapping.get(template_col, template_col)
 
 
     def _has_content_or_style(self, cell) -> bool:
@@ -215,8 +264,11 @@ class TemplateStateBuilder:
 
         logger.debug(f"  Header starts at row {header_start_row}, ends at row {end_row}")
         logger.debug(f"  Max columns: {self.max_col}")
+        
+        rows_captured = 0  # Track actual rows captured
 
         for r_idx in range(header_start_row, end_row + 1):
+            rows_captured += 1
             row_data = []
             row_has_content = False
             styled_cells = []  # Track cells with interesting styling
@@ -224,6 +276,11 @@ class TemplateStateBuilder:
             for c_idx in range(1, self.max_col + 1):
                 cell_info = self._get_cell_info(self.worksheet, r_idx, c_idx)
                 row_data.append(cell_info)
+                
+                # Debug: Log specific metadata cells (K7:K9 = column 11, rows 7-9)
+                if self.debug and c_idx == 11 and r_idx in [7, 8, 9]:
+                    col_letter = get_column_letter(c_idx)
+                    logger.debug(f"  METADATA CELL {col_letter}{r_idx}: value={cell_info.get('value')}")
                 
                 # Check if this cell has content
                 if cell_info['value'] is not None:
@@ -279,7 +336,7 @@ class TemplateStateBuilder:
         for c_idx in range(1, self.max_col + 1):
             self.column_widths[c_idx] = self.worksheet.column_dimensions[get_column_letter(c_idx)].width
         
-        logger.debug(f"  [OK] Header capture complete: {len(self.header_state)} rows, {len(self.header_merged_cells)} merges")
+        logger.debug(f"  [OK] Header capture complete: {rows_captured} rows captured (rows {header_start_row}-{end_row}), {len(self.header_merged_cells)} merges")
 
     def _capture_footer(self, footer_start_row: int, max_possible_footer_row: int):
         """
@@ -399,25 +456,89 @@ class TemplateStateBuilder:
         
         logger.debug(f"  [OK] Footer capture complete: {len(self.footer_state)} rows, {len(self.footer_merged_cells)} merges, template footer start: {self.template_footer_start_row}, non-empty cells: {total_non_empty_cells}")
 
-    def restore_header_only(self, target_worksheet: Worksheet):
+    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None):
         """
         Restores ONLY the header (structure, values, merges, formatting) to a new clean worksheet.
         This is used when creating a fresh worksheet to avoid template footer conflicts.
+        
+        Uses column mapping if set to shift content when columns are filtered/removed.
+        
+        Args:
+            target_worksheet: The worksheet to restore header to
+            actual_num_cols: If provided, stretch header to this many columns (for dynamic column scenarios)
         """
         if self.debug:
             logger.debug(f"Restoring header to new worksheet")
             logger.debug(f"Header rows: {len(self.header_state)}, Header merges: {len(self.header_merged_cells)}")
+            if actual_num_cols:
+                template_cols = self.max_col - self.min_col + 1
+                logger.debug(f"Dynamic column stretch: Template={template_cols} cols, Actual={actual_num_cols} cols")
+            if self.column_mapping:
+                logger.debug(f"Using column mapping to shift template content")
+        
+        # Calculate template column count and actual target
+        template_num_cols = self.max_col - self.min_col + 1
+        target_num_cols = actual_num_cols if actual_num_cols else template_num_cols
         
         # Restore header cell values and formatting
         for row_idx, row_data in enumerate(self.header_state):
             actual_row = row_idx + self.min_row
+            
+            # Restore template columns with column mapping
             for col_idx, cell_info in enumerate(row_data):
-                actual_col = col_idx + self.min_col
-                target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                template_col = col_idx + self.min_col
+                
+                # Get mapped column (may be shifted or None if removed)
+                output_col = self._get_mapped_column(template_col)
+                
+                # Handle removed columns with content - try to shift left first, then right
+                if output_col is None:
+                    if cell_info['value'] is not None:
+                        # Column removed but has content - try to save it
+                        shifted_col = None
+                        
+                        # Priority 1: Try shift LEFT (to previous column)
+                        if col_idx > 0:  # Has a left neighbor
+                            left_cell = row_data[col_idx - 1]
+                            if left_cell['value'] is None:  # Left is empty
+                                shifted_col = self._get_mapped_column(template_col - 1)
+                                if self.debug:
+                                    logger.debug(f"  Shifting removed column {template_col} content LEFT to {template_col-1} (row {actual_row}, value: '{cell_info['value']}')")
+                        
+                        # Priority 2: Try shift RIGHT (to next column) if left failed
+                        if shifted_col is None and col_idx < len(row_data) - 1:  # Has a right neighbor
+                            right_cell = row_data[col_idx + 1]
+                            if right_cell['value'] is None:  # Right is empty
+                                shifted_col = self._get_mapped_column(template_col + 1)
+                                if self.debug:
+                                    logger.debug(f"  Shifting removed column {template_col} content RIGHT to {template_col+1} (row {actual_row}, value: '{cell_info['value']}')")
+                        
+                        # HALT if cannot shift anywhere
+                        if shifted_col is None:
+                            left_status = "has content" if col_idx > 0 and row_data[col_idx - 1]['value'] is not None else "N/A"
+                            right_status = "has content" if col_idx < len(row_data) - 1 and row_data[col_idx + 1]['value'] is not None else "N/A"
+                            raise ValueError(
+                                f"CRITICAL: Cannot remove column {template_col} at row {actual_row}!\n"
+                                f"  Column has content: '{cell_info['value']}'\n"
+                                f"  Cannot shift LEFT (col {template_col-1}): {left_status}\n"
+                                f"  Cannot shift RIGHT (col {template_col+1}): {right_status}\n"
+                                f"  Solution: Either remove content from neighboring columns or don't use skip_in_daf flag on this column."
+                            )
+                        
+                        output_col = shifted_col
+                    else:
+                        # Column removed and empty - safe to skip
+                        if self.debug:
+                            logger.debug(f"  Skipping removed column {template_col} at row {actual_row} (empty)")
+                        continue
+                
+                target_cell = target_worksheet.cell(row=actual_row, column=output_col)
                 
                 # Restore value
                 if cell_info['value'] is not None:
                     target_cell.value = cell_info['value']
+                    if self.debug and template_col != output_col:
+                        logger.debug(f"  Shifted column {template_col} -> {output_col} at row {actual_row} (value: '{cell_info['value']}')")
                 
                 # Restore formatting
                 if cell_info['font']:
@@ -430,13 +551,59 @@ class TemplateStateBuilder:
                     target_cell.alignment = copy.copy(cell_info['alignment'])
                 if cell_info['number_format']:
                     target_cell.number_format = cell_info['number_format']
+            
+            # If we need more columns than template had, extend the last column's styling
+            if target_num_cols > template_num_cols:
+                last_template_col_idx = len(row_data) - 1
+                last_template_cell_info = row_data[last_template_col_idx]
+                
+                # Extend from template edge to new edge
+                for extra_col_idx in range(template_num_cols, target_num_cols):
+                    actual_col = extra_col_idx + self.min_col
+                    target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                    
+                    # Copy styling from template's last column (but not value)
+                    if last_template_cell_info['font']:
+                        target_cell.font = copy.copy(last_template_cell_info['font'])
+                    if last_template_cell_info['fill']:
+                        target_cell.fill = copy.copy(last_template_cell_info['fill'])
+                    if last_template_cell_info['border']:
+                        target_cell.border = copy.copy(last_template_cell_info['border'])
+                    if last_template_cell_info['alignment']:
+                        target_cell.alignment = copy.copy(last_template_cell_info['alignment'])
+                    if last_template_cell_info['number_format']:
+                        target_cell.number_format = last_template_cell_info['number_format']
         
-        # Restore header merged cells
+        # Restore header merged cells with column mapping
         for merged_cell_range_str in self.header_merged_cells:
             try:
-                target_worksheet.merge_cells(merged_cell_range_str)
-                if self.debug:
-                    logger.debug(f"Merged: {merged_cell_range_str}")
+                # Apply column mapping to merged cells if mapping is set
+                if self.column_mapping:
+                    from openpyxl.utils.cell import range_boundaries
+                    min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
+                    
+                    # Map the columns
+                    mapped_min_col = self._get_mapped_column(min_col)
+                    mapped_max_col = self._get_mapped_column(max_col)
+                    
+                    # Skip if either column was removed
+                    if mapped_min_col is None or mapped_max_col is None:
+                        if self.debug:
+                            logger.debug(f"Skipping merge {merged_cell_range_str} (columns removed)")
+                        continue
+                    
+                    # Create adjusted merge range
+                    adjusted_range_str = f"{get_column_letter(mapped_min_col)}{min_row}:{get_column_letter(mapped_max_col)}{max_row}"
+                    target_worksheet.merge_cells(adjusted_range_str)
+                    if self.debug and merged_cell_range_str != adjusted_range_str:
+                        logger.debug(f"Merged (shifted): {merged_cell_range_str} -> {adjusted_range_str}")
+                    elif self.debug:
+                        logger.debug(f"Merged: {adjusted_range_str}")
+                else:
+                    # No mapping, use original
+                    target_worksheet.merge_cells(merged_cell_range_str)
+                    if self.debug:
+                        logger.debug(f"Merged: {merged_cell_range_str}")
             except Exception as e:
                 if self.debug:
                     logger.warning(f"Could not merge {merged_cell_range_str}: {e}")
@@ -454,14 +621,18 @@ class TemplateStateBuilder:
         if self.debug:
             logger.debug(f"Header restoration complete")
 
-    def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int):
+    def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, restore_footer_merges: bool = True):
         """
         Restores ONLY the footer (structure, values, merges, formatting) to the new worksheet.
         This places the template footer (static content) AFTER the dynamically created data footer.
         
+        Uses column mapping if set to shift content when columns are filtered/removed.
+        
         Args:
             target_worksheet: The worksheet to restore footer to
             footer_start_row: The row where the template footer should start (after data footer)
+            actual_num_cols: If provided, stretch footer to this many columns (for dynamic column scenarios)
+            restore_footer_merges: Whether to restore footer merged cells (default True)
         """
         logger.debug(f"restore_footer_only called with:")
         logger.debug(f"footer_start_row parameter: {footer_start_row}")
@@ -472,23 +643,81 @@ class TemplateStateBuilder:
         if self.debug:
             logger.debug(f"Restoring template footer starting at row {footer_start_row}")
             logger.debug(f"Template footer rows: {len(self.footer_state)}, Footer merges: {len(self.footer_merged_cells)}")
+            if actual_num_cols:
+                template_cols = self.max_col - self.min_col + 1
+                logger.debug(f"Dynamic column stretch: Template={template_cols} cols, Actual={actual_num_cols} cols")
+            if self.column_mapping:
+                logger.debug(f"Using column mapping to shift template content")
         
         # Calculate offset: template footer was at self.template_footer_start_row, now goes to footer_start_row
         offset = footer_start_row - self.template_footer_start_row if self.template_footer_start_row > 0 else 0
         logger.debug(f"Calculated offset: {offset} (footer_start_row={footer_start_row} - template_footer_start_row={self.template_footer_start_row})")
         logger.debug(f"offset: {offset}")
         
-        # Restore footer cell values and formatting with offset
+        # Calculate template column count and actual target
+        template_num_cols = self.max_col - self.min_col + 1
+        target_num_cols = actual_num_cols if actual_num_cols else template_num_cols
+        
+        # Restore footer cell values and formatting with offset and column mapping
         for row_idx, row_data in enumerate(self.footer_state):
             actual_row = self.template_footer_start_row + row_idx + offset
+            
+            # Restore template columns with column mapping
             for col_idx, cell_info in enumerate(row_data):
-                actual_col = col_idx + self.min_col
-                logger.debug(f"actual_row: {actual_row}, actual_col: {actual_col}")
-                target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                template_col = col_idx + self.min_col
+                
+                # Get mapped column (may be shifted or None if removed)
+                output_col = self._get_mapped_column(template_col)
+                
+                # Handle removed columns with content - try to shift left first, then right
+                if output_col is None:
+                    if cell_info['value'] is not None:
+                        # Column removed but has content - try to save it
+                        shifted_col = None
+                        
+                        # Priority 1: Try shift LEFT (to previous column)
+                        if col_idx > 0:  # Has a left neighbor
+                            left_cell = row_data[col_idx - 1]
+                            if left_cell['value'] is None:  # Left is empty
+                                shifted_col = self._get_mapped_column(template_col - 1)
+                                if self.debug:
+                                    logger.debug(f"  Shifting removed column {template_col} content LEFT to {template_col-1} (row {actual_row}, value: '{cell_info['value']}')")
+                        
+                        # Priority 2: Try shift RIGHT (to next column) if left failed
+                        if shifted_col is None and col_idx < len(row_data) - 1:  # Has a right neighbor
+                            right_cell = row_data[col_idx + 1]
+                            if right_cell['value'] is None:  # Right is empty
+                                shifted_col = self._get_mapped_column(template_col + 1)
+                                if self.debug:
+                                    logger.debug(f"  Shifting removed column {template_col} content RIGHT to {template_col+1} (row {actual_row}, value: '{cell_info['value']}')")
+                        
+                        # HALT if cannot shift anywhere
+                        if shifted_col is None:
+                            left_status = "has content" if col_idx > 0 and row_data[col_idx - 1]['value'] is not None else "N/A"
+                            right_status = "has content" if col_idx < len(row_data) - 1 and row_data[col_idx + 1]['value'] is not None else "N/A"
+                            raise ValueError(
+                                f"CRITICAL: Cannot remove column {template_col} at row {actual_row}!\n"
+                                f"  Column has content: '{cell_info['value']}'\n"
+                                f"  Cannot shift LEFT (col {template_col-1}): {left_status}\n"
+                                f"  Cannot shift RIGHT (col {template_col+1}): {right_status}\n"
+                                f"  Solution: Either remove content from neighboring columns or don't use skip_in_daf flag on this column."
+                            )
+                        
+                        output_col = shifted_col
+                    else:
+                        # Column removed and empty - safe to skip
+                        if self.debug:
+                            logger.debug(f"  Skipping removed column {template_col} at row {actual_row} (empty)")
+                        continue
+                
+                logger.debug(f"actual_row: {actual_row}, template_col: {template_col}, output_col: {output_col}")
+                target_cell = target_worksheet.cell(row=actual_row, column=output_col)
                 
                 # Restore value
                 if cell_info['value'] is not None:
                     target_cell.value = cell_info['value']
+                    if self.debug and template_col != output_col:
+                        logger.debug(f"  Shifted column {template_col} -> {output_col} at row {actual_row} (value: '{cell_info['value']}')")
                 
                 # Restore formatting
                 if cell_info['font']:
@@ -501,12 +730,72 @@ class TemplateStateBuilder:
                     target_cell.alignment = copy.copy(cell_info['alignment'])
                 if cell_info['number_format']:
                     target_cell.number_format = cell_info['number_format']
+            
+            # If we need more columns than template had, extend the last column's styling
+            if target_num_cols > template_num_cols:
+                last_template_col_idx = len(row_data) - 1
+                last_template_cell_info = row_data[last_template_col_idx]
+                
+                # Extend from template edge to new edge
+                for extra_col_idx in range(template_num_cols, target_num_cols):
+                    actual_col = extra_col_idx + self.min_col
+                    target_cell = target_worksheet.cell(row=actual_row, column=actual_col)
+                    
+                    # Copy styling from template's last column (but not value)
+                    if last_template_cell_info['font']:
+                        target_cell.font = copy.copy(last_template_cell_info['font'])
+                    if last_template_cell_info['fill']:
+                        target_cell.fill = copy.copy(last_template_cell_info['fill'])
+                    if last_template_cell_info['border']:
+                        target_cell.border = copy.copy(last_template_cell_info['border'])
+                    if last_template_cell_info['alignment']:
+                        target_cell.alignment = copy.copy(last_template_cell_info['alignment'])
+                    if last_template_cell_info['number_format']:
+                        target_cell.number_format = last_template_cell_info['number_format']
         
-        # Restore footer merged cells with offset
+        # Restore footer merged cells with offset and column mapping
         for merged_cell_range_str in self.footer_merged_cells:
             try:
                 from openpyxl.utils.cell import range_boundaries
                 min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
+                original_span = max_col - min_col + 1  # Calculate original column span
+                
+                # Apply column mapping if set
+                if self.column_mapping:
+                    mapped_min_col = self._get_mapped_column(min_col)
+                    mapped_max_col = self._get_mapped_column(max_col)
+                    
+                    # If either column was removed, find the nearest valid columns
+                    if mapped_min_col is None or mapped_max_col is None:
+                        # Find first valid column at or after min_col
+                        for col in range(min_col, max(self.column_mapping.keys()) + 1):
+                            mapped_col = self._get_mapped_column(col)
+                            if mapped_col is not None:
+                                mapped_min_col = mapped_col
+                                break
+                        
+                        # Find last valid column at or before max_col
+                        for col in range(max_col, min_col - 1, -1):
+                            mapped_col = self._get_mapped_column(col)
+                            if mapped_col is not None:
+                                mapped_max_col = mapped_col
+                                break
+                        
+                        # If still no valid range, skip this merge
+                        if mapped_min_col is None or mapped_max_col is None or mapped_min_col > mapped_max_col:
+                            if self.debug:
+                                logger.debug(f"Skipping footer merge {merged_cell_range_str} (no valid columns after mapping)")
+                            continue
+                        
+                        if self.debug:
+                            logger.debug(f"Adjusted footer merge {merged_cell_range_str}: cols {min_col}-{max_col} -> {mapped_min_col}-{mapped_max_col}")
+                    
+                    # Preserve the original span - extend max_col to maintain visual width
+                    min_col = mapped_min_col
+                    max_col = mapped_min_col + original_span - 1  # Maintain original span
+                else:
+                    # No mapping, keep original positions
+                    pass
                 
                 # Adjust row numbers with offset
                 min_row += offset
@@ -514,7 +803,10 @@ class TemplateStateBuilder:
                 adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
                 target_worksheet.merge_cells(adjusted_range_str)
                 if self.debug:
-                    logger.debug(f"Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+                    if merged_cell_range_str != adjusted_range_str:
+                        logger.debug(f"Merged (shifted): {merged_cell_range_str} -> {adjusted_range_str}")
+                    else:
+                        logger.debug(f"Merged: {adjusted_range_str}")
             except Exception as e:
                 if self.debug:
                     logger.warning(f"Could not merge {merged_cell_range_str}: {e}")
@@ -572,6 +864,44 @@ class TemplateStateBuilder:
                 try:
                     from openpyxl.utils.cell import range_boundaries
                     min_col, min_row, max_col, max_row = range_boundaries(merged_cell_range_str)
+                    original_span = max_col - min_col + 1  # Calculate original column span
+                    
+                    # Apply column mapping if set
+                    if self.column_mapping:
+                        mapped_min_col = self._get_mapped_column(min_col)
+                        mapped_max_col = self._get_mapped_column(max_col)
+                        
+                        # If either column was removed, find the nearest valid columns
+                        if mapped_min_col is None or mapped_max_col is None:
+                            # Find first valid column at or after min_col
+                            for col in range(min_col, max(self.column_mapping.keys()) + 1):
+                                mapped_col = self._get_mapped_column(col)
+                                if mapped_col is not None:
+                                    mapped_min_col = mapped_col
+                                    break
+                            
+                            # Find last valid column at or before max_col
+                            for col in range(max_col, min_col - 1, -1):
+                                mapped_col = self._get_mapped_column(col)
+                                if mapped_col is not None:
+                                    mapped_max_col = mapped_col
+                                    break
+                            
+                            # If still no valid range, skip this merge
+                            if mapped_min_col is None or mapped_max_col is None or mapped_min_col > mapped_max_col:
+                                if self.debug:
+                                    logger.debug(f"Skipping footer merge {merged_cell_range_str} (no valid columns after mapping)")
+                                continue
+                            
+                            if self.debug:
+                                logger.debug(f"Adjusted footer merge {merged_cell_range_str}: cols {min_col}-{max_col} -> {mapped_min_col}-{mapped_max_col}")
+                        
+                        # Preserve the original span - extend max_col to maintain visual width
+                        min_col = mapped_min_col
+                        max_col = mapped_min_col + original_span - 1  # Maintain original span
+                    else:
+                        # No mapping, keep original positions
+                        pass
                     
                     # Adjust row numbers for all footer merged cells
                     min_row += offset
@@ -579,7 +909,10 @@ class TemplateStateBuilder:
                     adjusted_range_str = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
                     target_worksheet.merge_cells(adjusted_range_str)
                     if self.debug:
-                        logger.debug(f"Merged: {merged_cell_range_str} -> {adjusted_range_str}")
+                        if merged_cell_range_str != adjusted_range_str:
+                            logger.debug(f"Merged (shifted): {merged_cell_range_str} -> {adjusted_range_str}")
+                        else:
+                            logger.debug(f"Merged: {adjusted_range_str}")
                 except Exception as e:
                     if self.debug:
                         logger.warning(f"Could not merge {merged_cell_range_str}: {e}")
@@ -627,6 +960,19 @@ class TemplateStateBuilder:
         Returns:
             Number of replacements made
         """
+        if self.debug:
+            logger.debug(f"=== apply_text_replacements START ===")
+            # Count formulas in header state
+            formula_count = 0
+            for row_data in self.header_state:
+                for cell_info in row_data:
+                    val = cell_info.get('value')
+                    if val and isinstance(val, str) and val.startswith('='):
+                        formula_count += 1
+                        if formula_count <= 5:  # Log first 5
+                            logger.debug(f"  Formula in header: {val}")
+            logger.debug(f"  Total formulas in header: {formula_count}")
+        
         changes_made = 0
         
         # Apply to header state
@@ -634,6 +980,19 @@ class TemplateStateBuilder:
             for cell_info in row_data:
                 if cell_info.get('value') and isinstance(cell_info['value'], str):
                     original_value = cell_info['value']
+                    
+                    # Debug: Log every cell being processed
+                    if self.debug and ('=' in original_value or 'Packing list' in original_value):
+                        logger.debug(f"[HEADER] Processing cell with value: '{original_value[:80]}'")
+                    
+                    # Check if it's a formula (starts with =)
+                    if original_value.startswith('='):
+                        # Try to extract placeholder from formula
+                        # E.g., "='Packing list'!J7" might refer to a cell with "JFINV"
+                        # For now, we'll handle simple cases - can be enhanced later
+                        if self.debug:
+                            logger.debug(f"Found formula in header: {original_value}")
+                    
                     new_value, format_changed = self._apply_rules_to_cell(
                         cell_info['value'], 
                         replacement_rules, 
@@ -651,6 +1010,12 @@ class TemplateStateBuilder:
             for cell_info in row_data:
                 if cell_info.get('value') and isinstance(cell_info['value'], str):
                     original_value = cell_info['value']
+                    
+                    # Check if it's a formula (starts with =)
+                    if original_value.startswith('='):
+                        if self.debug:
+                            logger.debug(f"Found formula in footer: {original_value}")
+                    
                     new_value, format_changed = self._apply_rules_to_cell(
                         cell_info['value'], 
                         replacement_rules, 
@@ -670,6 +1035,10 @@ class TemplateStateBuilder:
         """
         Apply replacement rules to a single text value.
         
+        Handles both direct text and formulas that reference cells with placeholders.
+        For formulas like "='Packing list'!J7", if J7 contains "JFINV", 
+        we replace the formula with the actual data value.
+        
         Returns:
             Tuple of (new_value, format_changed)
             - new_value: The replaced text
@@ -678,6 +1047,7 @@ class TemplateStateBuilder:
         if not text:
             return text, False
         
+        # Original text replacement logic
         for rule in rules:
             find_text = rule.get('find', '')
             if not find_text:
@@ -698,17 +1068,25 @@ class TemplateStateBuilder:
                 
                 if 'data_path' in rule and invoice_data:
                     replacement_value = self._resolve_data_path(invoice_data, rule['data_path'])
+                    if self.debug:
+                        logger.debug(f"Data path {rule['data_path']} resolved to: {replacement_value}")
                     if replacement_value is not None and is_date:
                         # Format date value
                         replacement_value = self._format_date_value(replacement_value)
                 elif 'replace' in rule:
                     replacement_value = rule['replace']
+                    if self.debug:
+                        logger.debug(f"Using hardcoded replacement: '{replacement_value}' for '{find_text}'")
                 
                 if replacement_value is not None:
                     # Perform replacement
                     if match_mode == 'exact':
+                        if self.debug:
+                            logger.debug(f"Replacing '{find_text}' with '{replacement_value}'")
                         return str(replacement_value), not is_date  # format_changed = True unless it's a date
                     else:  # substring/contains
+                        if self.debug:
+                            logger.debug(f"Replacing substring '{find_text}' with '{replacement_value}' in '{text}'")
                         return text.replace(find_text, str(replacement_value)), True
         
         return text, False

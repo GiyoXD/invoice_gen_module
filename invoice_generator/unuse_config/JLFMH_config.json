@@ -24,7 +24,7 @@
       "mappings": {
         "po":          { "key_index": 0, "id": "col_po" },
         "item":        { "key_index": 1, "id": "col_item" },
-        "description": { "key_index": 3, "id": "col_desc", "fallback_on_none": "LEATHER" },
+        "description": { "key_index": 3, "id": "col_desc", "fallback_on_none": "COW COW LEATHER" },
         "sqft":        { "value_key": "sqft_sum", "id": "col_qty_sf" },
         "unit_price":  { "key_index": 2, "id": "col_unit_price" },
         "amount": {
@@ -36,7 +36,7 @@
         "initial_static": {
           "type": "initial_static_rows",
           "column_header_id": "col_static",
-          "values": ["VENDOR#:", "Des: LEATHER", "MADE IN CAMBODIA"]
+          "values": ["VENDOR#:", "Des: COW LEATHER", "MADE IN CAMBODIA"]
         }
       },
       "data_cell_merging_rule": {
@@ -109,7 +109,7 @@
       "mappings": {
         "po":         { "key_index": 0, "id": "col_po" },
         "item":       { "key_index": 1, "id": "col_item" },
-        "desc":       { "key_index": 3, "id": "col_desc", "fallback_on_none": "LEATHER" },
+        "desc":       { "key_index": 3, "id": "col_desc", "fallback_on_none": "COW LEATHER" },
         "sqft":       { "value_key": "sqft_sum", "id": "col_qty_sf" },
         "unit_price": { "key_index": 2, "id": "col_unit_price" },
         "amount": {

@@ -119,6 +119,11 @@ class DataTableBuilderStyler:
                 
                 row_data = self.data_rows[i]
                 
+                # Filter row_data to only include columns in the filtered column_id_map
+                # This removes columns that were filtered by skip_in_daf or skip_in_custom
+                valid_col_indices = set(self.col_id_map.values())
+                row_data = {col_idx: value for col_idx, value in row_data.items() if col_idx in valid_col_indices}
+                
                 # First, write columns that have data
                 columns_with_data = set(row_data.keys())
 

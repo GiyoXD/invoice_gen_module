@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\generate_invoice.py", line 23, in <module>
+    from .processors.single_table_processor import SingleTableProcessor
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\processors\single_table_processor.py", line 7, in <module>
+    from ..config.builder_config_resolver import BuilderConfigResolver
+  File "C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config\builder_config_resolver.py", line 405
+    column_map = {}
+    ^
+IndentationError: expected an indented block after 'for' statement on line 404
+Running command: C:\Users\JPZ031127\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe -m invoice_generator.generate_invoice C:\Users\JPZ031127\Desktop\refactor\invoice_generator\JF.json --output C:\Users\JPZ031127\Desktop\refactor\result_test2.xlsx --templatedir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\template --configdir C:\Users\JPZ031127\Desktop\refactor\invoice_generator\config_bundled --DAF --log-level ERROR
+Error generating invoice: Command '['C:\\Users\\JPZ031127\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe', '-m', 'invoice_generator.generate_invoice', 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\JF.json', '--output', 'C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx', '--templatedir', 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\template', '--configdir', 'C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\config_bundled', '--DAF', '--log-level', 'ERROR']' returned non-zero exit status 1.
