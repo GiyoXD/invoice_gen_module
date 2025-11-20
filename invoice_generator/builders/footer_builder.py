@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
-from ..styling.models import StylingConfigModel
+from ..styling.models import StylingConfigModel, FooterData
 # Legacy apply_cell_style removed - using only StyleRegistry + CellStyler
 from ..styling.style_registry import StyleRegistry
 from ..styling.cell_styler import CellStyler
@@ -27,7 +27,7 @@ class FooterBuilderStyler(BundleAccessor):
     def __init__(
         self,
         worksheet: Worksheet,
-        footer_row_num: int,
+        footer_data: FooterData,
         style_config: Dict[str, Any],
         context_config: Dict[str, Any],
         data_config: Dict[str, Any]
@@ -51,7 +51,8 @@ class FooterBuilderStyler(BundleAccessor):
         )
         
         # Store FooterBuilder-specific attributes
-        self.footer_row_num = footer_row_num
+        self.footer_data = footer_data
+        self.footer_row_num = footer_data.footer_row_start_idx
         
         # Initialize StyleRegistry and CellStyler for ID-driven styling
         self.style_registry = None
@@ -64,10 +65,11 @@ class FooterBuilderStyler(BundleAccessor):
                     self.style_registry = StyleRegistry(styling_dict)
                     logger.info("StyleRegistry initialized successfully for FooterBuilder")
                 else:
-                    logger.warning(f"warning!!  FooterBuilder: OLD format detected - StyleRegistry NOT initialized")
-                    logger.warning(f"   Falling back to legacy style_applier methods")
+                    logger.error(f"FooterBuilder: Invalid styling config format. Expected 'columns' and 'row_contexts'.")
+                    raise ValueError("Invalid styling config format")
             except Exception as e:
-                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
+                logger.error(f"Could not initialize StyleRegistry: {e}")
+                raise
         
         # Track rows that have had height applied to avoid redundant operations
         self._rows_with_height_applied = set()
@@ -164,6 +166,24 @@ class FooterBuilderStyler(BundleAccessor):
             if row_height:
                 self.cell_styler.apply_row_height(self.worksheet, row_num, row_height)
                 logger.debug(f"Applied {row_context} row height {row_height} to row {row_num}")
+            self._rows_with_height_applied.add(row_num)
+
+    def _apply_footer_row_height(self, row_num: int, context: str = 'footer'):
+        """
+        Apply row height to a specific row using StyleRegistry.
+        
+        Args:
+            row_num: The row number to apply height to
+            context: The row context to use (default 'footer')
+        """
+        if not self.style_registry:
+            return
+            
+        if row_num not in self._rows_with_height_applied:
+            row_height = self.style_registry.get_row_height(context)
+            if row_height:
+                self.cell_styler.apply_row_height(self.worksheet, row_num, row_height)
+                logger.debug(f"Applied {context} row height {row_height} to row {row_num}")
             self._rows_with_height_applied.add(row_num)
     
     def _resolve_column_index(self, col_id, column_map_by_id: Dict[str, int]) -> Optional[int]:
@@ -275,7 +295,7 @@ class FooterBuilderStyler(BundleAccessor):
             # Handle add-ons (dict format only)
             add_ons = self.footer_config.get("add_ons", {})
             if add_ons:
-                current_footer_row = self._process_footer_addons(current_footer_row, add_ons)
+                current_footer_row = self._process_footer_addons(current_footer_row, add_ons, footer_type)
 
             total_rows = current_footer_row - initial_row
             logger.info(f"[FooterBuilder] COMPLETE - Started at {initial_row}, ended at {current_footer_row - 1}, total rows: {total_rows}")
@@ -295,17 +315,20 @@ class FooterBuilderStyler(BundleAccessor):
         self._build_footer_common(current_footer_row, default_total_text, footer_type="regular")
         logger.debug(f"[FooterBuilder._build_regular_footer] Complete")
 
-    def _process_footer_addons(self, start_row: int, add_ons: dict) -> int:
+    def _process_footer_addons(self, start_row: int, add_ons: dict, footer_type: str = "regular") -> int:
         """Process all footer add-ons in order.
         
         Args:
             start_row: Row to start building add-ons
             add_ons: Dict of add-on configs {"weight_summary": {...}, "leather_summary": {...}}
+            footer_type: Type of footer ('regular' or 'grand_total')
             
         Returns:
             Next available row after all add-ons
         """
         current_row = start_row
+        
+        logger.debug(f"[_process_footer_addons] Processing add-ons: {list(add_ons.keys())}")
         
         # Weight Summary Add-on
         weight_summary_config = add_ons.get("weight_summary", {})
@@ -317,15 +340,23 @@ class FooterBuilderStyler(BundleAccessor):
                 logger.error(f"Error building weight_summary add-on: {e}")
                 raise
         
-        # Leather Summary Add-on
+        # Leather Summary Add-on - only for grand_total footers
         leather_summary_config = add_ons.get("leather_summary", {})
-        if leather_summary_config.get("enabled"):
+        logger.debug(f"[_process_footer_addons] leather_summary config: {leather_summary_config}")
+        logger.debug(f"[_process_footer_addons] footer_type: {footer_type}")
+        if leather_summary_config.get("enabled") and footer_type == "grand_total":
             try:
                 logger.debug(f"Building leather_summary add-on at row {current_row}")
-                current_row = self._build_summary_add_on(current_row)
+                current_row = self._build_summary_add_on(current_row, leather_summary_config)
+                logger.debug(f"leather_summary add-on returned row {current_row}")
             except Exception as e:
                 logger.error(f"Error building leather_summary add-on: {e}")
                 raise
+        else:
+            if leather_summary_config.get("enabled"):
+                logger.debug(f"[_process_footer_addons] Skipping leather_summary for {footer_type} footer (only for grand_total)")
+            else:
+                logger.debug(f"[_process_footer_addons] leather_summary NOT enabled")
         
         return current_row
 
@@ -553,24 +584,140 @@ class FooterBuilderStyler(BundleAccessor):
                 end_col = min(resolved_start_col + colspan - 1, num_columns)
                 self.worksheet.merge_cells(start_row=current_footer_row, start_column=resolved_start_col, end_row=current_footer_row, end_column=end_col)
 
-    def _build_summary_add_on(self, current_footer_row: int) -> int:
-        from ..utils.layout import write_summary_rows # NEW IMPORT
-        if self.DAF_mode and self.dynamic_desc_used and self.sheet_name == "Packing list" and self.is_last_table and self.all_tables_data and self.table_keys and self.mapping_rules:
-            return write_summary_rows(
-                worksheet=self.worksheet,
-                start_row=current_footer_row,
-                header_info=self.header_info,
-                all_tables_data=self.all_tables_data,
-                table_keys=self.table_keys,
-                footer_config=self.footer_config,
-                mapping_rules=self.mapping_rules,
-                styling_config=self.sheet_styling_config,
-                DAF_mode=self.DAF_mode,
-                grand_total_pallets=self.pallet_count,
-                style_registry=self.style_registry,
-                cell_styler=self.cell_styler
-            )
-        return current_footer_row
+    def _build_summary_add_on(self, current_footer_row: int, leather_config: Dict[str, Any] = None) -> int:
+        """
+        Builds the leather summary add-on (Buffalo/Cow totals) if enabled.
+        Uses pre-calculated data from DataTableBuilder.
+        """
+        # Check if add-on is enabled in config
+        add_ons = self.footer_config.get('add_ons', {})
+        summary_config = add_ons.get('leather_summary', {})
+        
+        if not summary_config.get('enabled', False):
+            return current_footer_row
+
+        # Check sheet restriction (Packing list only)
+        if self.sheet_name != "Packing list":
+            return current_footer_row
+            
+        # Check if we have the summary data
+        leather_summary = self.footer_data.leather_summary
+        if not leather_summary:
+            logger.debug("No leather_summary data available in FooterData")
+            return current_footer_row
+
+        logger.info(f"Building leather summary add-on at row {current_footer_row}")
+        
+        try:
+            column_id_map = self.header_info.get('column_id_map', {})
+            
+            # Get column IDs for placement
+            total_text_col_id = self.footer_config.get("total_text_column_id", "col_desc")
+            total_text_col_idx = column_id_map.get(total_text_col_id)
+            
+            # Fallback if total_text_col_idx is missing
+            if not total_text_col_idx:
+                 total_text_col_idx = column_id_map.get("col_desc", 2)
+
+            current_row = current_footer_row
+            
+            # Helper function to apply styling without borders
+            def apply_summary_style(cell, col_id):
+                """Apply styling without borders for summary rows"""
+                if not self.style_registry or not self.cell_styler or not col_id:
+                    return
+                
+                # Use 'footer' context for summary rows to match footer style
+                style = self.style_registry.get_style(col_id, context='footer')
+                
+                # Remove borders by setting border_style to None
+                from copy import deepcopy
+                style_no_border = deepcopy(style)
+                style_no_border['border_style'] = None
+                self.cell_styler.apply(cell, style_no_border)
+
+            # Process each leather type
+            for leather_type in ['BUFFALO', 'COW']:
+                summary_data = leather_summary.get(leather_type)
+                if not summary_data:
+                    continue
+                
+                # Check if this row has any content (pallets or sum values)
+                pallet_count = int(summary_data.get('pallet_count', 0))
+                
+                # Check sum values
+                sum_column_ids = self.footer_config.get("sum_column_ids", [])
+                has_sum_value = False
+                for col_id in sum_column_ids:
+                    if col_id in summary_data:
+                        try:
+                            val = float(summary_data[col_id])
+                            if val != 0:
+                                has_sum_value = True
+                                break
+                        except (ValueError, TypeError):
+                            pass
+                
+                # If no pallets and no sum values, skip this row
+                if pallet_count == 0 and not has_sum_value:
+                    logger.debug(f"Skipping {leather_type} summary row - no content")
+                    continue
+
+                # Write Label to total_text_column_id
+                label_text = f"TOTAL OF {leather_type} LEATHER"
+                cell = self.worksheet.cell(row=current_row, column=total_text_col_idx)
+                cell.value = label_text
+                apply_summary_style(cell, total_text_col_id)
+                
+                # Write pallet count to pallet_count_column_id (like regular footer)
+                pallet_col_id = self.footer_config.get("pallet_count_column_id")
+                pallet_col_idx = column_id_map.get(pallet_col_id)
+                
+                if pallet_col_idx and pallet_count > 0:
+                    pallet_text = f"{pallet_count} PALLET{'S' if pallet_count != 1 else ''}"
+                    pallet_cell = self.worksheet.cell(row=current_row, column=pallet_col_idx)
+                    pallet_cell.value = pallet_text
+                    apply_summary_style(pallet_cell, pallet_col_id)
+                    logger.debug(f"Wrote {leather_type} pallet count '{pallet_text}' to {pallet_cell.coordinate}")
+                
+                # Write sum totals to sum_column_ids (like regular footer)
+                for col_id in sum_column_ids:
+                    if col_id in summary_data:
+                        col_idx = column_id_map.get(col_id)
+                        if col_idx:
+                            value = summary_data[col_id]
+                            val_cell = self.worksheet.cell(row=current_row, column=col_idx)
+                            val_cell.value = value
+                            apply_summary_style(val_cell, col_id)
+                            logger.debug(f"Wrote {leather_type} {col_id} = {value} to {val_cell.coordinate}")
+                
+                # Apply styling to ALL columns to ensure consistent appearance (including pallet column)
+                num_columns = self.header_info.get('num_columns', 1)
+                idx_to_id_map = {v: k for k, v in column_id_map.items()}
+                
+                for c_idx in range(1, num_columns + 1):
+                    cell = self.worksheet.cell(row=current_row, column=c_idx)
+                    col_id = idx_to_id_map.get(c_idx)
+                    
+                    # Skip cells without col_id (they're part of a colspan merge)
+                    if not col_id:
+                        logger.debug(f"Skipping {cell.coordinate} - no col_id (part of merge)")
+                        continue
+                    
+                    # Apply styling to all cells (even empty ones like pallet column)
+                    apply_summary_style(cell, col_id)
+                
+                # Apply row height to the summary row
+                self._apply_footer_row_height(current_row)
+                
+                logger.info(f"Wrote {leather_type} summary row at {current_row}")
+                current_row += 1
+                
+            return current_row
+
+        except Exception as e:
+            logger.error(f"Error building leather summary: {e}", exc_info=True)
+            return current_footer_row
 
     def _build_weight_summary_addon(self, current_footer_row: int, weight_config: Dict[str, Any]) -> int:
         """
@@ -600,65 +747,22 @@ class FooterBuilderStyler(BundleAccessor):
             logger.warning(f"Weight summary skipped: label_col_id or value_col_id not found in column map")
             return current_footer_row
         
-        # Calculate totals from all tables data
+        # Calculate totals from FooterData
         grand_total_net = Decimal('0')
         grand_total_gross = Decimal('0')
         
-        # First, check if totals were pre-calculated by processor (for single-table sheets)
-        precalc_net = self.context_config.get('total_net_weight')
-        precalc_gross = self.context_config.get('total_gross_weight')
-        
-        logger.debug(f"Weight summary context check: total_net_weight={precalc_net}, total_gross_weight={precalc_gross}, all_tables_data={'present' if self.all_tables_data else 'None'}")
-        
-        if precalc_net is not None and precalc_gross is not None:
-            # Use pre-calculated totals from processor
-            grand_total_net = Decimal(str(precalc_net))
-            grand_total_gross = Decimal(str(precalc_gross))
-            logger.debug(f"Using pre-calculated weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")
-        
-        elif self.all_tables_data:
-            # Multi-table scenario (e.g., Packing list with multiple tables) - calculate from all_tables_data
-            logger.debug(f"Multi-table weight calc - using all_tables_data with {len(self.all_tables_data)} tables")
-            for table_data in self.all_tables_data.values():
-                net_weights = table_data.get("net", [])
-                gross_weights = table_data.get("gross", [])
-                
-                for weight in net_weights:
-                    try:
-                        grand_total_net += Decimal(str(weight))
-                    except (InvalidOperation, TypeError, ValueError):
-                        continue
-                
-                for weight in gross_weights:
-                    try:
-                        grand_total_gross += Decimal(str(weight))
-                    except (InvalidOperation, TypeError, ValueError):
-                        continue
-        
+        if self.footer_data.weight_summary:
+            try:
+                net_val = self.footer_data.weight_summary.get('net', 0)
+                gross_val = self.footer_data.weight_summary.get('gross', 0)
+                grand_total_net = Decimal(str(net_val))
+                grand_total_gross = Decimal(str(gross_val))
+                logger.debug(f"Using weight totals from FooterData: N.W={grand_total_net}, G.W={grand_total_gross}")
+            except (InvalidOperation, TypeError, ValueError) as e:
+                logger.error(f"Error converting weight summary values: {e}")
         else:
-            # Fallback: try to get from processed_tables_data in context (shouldn't normally happen)
-            processed_tables = self.context_config.get('processed_tables_data', {})
-            
-            if processed_tables:
-                logger.debug(f"Fallback weight calc - processed_tables keys: {list(processed_tables.keys())}")
-                first_table_key = list(processed_tables.keys())[0]
-                table_data = processed_tables[first_table_key]
-                net_weights = table_data.get("net", [])
-                gross_weights = table_data.get("gross", [])
-                
-                for weight in net_weights:
-                    try:
-                        grand_total_net += Decimal(str(weight))
-                    except (InvalidOperation, TypeError, ValueError):
-                        continue
-                
-                for weight in gross_weights:
-                    try:
-                        grand_total_gross += Decimal(str(weight))
-                    except (InvalidOperation, TypeError, ValueError):
-                        continue
-            else:
-                logger.debug("No weight data available - weights will be 0")
+            logger.warning("No weight_summary found in FooterData")
+
         
         logger.debug(f"Weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")
         

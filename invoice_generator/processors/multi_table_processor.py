@@ -106,6 +106,12 @@ class MultiTableProcessor(SheetProcessor):
         last_header_info = None
         dynamic_desc_used = False  # Track if any table used dynamic description (for summary add-on)
         
+        # Track aggregated leather summary from all tables
+        aggregated_leather_summary = {
+            'BUFFALO': {},
+            'COW': {}
+        }
+        
         # Process each table using LayoutBuilder
         # IMPORTANT: For multi-table, skip template restoration after first table
         # to avoid capturing template state from wrong row positions
@@ -200,6 +206,19 @@ class MultiTableProcessor(SheetProcessor):
             logger.debug(f"  next_row_after_footer: {layout_builder.next_row_after_footer}")
             logger.debug(f"  data_start_row: {layout_builder.data_start_row}")
             logger.debug(f"  data_end_row: {layout_builder.data_end_row}")
+            
+            # Aggregate leather summary from this table
+            table_leather_summary = getattr(layout_builder, 'leather_summary', None)
+            if table_leather_summary:
+                logger.debug(f"Table '{table_key}' has leather_summary: {table_leather_summary}")
+                for leather_type in ['BUFFALO', 'COW']:
+                    if leather_type in table_leather_summary:
+                        for col_id, value in table_leather_summary[leather_type].items():
+                            if col_id not in aggregated_leather_summary[leather_type]:
+                                aggregated_leather_summary[leather_type][col_id] = 0
+                            aggregated_leather_summary[leather_type][col_id] += value
+            else:
+                logger.debug(f"Table '{table_key}' has no leather_summary")
         
         # After all tables, add grand total row if needed
         if len(table_keys) > 1 and last_header_info:
@@ -267,10 +286,13 @@ class MultiTableProcessor(SheetProcessor):
                 'footer_config': footer_config_copy,
                 'all_tables_data': all_tables_data,
                 'table_keys': table_keys,
-                'mapping_rules': gt_layout_config.get('data_flow', {}).get('mappings', {}),
+                'mapping_rules': gt_layout_config.get('sheet_config', {}).get('data_flow', {}).get('mappings', {}),
                 'DAF_mode': self.args.DAF,
-                'override_total_text': None
+                'override_total_text': None,
+                'leather_summary': aggregated_leather_summary  # Pass aggregated leather summary
             }
+            
+            logger.info(f"Grand total leather_summary: {aggregated_leather_summary}")
             
             footer_builder = FooterBuilderStyler(
                 worksheet=self.output_worksheet,

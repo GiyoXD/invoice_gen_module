@@ -112,7 +112,13 @@ class CellStyler:
             return
         
         if style.get('alignment'):
-            alignment_kwargs['horizontal'] = style['alignment']
+            align_val = style['alignment']
+            if isinstance(align_val, dict):
+                # New format: alignment is a dict of properties
+                alignment_kwargs.update(align_val)
+            else:
+                # Legacy format: alignment is just the horizontal string
+                alignment_kwargs['horizontal'] = align_val
         
         # Always default to center for vertical alignment
         alignment_kwargs['vertical'] = style.get('vertical_alignment', 'center')

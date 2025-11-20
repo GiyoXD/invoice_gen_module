@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 
-from ..styling.models import StylingConfigModel
+from ..styling.models import StylingConfigModel, FooterData
 from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import FooterBuilderStyler as FooterBuilder
@@ -247,12 +247,9 @@ class LayoutBuilder:
                     # NEW format: keep as dict, don't convert to StylingConfigModel
                     logger.debug("Keeping NEW format styling (columns + row_contexts) as dict")
                 else:
-                    # OLD format: convert to StylingConfigModel
-                    try:
-                        styling_model = StylingConfigModel(**styling_model)
-                    except Exception as e:
-                        logger.warning(f"Could not create StylingConfigModel: {e}")
-                        styling_model = None
+                    logger.error("LayoutBuilder: Invalid styling config format. Expected 'columns' and 'row_contexts'.")
+                    # Don't fallback, let it fail or be None if critical
+                    styling_model = None
 
             # Get bundled columns from sheet_config (bundled config v2.1 format)
             # These are in layout_config -> sheet_config -> 'structure' -> 'columns'
@@ -482,19 +479,26 @@ class LayoutBuilder:
                 )
 
                 logger.debug(f"Calling DataTableBuilder.build()")
-                fill_success, footer_row_position, data_start_row, data_end_row, local_chunk_pallets = data_table_builder.build()
+                result = data_table_builder.build()
+
+                if not result:
+                    logger.error(f"DataTableBuilder failed for sheet '{self.sheet_name}'")
+                    logger.error(f"Failed to fill table data - HALTING EXECUTION")
+                    return False
+
+                # Store FooterData for FooterBuilder
+                self.footer_data = result
+                
+                # Extract legacy values for logging/compatibility if needed
+                data_start_row = self.footer_data.data_start_row
+                data_end_row = self.footer_data.data_end_row
+                footer_row_position = self.footer_data.footer_row_start_idx
+                local_chunk_pallets = self.footer_data.total_pallets
 
                 # Store data range for multi-table processors to access
                 self.data_start_row = data_start_row
                 self.data_end_row = data_end_row
                 self.dynamic_desc_used = data_table_builder.dynamic_desc_used  # Track for summary add-on
-
-                if not fill_success:
-                    logger.error(f"DataTableBuilder failed for sheet '{self.sheet_name}'")
-                    logger.error(f"Failed to fill table data - HALTING EXECUTION")
-                    logger.error(f"footer_row_position={footer_row_position}, data_start_row={data_start_row}, data_end_row={data_end_row}")
-                    logger.error(f"expected_row_start={expected_row_start}, data_source_type={dtb_data_config.get('data_source_type')}")
-                    return False
                 
                 rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
                 logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
@@ -591,7 +595,8 @@ class LayoutBuilder:
                 'table_keys': None,
                 'mapping_rules': sheet_inner_mapping_rules_dict,
                 'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
-                'override_total_text': None
+                'override_total_text': None,
+                'leather_summary': getattr(data_table_builder, 'leather_summary', None) if 'data_table_builder' in locals() else None
             }
 
             logger.debug(f"Creating FooterBuilder at row {footer_row_position}")
@@ -600,7 +605,7 @@ class LayoutBuilder:
             try:
                 footer_builder = FooterBuilder(
                     worksheet=self.worksheet,
-                    footer_row_num=footer_row_position,
+                    footer_data=self.footer_data,
                     style_config=fb_style_config,
                     context_config=fb_context_config,
                     data_config=fb_data_config
@@ -694,8 +699,7 @@ class LayoutBuilder:
         if not styling_config:
             return
         
-        # Handle both NEW format (dict with 'row_contexts') and OLD format (StylingConfigModel with rowHeights)
-        row_heights_cfg = None
+        # Handle NEW format (dict with 'row_contexts')
         if isinstance(styling_config, dict):
             # NEW format: row heights are in row_contexts.footer.row_height
             if 'row_contexts' in styling_config:
@@ -707,31 +711,5 @@ class LayoutBuilder:
                         self.worksheet.row_dimensions[footer_row].height = height
                         logger.debug(f"Applied footer height {height} to row {footer_row} (NEW format)")
                 return
-        elif hasattr(styling_config, 'rowHeights'):
-            # OLD format: StylingConfigModel with rowHeights attribute
-            row_heights_cfg = styling_config.rowHeights
-        
-        if not row_heights_cfg:
-            return
-        
-        footer_height_config = row_heights_cfg.get("footer")
-        match_header_height_flag = row_heights_cfg.get("footer_matches_header_height", True)
-        
-        # Determine the footer height
-        final_footer_height = None
-        if match_header_height_flag:
-            # Get header height from config
-            header_height = row_heights_cfg.get("header")
-            if header_height is not None:
-                final_footer_height = header_height
-        if final_footer_height is None and footer_height_config is not None:
-            final_footer_height = footer_height_config
-        
-        # Apply the height
-        if final_footer_height is not None and footer_row > 0:
-            try:
-                h_val = float(final_footer_height)
-                if h_val > 0:
-                    self.worksheet.row_dimensions[footer_row].height = h_val
-            except (ValueError, TypeError):
-                pass
+        else:
+             logger.warning("LayoutBuilder: Legacy styling config format detected (not a dict). Row heights NOT applied.")
