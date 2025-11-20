@@ -294,9 +294,29 @@ class MultiTableProcessor(SheetProcessor):
             
             logger.info(f"Grand total leather_summary: {aggregated_leather_summary}")
             
+            # Create FooterData for grand total row
+            from ..styling.models import FooterData
+            
+            # Calculate total data range (from first to last table)
+            if all_data_ranges:
+                overall_data_start = min(r[0] for r in all_data_ranges)
+                overall_data_end = max(r[1] for r in all_data_ranges)
+            else:
+                overall_data_start = grand_total_row - 1
+                overall_data_end = grand_total_row - 1
+            
+            footer_data = FooterData(
+                footer_row_start_idx=grand_total_row,
+                data_start_row=overall_data_start,
+                data_end_row=overall_data_end,
+                total_pallets=grand_total_pallets,
+                leather_summary=aggregated_leather_summary,
+                weight_summary={'net': 0.0, 'gross': 0.0}  # Not tracked for grand total
+            )
+            
             footer_builder = FooterBuilderStyler(
                 worksheet=self.output_worksheet,
-                footer_row_num=grand_total_row,
+                footer_data=footer_data,
                 style_config=fb_style_config,
                 context_config=fb_context_config,
                 data_config=fb_data_config
