@@ -7,7 +7,7 @@ from ..styling.models import StylingConfigModel, FooterData
 from invoice_generator.data.table_calculator import TableCalculator
 from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
-from .footer_builder import FooterBuilderStyler as FooterBuilder
+from .footer_builder import FooterBuilder as FooterBuilder
 from .text_replacement_builder import TextReplacementBuilder
 from .template_state_builder import TemplateStateBuilder
 from ..utils.text_replacement_rules import build_replacement_rules
@@ -645,8 +645,9 @@ class LayoutBuilder:
 
             logger.debug(f"Creating FooterBuilder at row {footer_row_position}")
             logger.debug(f"FooterBuilder input - footer_type: {footer_config.get('type', 'regular')}, add_blank_before: {footer_config.get('add_blank_before', False)}, pallet_count: {pallet_count}")
-            
             try:
+                # 4. Build Footer
+                # Use FooterBuilder (renamed from FooterBuilderStyler)
                 footer_builder = FooterBuilder(
                     worksheet=self.worksheet,
                     footer_data=self.footer_data,

@@ -1,5 +1,7 @@
-
 import logging
+import traceback
+from copy import deepcopy
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Font, Side, Border
@@ -13,7 +15,7 @@ from ..styling.style_registry import StyleRegistry
 from ..styling.cell_styler import CellStyler
 from .bundle_accessor import BundleAccessor
 
-class FooterBuilderStyler(BundleAccessor):
+class FooterBuilder(BundleAccessor):
     """
     Builds and styles footer sections using pure bundle architecture.
     
@@ -152,7 +154,6 @@ class FooterBuilderStyler(BundleAccessor):
         
         # Remove borders if requested (for grand_total footers)
         if not apply_border:
-            from copy import deepcopy
             style = deepcopy(style)
             style['border_style'] = None
         
@@ -279,7 +280,6 @@ class FooterBuilderStyler(BundleAccessor):
                     self._build_regular_footer(current_footer_row)
             except Exception as footer_build_err:
                 logger.error(f"❌ [FooterBuilder] Error building {footer_type} footer at row {current_footer_row}: {footer_build_err}")
-                import traceback
                 logger.error(traceback.format_exc())
                 raise
 
@@ -304,7 +304,6 @@ class FooterBuilderStyler(BundleAccessor):
 
         except Exception as e:
             logger.error(f"[FooterBuilder] FATAL ERROR during footer generation starting at row {self.footer_row_num}: {e}")
-            import traceback
             logger.error(traceback.format_exc())
             return -1
 
@@ -415,7 +414,6 @@ class FooterBuilderStyler(BundleAccessor):
         
         # Apply merge if specified (manual merge from config)
         if merge_span > 0:
-            from openpyxl.utils.cell import get_column_letter
             # merge_span is the TOTAL number of columns to span (including current cell)
             # So if merge_span=2, we merge current column + 1 more column
             end_col = col_idx + (merge_span - 1)
@@ -429,7 +427,6 @@ class FooterBuilderStyler(BundleAccessor):
         # Apply styling and borders to all cells in the row using footer row context
         # Special case: col_static (column 1) gets only side borders (left/right), no top/bottom
         # Note: For grand_total footers, no borders are applied to before_footer rows
-        from openpyxl.styles import Border, Side
         
         idx_to_id_map = {v: k for k, v in column_map_by_id.items()}
         for c_idx in range(1, num_columns + 1):
@@ -447,7 +444,6 @@ class FooterBuilderStyler(BundleAccessor):
                 if self.style_registry and col_id:
                     style = self.style_registry.get_style(col_id, context='footer')
                     # Apply style but override to remove borders
-                    from copy import deepcopy
                     style_no_border = deepcopy(style)
                     style_no_border['border_style'] = None
                     self.cell_styler.apply(cell, style_no_border)
@@ -631,7 +627,6 @@ class FooterBuilderStyler(BundleAccessor):
                 style = self.style_registry.get_style(col_id, context='footer')
                 
                 # Remove borders by setting border_style to None
-                from copy import deepcopy
                 style_no_border = deepcopy(style)
                 style_no_border['border_style'] = None
                 self.cell_styler.apply(cell, style_no_border)
@@ -734,8 +729,6 @@ class FooterBuilderStyler(BundleAccessor):
         Returns:
             Next available row number (current_footer_row + 2)
         """
-        from decimal import Decimal, InvalidOperation
-        
         logger.debug(f"[FooterBuilder._build_weight_summary_addon] Starting at row {current_footer_row}")
         
         # Get column mapping
@@ -762,6 +755,18 @@ class FooterBuilderStyler(BundleAccessor):
                 logger.error(f"Error converting weight summary values: {e}")
         else:
             logger.warning("No weight_summary found in FooterData")
+
+        # Fallback to context config if FooterData has zero values (e.g. Invoice sheet)
+        if grand_total_net == 0 and grand_total_gross == 0:
+            context_net = self.context_config.get('total_net_weight')
+            context_gross = self.context_config.get('total_gross_weight')
+            if context_net or context_gross:
+                try:
+                    grand_total_net = Decimal(str(context_net or 0))
+                    grand_total_gross = Decimal(str(context_gross or 0))
+                    logger.debug(f"Using weight totals from ContextConfig: N.W={grand_total_net}, G.W={grand_total_gross}")
+                except Exception as e:
+                    logger.error(f"Error converting context weight values: {e}")
 
         
         logger.debug(f"Weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")
@@ -800,11 +805,8 @@ class FooterBuilderStyler(BundleAccessor):
         cell_gross_label = self.worksheet.cell(row=gross_weight_row, column=label_col_idx, value="GW(KGS):")
         cell_gross_value = self.worksheet.cell(row=gross_weight_row, column=value_col_idx, value=float(grand_total_gross))
         
-        # Apply footer styling to label and value cells
         self._apply_footer_cell_style(cell_gross_label, label_col_id, row_context='footer')
         self._apply_footer_cell_style(cell_gross_value, value_col_id, row_context='footer')
-        
-        # Override number format for weight values (hardcoded)
         cell_gross_value.number_format = '#,##0.00'
         
         # Apply borders to all other cells in G.W row
@@ -817,7 +819,4 @@ class FooterBuilderStyler(BundleAccessor):
         
         self._apply_footer_row_height(gross_weight_row)
         
-        logger.debug(f"[FooterBuilder._build_weight_summary_addon] Complete - wrote rows {net_weight_row}-{gross_weight_row}")
-        
-        return current_footer_row + 2
-
+        return gross_weight_row + 1

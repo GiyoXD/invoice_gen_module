@@ -17,6 +17,8 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 
+from invoice_generator.data.global_summary_calculator import GlobalSummaryCalculator
+
 logger = logging.getLogger(__name__)
 
 
@@ -141,6 +143,18 @@ class BuilderConfigResolver:
         # Add processed_tables_data separately for features that need raw data (e.g., weight_summary)
         if self.invoice_data and 'processed_tables_data' in self.invoice_data:
             base_context['processed_tables_data'] = self.invoice_data['processed_tables_data']
+            
+            # Use GlobalSummaryCalculator to compute all global summaries
+            # This provides clean separation: BuilderConfigResolver bundles, GlobalSummaryCalculator calculates
+            try:
+                calculator = GlobalSummaryCalculator(self.invoice_data['processed_tables_data'])
+                summaries = calculator.calculate_all()
+                
+                # Add calculated summaries to context
+                base_context.update(summaries)
+                logger.debug(f"Added global summaries to context: {summaries}")
+            except Exception as e:
+                logger.warning(f"Failed to calculate global summaries: {e}")
         
         # Merge in any overrides and additional context
         base_context.update(self.context_overrides)

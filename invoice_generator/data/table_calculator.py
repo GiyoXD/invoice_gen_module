@@ -77,8 +77,8 @@ class TableCalculator:
 
     def _update_weight_summary(self, row_data: Dict[int, Any]):
         """Updates the running totals for Net and Gross weight."""
-        net_col_idx = self.col_id_map.get('col_net_weight')
-        gross_col_idx = self.col_id_map.get('col_gross_weight')
+        net_col_idx = self.col_id_map.get('col_net_weight') or self.col_id_map.get('col_net')
+        gross_col_idx = self.col_id_map.get('col_gross_weight') or self.col_id_map.get('col_gross')
         
         if net_col_idx and net_col_idx in row_data:
             try:
