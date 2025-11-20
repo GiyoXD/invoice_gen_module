@@ -21,7 +21,7 @@ from invoice_generator.styling.style_config import THIN_BORDER, NO_BORDER, CENTE
 
 
 
-from invoice_generator.styling.models import StylingConfigModel, FooterData
+from invoice_generator.styling.models import StylingConfigModel
 from .bundle_accessor import BundleAccessor
 
 class DataTableBuilderStyler:
@@ -77,16 +77,14 @@ class DataTableBuilderStyler:
                     self.style_registry = StyleRegistry(styling_dict)
                     logger.info("StyleRegistry initialized successfully for DataTableBuilder")
                 else:
-                    logger.warning(f"warning!!  DataTableBuilder: OLD format detected - StyleRegistry NOT initialized")
-                    logger.warning(f"   Falling back to legacy style_applier methods")
+                    logger.error(f"DataTableBuilder: Invalid styling config format. Expected 'columns' and 'row_contexts'.")
+                    raise ValueError("Invalid styling config format")
             except Exception as e:
-                logger.warning(f"Could not initialize StyleRegistry: {e}")
-                styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
-                if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
-                    self.style_registry = StyleRegistry(styling_dict)
-                    logger.info("StyleRegistry initialized successfully for DataTableBuilder")
-            except Exception as e:
-                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
+                logger.error(f"Could not initialize StyleRegistry: {e}")
+                raise
+        else:
+            logger.error("DataTableBuilder: No styling config provided!")
+            raise ValueError("No styling config provided")
         
         # Static content is now injected into data_rows by TableDataResolver
         # No need to handle it separately here
@@ -94,110 +92,11 @@ class DataTableBuilderStyler:
         
         # Track rows that have had height applied to avoid redundant operations
         self._rows_with_height_applied = set()
-        
-        # Leather Summary Data: { 'BUFFALO': {col_id: sum, 'pallet_count': sum}, 'COW': {col_id: sum, 'pallet_count': sum} }
-        self.leather_summary = {
-            'BUFFALO': {'pallet_count': 0},
-            'COW': {'pallet_count': 0}
-        }
-        
-        # Weight Summary Data: { 'net': Decimal, 'gross': Decimal }
-        # Using Decimal for precision if possible, but float for compatibility with existing code
-        self.weight_summary = {
-            'net': 0.0,
-            'gross': 0.0
-        }
-
-    def _update_weight_summary(self, row_data: Dict[int, Any]):
-        """
-        Updates the running totals for Net and Gross weight.
-        """
-        # Get column IDs for Net and Gross weight
-        # Assuming standard column IDs 'col_net_weight' and 'col_gross_weight'
-        # You might need to make these configurable if they vary
-        net_col_idx = self.col_id_map.get('col_net_weight')
-        gross_col_idx = self.col_id_map.get('col_gross_weight')
-        
-        if net_col_idx and net_col_idx in row_data:
-            try:
-                val = row_data[net_col_idx]
-                if isinstance(val, (int, float)):
-                    self.weight_summary['net'] += float(val)
-                elif isinstance(val, str) and val.replace('.', '', 1).isdigit():
-                    self.weight_summary['net'] += float(val)
-            except (ValueError, TypeError):
-                pass
-                
-        if gross_col_idx and gross_col_idx in row_data:
-            try:
-                val = row_data[gross_col_idx]
-                if isinstance(val, (int, float)):
-                    self.weight_summary['gross'] += float(val)
-                elif isinstance(val, str) and val.replace('.', '', 1).isdigit():
-                    self.weight_summary['gross'] += float(val)
-            except (ValueError, TypeError):
-                pass
-
-    def _update_leather_summary(self, row_data: Dict[int, Any], row_index: int):
-        """
-        Updates the running totals for Buffalo and Cow leather based on the current row data.
-        
-        Args:
-            row_data: Dictionary of column index to value for the current row
-            row_index: Index in self.pallet_counts list (0-based)
-        """
-        # Get description column index
-        desc_col_idx = self.col_id_map.get('col_desc')
-        if not desc_col_idx:
-            logger.debug(f"No col_desc found in col_id_map: {self.col_id_map}")
-            return
-
-        description = str(row_data.get(desc_col_idx, "")).upper()
-        logger.debug(f"Checking row description: '{description}'")
-        
-        # Categorize: BUFFALO goes to BUFFALO, everything else goes to COW
-        if "BUFFALO" in description:
-            target_type = 'BUFFALO'
-        else:
-            target_type = 'COW'
-            
-        if target_type:
-            logger.debug(f"Found {target_type} leather row: {description}")
-            
-            # Add pallet count for this row
-            if row_index < len(self.pallet_counts):
-                pallet_val = self.pallet_counts[row_index]
-                if pallet_val is not None and str(pallet_val).replace('.', '', 1).isdigit():
-                    self.leather_summary[target_type]['pallet_count'] += int(float(pallet_val))
-                    logger.debug(f"Added pallet {pallet_val} to {target_type}. New total: {self.leather_summary[target_type]['pallet_count']}")
-            
-            # Columns to sum - primarily Quantity and other numeric columns
-            # We sum any column that has a numeric value and a valid ID
-            for col_idx, value in row_data.items():
-                col_id = self.idx_to_id_map.get(col_idx)
-                if not col_id or col_id == 'col_desc': # Skip description
-                    continue
-                
-                # Check if value is numeric
-                try:
-                    if isinstance(value, (int, float)):
-                        num_val = value
-                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
-                         num_val = float(value)
-                    else:
-                        continue
-                        
-                    # Initialize if not present
-                    if col_id not in self.leather_summary[target_type]:
-                        self.leather_summary[target_type][col_id] = 0
-                        
-                    self.leather_summary[target_type][col_id] += num_val
-                    logger.debug(f"Added {num_val} to {target_type} {col_id}. New total: {self.leather_summary[target_type][col_id]}")
-                except (ValueError, TypeError):
-                    continue
 
 
-    def build(self) -> Union[FooterData, bool]:
+
+
+    def build(self) -> bool:
         if not self.header_info or 'second_row_index' not in self.header_info:
             logger.error("Invalid header_info provided to DataTableBuilderStyler")
             return False
@@ -210,8 +109,6 @@ class DataTableBuilderStyler:
         data_start_row = data_writing_start_row
         data_end_row = data_start_row + actual_rows_to_process - 1 if actual_rows_to_process > 0 else data_start_row - 1
         
-        footer_row_final = data_end_row + 1
-
         # --- Fill Data Rows Loop ---
         try:
             data_row_indices_written = []
@@ -220,10 +117,6 @@ class DataTableBuilderStyler:
                 data_row_indices_written.append(current_row_idx)
                 
                 row_data = self.data_rows[i]
-                
-                # Update leather summary calculation (pass row index for pallet tracking)
-                self._update_leather_summary(row_data, i)
-                self._update_weight_summary(row_data)
                 
                 # Filter row_data to only include columns in the filtered column_id_map
                 # This removes columns that were filtered by skip_in_daf or skip_in_custom
@@ -341,19 +234,10 @@ class DataTableBuilderStyler:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
             return False
 
-        local_chunk_pallets = sum(int(p) for p in self.pallet_counts if p is not None and str(p).isdigit())
-
         # Log completion summary
         logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows written (rows {data_start_row}-{data_end_row})")
 
-        return FooterData(
-            footer_row_start_idx=footer_row_final,
-            data_start_row=data_start_row,
-            data_end_row=data_end_row,
-            total_pallets=local_chunk_pallets,
-            leather_summary=self.leather_summary,
-            weight_summary=self.weight_summary
-        )
+        return True
     
     def _build_formula_string(self, formula_dict: Dict[str, Any], row_num: int) -> str:
         """

@@ -38,40 +38,33 @@ class HeaderBuilderStyler:
         # Initialize StyleRegistry and CellStyler for ID-driven styling
         self.style_registry = None
         self.cell_styler = CellStyler()
+        
         if sheet_styling_config:
             try:
                 # Try to create registry from styling_config (if it has columns/row_contexts)
                 styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
                 
-                # DEBUG: Log the actual structure received
-                logger.debug(f"HeaderBuilder received styling_dict type: {type(styling_dict)}")
-                if isinstance(styling_dict, dict):
-                    logger.debug(f"Keys in styling_dict: {list(styling_dict.keys())}")
-                
                 if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
                     self.style_registry = StyleRegistry(styling_dict)
                     logger.info("StyleRegistry initialized successfully for HeaderBuilder")
                 else:
-                    logger.warning(f"HeaderBuilder: OLD format detected - StyleRegistry NOT initialized")
-                    logger.warning(f"   Falling back to legacy style_applier methods")
-                    if isinstance(styling_dict, dict):
-                        logger.warning(f"   Available keys: {list(styling_dict.keys())}")
+                    logger.error(f"HeaderBuilder: Invalid styling config format. Expected 'columns' and 'row_contexts'.")
+                    raise ValueError("Invalid styling config format")
             except Exception as e:
-                logger.warning(f"Could not initialize StyleRegistry (falling back to legacy styling): {e}")
+                logger.error(f"Could not initialize StyleRegistry: {e}")
+                raise
+        else:
+             logger.error("HeaderBuilder: No styling config provided!")
+             raise ValueError("No styling config provided")
         
         # Convert bundled columns to internal format if provided
         if bundled_columns:
             logger.info(f"Using BUNDLED config (columns={len(bundled_columns)})")
-            # Show first column as example
-            if bundled_columns:
-                sample = bundled_columns[0]
-                sample_header = str(sample.get('header', '')).encode('ascii', 'replace').decode('ascii')
-                logger.debug(f"Sample bundled column: id='{sample.get('id')}', header='{sample_header}', format='{sample.get('format')}'")
             self.header_layout_config = self._convert_bundled_columns(bundled_columns)
             logger.debug(f"Converted to {len(self.header_layout_config)} header cells")
         else:
-            logger.warning(f"Using legacy config")
-            self.header_layout_config = header_layout_config or []
+            logger.error("HeaderBuilder: No bundled columns provided!")
+            raise ValueError("No bundled columns provided")
         
         # Track rows that have had height applied to avoid redundant operations
         self._rows_with_height_applied = set()

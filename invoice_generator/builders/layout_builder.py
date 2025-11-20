@@ -4,6 +4,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 
 from ..styling.models import StylingConfigModel, FooterData
+from invoice_generator.data.table_calculator import TableCalculator
 from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import FooterBuilderStyler as FooterBuilder
@@ -468,26 +469,68 @@ class LayoutBuilder:
             try:
                 expected_row_start = self.header_info.get('second_row_index', 0) + 1
                 logger.debug(f"Creating DataTableBuilder - Expected to start at row {expected_row_start}")
-                logger.debug(f"DataTableBuilder input - data_source_type: {dtb_data_config.get('data_source_type')}, has_data: {bool(dtb_data_config.get('data_source'))}")
-                
-                data_table_builder = DataTableBuilder(
+             # --- 4. Calculate Data (TableCalculator) ---
+            # Extract business logic: Calculate sums, pallets, etc. BEFORE rendering
+            logger.info("LayoutBuilder: Calculating table data...")
+            table_calculator = TableCalculator(self.header_info)
+            self.footer_data = table_calculator.calculate(dtb_data_config)
+            
+            if not self.footer_data:
+                logger.error("LayoutBuilder: TableCalculator failed to return data.")
+                return False
+
+            # --- 5. Build Data Table (DataTableBuilder) ---
+            if not self.skip_data_table_builder: # Renamed from skip_data_table
+                logger.info("LayoutBuilder: Building data table...")
+                data_builder = DataTableBuilder( # Original class name
                     worksheet=self.worksheet,
                     header_info=self.header_info,
-                    resolved_data=dtb_data_config,
-                    sheet_styling_config=styling_model,
-                    vertical_merge_columns=['col_desc']  # Always merge col_desc if all values are identical
+                    resolved_data=dtb_data_config, # Pass original dtb_data_config
+                    sheet_styling_config=styling_model, # Use styling_model
+                    vertical_merge_columns=['col_desc'] # Original value
                 )
-
-                logger.debug(f"Calling DataTableBuilder.build()")
-                result = data_table_builder.build()
-
+                result = data_builder.build() # Store result in 'result'
                 if not result:
-                    logger.error(f"DataTableBuilder failed for sheet '{self.sheet_name}'")
-                    logger.error(f"Failed to fill table data - HALTING EXECUTION")
+                    logger.error("LayoutBuilder: DataTableBuilder failed.")
                     return False
+            else:
+                logger.info("LayoutBuilder: Skipping data table build as requested.")
 
-                # Store FooterData for FooterBuilder
-                self.footer_data = result
+            # --- 6. Build Footer (FooterBuilder) ---
+            if not self.skip_footer_builder: # Renamed from skip_footer
+                logger.info("LayoutBuilder: Building footer...")
+                
+                # Get footer config from bundled config or legacy dict
+                footer_config = self.sheet_config.get('footer') # Use sheet_config
+                if not footer_config: # Check if footer_config is None or empty
+                     footer_config = self.sheet_config.get('footer_configurations') # Use sheet_config
+                
+                footer_builder = FooterBuilder( # Original class name
+                    worksheet=self.worksheet,
+                    footer_data=self.footer_data,
+                    style_config={'styling_config': styling_model}, # Wrap styling_model
+                    context_config={
+                        'header_info': self.header_info,
+                        'pallet_count': self.footer_data.total_pallets, # Use calculated pallets
+                        'sheet_name': self.sheet_name,
+                        'is_last_table': True,
+                        'dynamic_desc_used': getattr(data_builder, 'dynamic_desc_used', False) if 'data_builder' in locals() else False, # Get from data_builder if exists
+                        'total_net_weight': self.total_net_weight,
+                        'total_gross_weight': self.total_gross_weight
+                    },
+                    data_config={
+                        'sum_ranges': [(self.footer_data.data_start_row, self.footer_data.data_end_row)], # Use calculated data range
+                        'footer_config': footer_config,
+                        'all_tables_data': None,
+                        'table_keys': None,
+                        'mapping_rules': sheet_inner_mapping_rules_dict,
+                        'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
+                        'override_total_text': None,
+                        'leather_summary': getattr(data_builder, 'leather_summary', None) if 'data_builder' in locals() else None
+                    }
+                )
+                self.next_row_after_footer = footer_builder.build() # Assign to self.next_row_after_footer
+                logger.info(f"LayoutBuilder: Footer build complete. Next row index: {self.next_row_after_footer}")
                 
                 # Extract legacy values for logging/compatibility if needed
                 data_start_row = self.footer_data.data_start_row
@@ -498,7 +541,7 @@ class LayoutBuilder:
                 # Store data range for multi-table processors to access
                 self.data_start_row = data_start_row
                 self.data_end_row = data_end_row
-                self.dynamic_desc_used = data_table_builder.dynamic_desc_used  # Track for summary add-on
+                self.dynamic_desc_used = getattr(data_builder, 'dynamic_desc_used', False) # Track for summary add-on
                 
                 rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
                 logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
