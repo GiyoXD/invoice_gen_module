@@ -431,6 +431,65 @@ class BuilderConfigResolver:
         
         return style_config, context_config, data_config
     
+    def get_footer_data(
+        self,
+        footer_row_start_idx: int,
+        data_start_row: int,
+        data_end_row: int,
+        pallet_count: Optional[int] = None,
+        leather_summary: Optional[Dict] = None,
+        weight_summary: Optional[Dict] = None
+    ):
+        """
+        Create a fully populated FooterData object.
+        
+        This method normalizes the data flow by ensuring that weight_summary
+        is always populated, either from the passed argument (local table data)
+        or by calculating global defaults if missing/zero.
+        
+        Args:
+            footer_row_start_idx: Row index where footer starts
+            data_start_row: Start row of data
+            data_end_row: End row of data
+            pallet_count: Pallet count (defaults to self.pallets)
+            leather_summary: Leather summary dict
+            weight_summary: Weight summary dict (net/gross)
+            
+        Returns:
+            FooterData object
+        """
+        from ..styling.models import FooterData
+        
+        # Use provided pallet count or default to context
+        final_pallets = pallet_count if pallet_count is not None else self.pallets
+        
+        # Normalize weight summary
+        final_weight_summary = {'net': 0.0, 'gross': 0.0}
+        
+        # 1. Try to use provided weight summary
+        if weight_summary:
+            final_weight_summary.update(weight_summary)
+            
+        # 2. If weights are zero, try to use global calculated weights
+        # This handles cases like "Invoice" sheet where weights come from global context
+        # but need to be passed to FooterBuilder via FooterData
+        if final_weight_summary['net'] == 0 and final_weight_summary['gross'] == 0:
+            # Ensure global summaries are calculated
+            context = self.get_context_bundle()
+            if 'total_net_weight' in context:
+                final_weight_summary['net'] = context['total_net_weight']
+            if 'total_gross_weight' in context:
+                final_weight_summary['gross'] = context['total_gross_weight']
+                
+        return FooterData(
+            footer_row_start_idx=footer_row_start_idx,
+            data_start_row=data_start_row,
+            data_end_row=data_end_row,
+            total_pallets=final_pallets,
+            leather_summary=leather_summary,
+            weight_summary=final_weight_summary
+        )
+    
     # ========== Helper Methods ==========
     
     def _construct_header_info(self, layout_config: Dict[str, Any]) -> Dict[str, Any]:

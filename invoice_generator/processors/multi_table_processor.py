@@ -12,7 +12,9 @@ from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import FooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
+from ..builders.template_state_builder import TemplateStateBuilder
 from ..utils.text_replacement_rules import build_replacement_rules
+from ..extractors.header_extractor import HeaderExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +157,14 @@ class MultiTableProcessor(SheetProcessor):
                         replacement_rules=replacement_rules,
                         invoice_data=self.invoice_data
                     )
+                    # Capture replacements log
+                    self.replacements_log = template_state_builder.replacements_log
+                    
+                    # Extract Header Info
+                    self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
+                    
                 except Exception as e:
-                    logger.error(f"Failed to apply text replacements: {e}")
+                    logger.error(f"Failed to apply text replacements or extract header: {e}")
             
             return template_state_builder
         except Exception as e:
@@ -218,10 +226,8 @@ class MultiTableProcessor(SheetProcessor):
         if not is_last_table:
             next_row += 1
             
-        # Calculate pallets
-        table_data = all_tables_data.get(str(table_key), {})
-        pallet_counts = table_data.get('pallet_count', [])
-        table_pallets = sum(int(p) for p in pallet_counts if str(p).isdigit())
+        # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
+        table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
         
         # Get data range
         data_range = None
@@ -233,7 +239,7 @@ class MultiTableProcessor(SheetProcessor):
             table_pallets,
             data_range,
             layout_builder.header_info,
-            layout_builder.dynamic_desc_used,
+            resolved_data.get('dynamic_desc_used', False),
             getattr(layout_builder, 'leather_summary', None)
         )
 
@@ -271,8 +277,9 @@ class MultiTableProcessor(SheetProcessor):
         footer_config = sheet_config.get('footer', {}).copy()
         footer_config["type"] = "grand_total"
         
-        if sheet_config.get('content', {}).get("summary", False) and self.args.DAF:
-            footer_config["add_ons"] = ["summary"]
+        # Legacy DAF summary logic removed - add_ons are now controlled via dictionary config
+        # if sheet_config.get('content', {}).get("summary", False) and self.args.DAF:
+        #     footer_config["add_ons"] = ["summary"]
         
         # Calculate overall data range
         if all_data_ranges:
@@ -282,14 +289,14 @@ class MultiTableProcessor(SheetProcessor):
             overall_data_start = current_row - 1
             overall_data_end = current_row - 1
             
-        # Create FooterData
-        footer_data = FooterData(
+        # Create FooterData using resolver to ensure normalized data (including global weights)
+        footer_data = grand_total_resolver.get_footer_data(
             footer_row_start_idx=current_row,
             data_start_row=overall_data_start,
             data_end_row=overall_data_end,
-            total_pallets=grand_total_pallets,
-            leather_summary=dict(aggregated_leather_summary), # Convert defaultdict to dict
-            weight_summary={'net': 0.0, 'gross': 0.0}
+            pallet_count=grand_total_pallets,
+            leather_summary=dict(aggregated_leather_summary),
+            weight_summary={'net': 0.0, 'gross': 0.0}  # Will be auto-filled with global weights by resolver
         )
         
         footer_builder = FooterBuilder(

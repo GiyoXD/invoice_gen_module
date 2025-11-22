@@ -346,7 +346,7 @@ class FooterBuilder(BundleAccessor):
         if leather_summary_config.get("enabled") and footer_type == "grand_total":
             try:
                 logger.debug(f"Building leather_summary add-on at row {current_row}")
-                current_row = self._build_summary_add_on(current_row, leather_summary_config)
+                current_row = self._build_leather_summary_add_on(current_row, leather_summary_config)
                 logger.debug(f"leather_summary add-on returned row {current_row}")
             except Exception as e:
                 logger.error(f"Error building leather_summary add-on: {e}")
@@ -580,7 +580,7 @@ class FooterBuilder(BundleAccessor):
                 end_col = min(resolved_start_col + colspan - 1, num_columns)
                 self.worksheet.merge_cells(start_row=current_footer_row, start_column=resolved_start_col, end_row=current_footer_row, end_column=end_col)
 
-    def _build_summary_add_on(self, current_footer_row: int, leather_config: Dict[str, Any] = None) -> int:
+    def _build_leather_summary_add_on(self, current_footer_row: int, leather_config: Dict[str, Any] = None) -> int:
         """
         Builds the leather summary add-on (Buffalo/Cow totals) if enabled.
         Uses pre-calculated data from DataTableBuilder.
@@ -659,10 +659,24 @@ class FooterBuilder(BundleAccessor):
                     continue
 
                 # Write Label to total_text_column_id
-                label_text = f"TOTAL OF {leather_type} LEATHER"
+                total_text = self.footer_config.get("total_text", "TOTAL OF:")
                 cell = self.worksheet.cell(row=current_row, column=total_text_col_idx)
-                cell.value = label_text
+                cell.value = total_text
                 apply_summary_style(cell, total_text_col_id)
+                
+                # Write Leather Type to the NEXT column
+                type_text = "LEATHER" if leather_type == 'COW' else f"{leather_type} LEATHER"
+                
+                # Find the ID of the next column to apply correct styling
+                next_col_idx = total_text_col_idx + 1
+                # We need idx_to_id_map to find the ID
+                idx_to_id_map = {v: k for k, v in column_id_map.items()}
+                next_col_id = idx_to_id_map.get(next_col_idx)
+                
+                if next_col_id:
+                    type_cell = self.worksheet.cell(row=current_row, column=next_col_idx)
+                    type_cell.value = type_text
+                    apply_summary_style(type_cell, next_col_id)
                 
                 # Write pallet count to pallet_count_column_id (like regular footer)
                 pallet_col_id = self.footer_config.get("pallet_count_column_id")
@@ -756,17 +770,11 @@ class FooterBuilder(BundleAccessor):
         else:
             logger.warning("No weight_summary found in FooterData")
 
-        # Fallback to context config if FooterData has zero values (e.g. Invoice sheet)
-        if grand_total_net == 0 and grand_total_gross == 0:
-            context_net = self.context_config.get('total_net_weight')
-            context_gross = self.context_config.get('total_gross_weight')
-            if context_net or context_gross:
-                try:
-                    grand_total_net = Decimal(str(context_net or 0))
-                    grand_total_gross = Decimal(str(context_gross or 0))
-                    logger.debug(f"Using weight totals from ContextConfig: N.W={grand_total_net}, G.W={grand_total_gross}")
-                except Exception as e:
-                    logger.error(f"Error converting context weight values: {e}")
+            logger.warning("No weight_summary found in FooterData")
+            
+        # Note: Fallback to context_config is no longer needed here because 
+        # BuilderConfigResolver.get_footer_data() now ensures FooterData 
+        # is populated with global weights if missing.
 
         
         logger.debug(f"Weight totals: N.W={grand_total_net}, G.W={grand_total_gross}")

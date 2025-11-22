@@ -53,6 +53,9 @@ class TemplateStateBuilder:
         # Used to shift template content when columns are filtered/removed
         # Default is 1:1 mapping (no shift)
         self.column_mapping: Dict[int, int] = {}
+        
+        # Log of text replacements performed
+        self.replacements_log: List[Dict[str, str]] = []
 
         # Store default style objects for comparison
         default_workbook = openpyxl.Workbook()
@@ -993,7 +996,7 @@ class TemplateStateBuilder:
                         if self.debug:
                             logger.debug(f"Found formula in header: {original_value}")
                     
-                    new_value, format_changed = self._apply_rules_to_cell(
+                    new_value, format_changed, matched_term = self._apply_rules_to_cell(
                         cell_info['value'], 
                         replacement_rules, 
                         invoice_data
@@ -1004,6 +1007,15 @@ class TemplateStateBuilder:
                             # Reset number_format to General for text replacements
                             cell_info['number_format'] = 'General'
                         changes_made += 1
+                        
+                        # Log the replacement
+                        if matched_term:
+                            self.replacements_log.append({
+                                "original": original_value,
+                                "new": new_value,
+                                "term": matched_term,
+                                "location": "header"
+                            })
         
         # Apply to footer state
         for row_data in self.footer_state:
@@ -1016,7 +1028,7 @@ class TemplateStateBuilder:
                         if self.debug:
                             logger.debug(f"Found formula in footer: {original_value}")
                     
-                    new_value, format_changed = self._apply_rules_to_cell(
+                    new_value, format_changed, matched_term = self._apply_rules_to_cell(
                         cell_info['value'], 
                         replacement_rules, 
                         invoice_data
@@ -1027,6 +1039,15 @@ class TemplateStateBuilder:
                             # Reset number_format to General for text replacements
                             cell_info['number_format'] = 'General'
                         changes_made += 1
+                        
+                        # Log the replacement
+                        if matched_term:
+                            self.replacements_log.append({
+                                "original": original_value,
+                                "new": new_value,
+                                "term": matched_term,
+                                "location": "footer"
+                            })
         
         logger.info(f"[TemplateStateBuilder] Text replacements complete: {changes_made} changes made")
         return changes_made
@@ -1040,12 +1061,13 @@ class TemplateStateBuilder:
         we replace the formula with the actual data value.
         
         Returns:
-            Tuple of (new_value, format_changed)
+            Tuple of (new_value, format_changed, matched_term)
             - new_value: The replaced text
             - format_changed: True if number_format should be reset to General
+            - matched_term: The term that triggered the replacement (e.g., "FCA")
         """
         if not text:
-            return text, False
+            return text, False, None
         
         # Original text replacement logic
         for rule in rules:
@@ -1080,16 +1102,17 @@ class TemplateStateBuilder:
                 
                 if replacement_value is not None:
                     # Perform replacement
+                    # Perform replacement
                     if match_mode == 'exact':
                         if self.debug:
                             logger.debug(f"Replacing '{find_text}' with '{replacement_value}'")
-                        return str(replacement_value), not is_date  # format_changed = True unless it's a date
+                        return str(replacement_value), not is_date, find_text  # format_changed = True unless it's a date
                     else:  # substring/contains
                         if self.debug:
                             logger.debug(f"Replacing substring '{find_text}' with '{replacement_value}' in '{text}'")
-                        return text.replace(find_text, str(replacement_value)), True
+                        return text.replace(find_text, str(replacement_value)), True, find_text
         
-        return text, False
+        return text, False, None
     
     def _resolve_data_path(self, data: dict, path: list) -> Any:
         """Resolve nested data path like ["processed_tables_data", "1", "inv_no", 0]"""

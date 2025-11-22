@@ -137,7 +137,7 @@ class LayoutBuilder:
         self.next_row_after_footer = -1
         self.data_start_row = -1  # Expose data range for multi-table sum calculation
         self.data_end_row = -1    # Expose data range for multi-table sum calculation
-        self.dynamic_desc_used = False  # Expose for summary add-on condition
+        self.data_end_row = -1    # Expose data range for multi-table sum calculation
         self.template_state_builder = None
 
     def build(self) -> bool:
@@ -542,7 +542,9 @@ class LayoutBuilder:
                 # Store data range for multi-table processors to access
                 self.data_start_row = data_start_row
                 self.data_end_row = data_end_row
-                self.dynamic_desc_used = getattr(data_builder, 'dynamic_desc_used', False) # Track for summary add-on
+                self.data_start_row = data_start_row
+                self.data_end_row = data_end_row
+                self.leather_summary = self.footer_data.leather_summary
                 
                 rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
                 logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
@@ -608,7 +610,7 @@ class LayoutBuilder:
 
             # Get footer config and sum ranges
             # Support both bundled config format ('footer') and legacy format ('footer_configurations')
-            footer_config = self.sheet_config.get('footer', self.sheet_config.get('footer_configurations', {}))
+            footer_config = self.sheet_config.get('footer', {})
             # Support both bundled config format ('data_flow.mappings') and legacy format ('mappings')
             data_flow = self.sheet_config.get('data_flow', {})
             sheet_inner_mapping_rules_dict = data_flow.get('mappings', self.sheet_config.get('mappings', {}))
@@ -617,26 +619,22 @@ class LayoutBuilder:
                 data_range_to_sum = [(data_start_row, data_end_row)]
 
             # Bundle configs for FooterBuilder
-            fb_style_config = {
+            footer_builder_style_config = {
                 'styling_config': styling_model
             }
             
-            fb_context_config = {
+            footer_builder_context_config = {
                 'header_info': self.header_info,
                 'pallet_count': pallet_count,
                 'sheet_name': self.sheet_name,
-                'is_last_table': True,
-                'dynamic_desc_used': False,  # TODO: Track this if needed
                 # Pass through weight totals from processor context (if available)
                 'total_net_weight': self.total_net_weight,
                 'total_gross_weight': self.total_gross_weight
             }
             
-            fb_data_config = {
+            footer_builder_data_config = {
                 'sum_ranges': data_range_to_sum,
                 'footer_config': footer_config,
-                'all_tables_data': None,  # TODO: Pass if multi-table support needed
-                'table_keys': None,
                 'mapping_rules': sheet_inner_mapping_rules_dict,
                 'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
                 'override_total_text': None,
@@ -651,9 +649,9 @@ class LayoutBuilder:
                 footer_builder = FooterBuilder(
                     worksheet=self.worksheet,
                     footer_data=self.footer_data,
-                    style_config=fb_style_config,
-                    context_config=fb_context_config,
-                    data_config=fb_data_config
+                    style_config=footer_builder_style_config,
+                    context_config=footer_builder_context_config,
+                    data_config=footer_builder_data_config
                 )
                 
                 logger.debug(f"Calling FooterBuilder.build() with footer_row_position={footer_row_position}")

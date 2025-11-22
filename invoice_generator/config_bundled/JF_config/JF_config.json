@@ -364,6 +364,7 @@
       },
       "footer": {
         "total_text_column_id": "col_po",
+        "total_text": "TOTAL OF:",
         "pallet_count_column_id": "col_item",
         "sum_column_ids": [
           "col_qty_sf",
@@ -462,6 +463,7 @@
       },
       "footer": {
         "total_text_column_id": "col_no",
+        "total_text": "TOTAL OF:",
         "pallet_count_column_id": "col_item",
         "sum_column_ids": [
           "col_qty_sf",
@@ -608,6 +610,7 @@
       },
       "footer": {
         "total_text_column_id": "col_po",
+        "total_text": "TOTAL OF:",
         "pallet_count_column_id": "col_desc",
         "sum_column_ids": [
           "col_qty_pcs",
