@@ -1,8 +1,8 @@
 {
   "status": "success",
   "output_file": "C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx",
-  "timestamp": "2025-11-24T10:29:52.684323",
-  "execution_time": 5.516307592391968,
+  "timestamp": "2025-11-24T10:42:43.761863",
+  "execution_time": 6.8414390087127686,
   "sheets_processed": [
     "Invoice",
     "Contract",
@@ -358,8 +358,8 @@
   },
   "invoice_terms": {
     "detected_terms": [
-      "FCA",
-      "BAVET, SVAY RIENG"
+      "BAVET, SVAY RIENG",
+      "FCA"
     ],
     "replacements_detail": [
       {
