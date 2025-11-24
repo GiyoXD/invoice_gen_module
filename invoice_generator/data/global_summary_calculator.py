@@ -5,8 +5,9 @@ Calculates global summary data from processed_tables_data.
 This includes total weights, pallet counts, and other cross-table summaries.
 """
 
+from typing import Any, Dict
+from ..utils.math_utils import safe_float_convert, safe_int_convert
 import logging
-from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,20 +87,7 @@ class GlobalSummaryCalculator:
             net_values = table_data.get('net', [])
             
             for val in net_values:
-                if val is None:
-                    continue
-                    
-                try:
-                    if isinstance(val, (int, float)):
-                        total_net += float(val)
-                    elif isinstance(val, str):
-                        # Handle string numbers (e.g., "718.5")
-                        cleaned = val.strip()
-                        if cleaned and cleaned.replace('.', '', 1).replace('-', '', 1).isdigit():
-                            total_net += float(cleaned)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Failed to convert net weight value '{val}' in table '{table_key}': {e}")
-                    continue
+                total_net += safe_float_convert(val)
         
         logger.debug(f"Total net weight: {total_net}")
         return total_net
@@ -117,20 +105,7 @@ class GlobalSummaryCalculator:
             gross_values = table_data.get('gross', [])
             
             for val in gross_values:
-                if val is None:
-                    continue
-                    
-                try:
-                    if isinstance(val, (int, float)):
-                        total_gross += float(val)
-                    elif isinstance(val, str):
-                        # Handle string numbers (e.g., "763.5")
-                        cleaned = val.strip()
-                        if cleaned and cleaned.replace('.', '', 1).replace('-', '', 1).isdigit():
-                            total_gross += float(cleaned)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Failed to convert gross weight value '{val}' in table '{table_key}': {e}")
-                    continue
+                total_gross += safe_float_convert(val)
         
         logger.debug(f"Total gross weight: {total_gross}")
         return total_gross
@@ -148,20 +123,7 @@ class GlobalSummaryCalculator:
             pallet_values = table_data.get('pallet_count', [])
             
             for val in pallet_values:
-                if val is None:
-                    continue
-                    
-                try:
-                    if isinstance(val, (int, float)):
-                        total_pallets += int(val)
-                    elif isinstance(val, str):
-                        # Handle string numbers
-                        cleaned = val.strip()
-                        if cleaned.isdigit():
-                            total_pallets += int(cleaned)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Failed to convert pallet count value '{val}' in table '{table_key}': {e}")
-                    continue
+                total_pallets += safe_int_convert(val)
         
         logger.debug(f"Total pallets: {total_pallets}")
         return total_pallets

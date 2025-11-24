@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 
 from invoice_generator.styling.models import FooterData
+from ..utils.math_utils import safe_float_convert, safe_int_convert
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class TableCalculator:
         pallet_counts = resolved_data.get('pallet_counts', [])
         
         # Calculate total pallets
-        self.total_pallets = sum(int(p) for p in pallet_counts if p is not None and str(p).isdigit())
+        self.total_pallets = sum(safe_int_convert(p) for p in pallet_counts)
         
         # Process each row
         for i, row_data in enumerate(data_rows):
@@ -81,24 +82,10 @@ class TableCalculator:
         gross_col_idx = self.col_id_map.get('col_gross_weight') or self.col_id_map.get('col_gross')
         
         if net_col_idx and net_col_idx in row_data:
-            try:
-                val = row_data[net_col_idx]
-                if isinstance(val, (int, float)):
-                    self.weight_summary['net'] += float(val)
-                elif isinstance(val, str) and val.replace('.', '', 1).isdigit():
-                    self.weight_summary['net'] += float(val)
-            except (ValueError, TypeError):
-                pass
+            self.weight_summary['net'] += safe_float_convert(row_data[net_col_idx])
                 
         if gross_col_idx and gross_col_idx in row_data:
-            try:
-                val = row_data[gross_col_idx]
-                if isinstance(val, (int, float)):
-                    self.weight_summary['gross'] += float(val)
-                elif isinstance(val, str) and val.replace('.', '', 1).isdigit():
-                    self.weight_summary['gross'] += float(val)
-            except (ValueError, TypeError):
-                pass
+            self.weight_summary['gross'] += safe_float_convert(row_data[gross_col_idx])
 
     def _update_leather_summary(self, row_data: Dict[int, Any], row_index: int, pallet_counts: List[Any]):
         """Updates the running totals for Buffalo and Cow leather."""
@@ -116,9 +103,7 @@ class TableCalculator:
         if target_type:
             # Add pallet count for this row
             if row_index < len(pallet_counts):
-                pallet_val = pallet_counts[row_index]
-                if pallet_val is not None and str(pallet_val).replace('.', '', 1).isdigit():
-                    self.leather_summary[target_type]['pallet_count'] += int(float(pallet_val))
+                self.leather_summary[target_type]['pallet_count'] += safe_int_convert(pallet_counts[row_index])
             
             # Sum numeric columns
             for col_idx, value in row_data.items():
@@ -126,17 +111,18 @@ class TableCalculator:
                 if not col_id or col_id == 'col_desc':
                     continue
                 
-                try:
-                    if isinstance(value, (int, float)):
-                        num_val = value
-                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
-                         num_val = float(value)
-                    else:
-                        continue
-                        
-                    if col_id not in self.leather_summary[target_type]:
-                        self.leather_summary[target_type][col_id] = 0
-                        
-                    self.leather_summary[target_type][col_id] += num_val
-                except (ValueError, TypeError):
-                    continue
+                num_val = safe_float_convert(value)
+                if num_val == 0 and value not in [0, 0.0, "0", "0.0"]:
+                     # safe_float_convert returns 0.0 for non-numeric strings, 
+                     # but we only want to sum actual numbers.
+                     # However, safe_float_convert handles whitespace/etc so if it returns 0 
+                     # it might be a valid 0 or a failure.
+                     # Let's refine: safe_float_convert returns 0.0 on failure.
+                     # If the original value was NOT something that converts to 0, we should skip it?
+                     # Actually, safe_float_convert is robust enough. If it returns 0.0, adding 0.0 is harmless.
+                     pass
+
+                if col_id not in self.leather_summary[target_type]:
+                    self.leather_summary[target_type][col_id] = 0
+                    
+                self.leather_summary[target_type][col_id] += num_val

@@ -2,3 +2,29 @@
 .github\instructions\codacy.instructions.md
 
 __pycache__/
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Project Specific - OUTPUTS & LOGS
+result_moto/
+result_test*/
+debug_*.txt
+*.log
+
+# Excel temporary files
+~$*.xlsx
+
+# Mac system files (if applicable)
+.DS_Store
