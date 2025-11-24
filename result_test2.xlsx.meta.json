@@ -1,8 +1,8 @@
 {
   "status": "success",
   "output_file": "C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx",
-  "timestamp": "2025-11-24T10:57:07.052306",
-  "execution_time": 6.580140829086304,
+  "timestamp": "2025-11-24T15:01:20.234047",
+  "execution_time": 9.147358179092407,
   "sheets_processed": [
     "Invoice",
     "Contract",

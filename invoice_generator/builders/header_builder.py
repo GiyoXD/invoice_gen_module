@@ -16,17 +16,15 @@ class HeaderBuilderStyler:
         self,
         worksheet: Worksheet,
         start_row: int,
-        header_layout_config: Optional[List[Dict[str, Any]]] = None,
-        bundled_columns: Optional[List[Dict[str, Any]]] = None,
+        bundled_columns: List[Dict[str, Any]],
         sheet_styling_config: Optional[StylingConfigModel] = None,
     ):
         """
-        Initialize HeaderBuilder with either legacy or bundled config.
+        Initialize HeaderBuilder with bundled config.
         
         Args:
             worksheet: The worksheet to write to
             start_row: Starting row for header
-            header_layout_config: Legacy format (list with row/col/text/id/rowspan/colspan)
             bundled_columns: Bundled format (list with id/header/format/rowspan/colspan/children)
             sheet_styling_config: Styling configuration
         """
@@ -57,7 +55,7 @@ class HeaderBuilderStyler:
              logger.error("HeaderBuilder: No styling config provided!")
              raise ValueError("No styling config provided")
         
-        # Convert bundled columns to internal format if provided
+        # Convert bundled columns to internal format
         if bundled_columns:
             logger.info(f"Using BUNDLED config (columns={len(bundled_columns)})")
             self.header_layout_config = self._convert_bundled_columns(bundled_columns)

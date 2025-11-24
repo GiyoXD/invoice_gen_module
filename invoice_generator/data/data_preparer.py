@@ -58,14 +58,17 @@ def parse_mapping_rules(
                 parsed_result["initial_static_col1_values"] = rule_value.get("values", [])
                 parsed_result["num_static_labels"] = len(parsed_result["initial_static_col1_values"])
                 
-                header_text = parsed_result["static_column_header_name"]
-                parsed_result["apply_special_border_rule"] = header_text and header_text.strip() in ["Mark & Nº", "Mark & N °"]
+                parsed_result["formula_rules"][target_col_idx] = {
+                    "template": rule_value.get("formula_template"),
+                    "input_ids": rule_value.get("inputs", [])
+                }
             else:
                 logger.warning(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
             continue
 
         # For all other rules, get the target column index using the RELIABLE ID
-        target_id = rule_value.get("id")
+        # Support both legacy 'id' and bundled 'column' keys
+        target_id = rule_value.get("id") or rule_value.get("column")
         target_col_idx = column_id_map.get(target_id)
 
         # --- Handler for Formulas ---
@@ -211,7 +214,9 @@ def prepare_data_rows(
                 else:
                     mapping_rule_for_id = {}
                     for rule in dynamic_mapping_rules.values():
-                        if rule.get("id") == col_id:
+                        # Support both 'id' and 'column'
+                        rule_id = rule.get("id") or rule.get("column")
+                        if rule_id == col_id:
                             mapping_rule_for_id = rule
                             break
                     _apply_fallback(row_dict, target_col_idx, mapping_rule_for_id, DAF_mode)
@@ -245,7 +250,7 @@ def prepare_data_rows(
             
             # Apply fallbacks for any unmapped columns based on DAF_mode
             for header, mapping_rule in dynamic_mapping_rules.items():
-                target_id = mapping_rule.get("id")
+                target_id = mapping_rule.get("id") or mapping_rule.get("column")
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx or target_col_idx in row_dict:
                     continue
@@ -279,17 +284,26 @@ def prepare_data_rows(
         for item in normalized_data:
             row_dict = {}
             for header, mapping_rule in dynamic_mapping_rules.items():
-                target_id = mapping_rule.get("id")
+                target_id = mapping_rule.get("id") or mapping_rule.get("column")
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
 
                 data_value = None
                 if 'key_tuple' in item:
                     key_tuple, value_dict = item['key_tuple'], item['value_dict']
-                    if 'key_index' in mapping_rule and mapping_rule['key_index'] < len(key_tuple):
-                        data_value = key_tuple[mapping_rule['key_index']]
-                    elif 'value_key' in mapping_rule:
-                        data_value = value_dict.get(mapping_rule['value_key'])
+                    # Support both legacy 'key_index' and bundled 'source_key'
+                    key_idx = mapping_rule.get('key_index')
+                    if key_idx is None:
+                        key_idx = mapping_rule.get('source_key')
+                        
+                    if key_idx is not None and key_idx < len(key_tuple):
+                        data_value = key_tuple[key_idx]
+                    else:
+                        # Support both legacy 'value_key' and bundled 'source_value'
+                        val_key = mapping_rule.get('value_key') or mapping_rule.get('source_value')
+                        if val_key:
+                            data_value = value_dict.get(val_key)
+                            
                 elif 'table_row_index' in item:
                     i, table_data = item['table_row_index'], item['table_data']
                     source_list = table_data.get(header, [])

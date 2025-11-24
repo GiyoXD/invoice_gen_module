@@ -46,13 +46,7 @@ class LayoutBuilder:
                 template_worksheet=template,
                 style_config=style_config,
                 context_config=context_config,
-                layout_config={**layout_config, **data_config}  # Merge layout + data
-            )
-    
-    LEGACY USAGE (Individual Parameters):
-        Direct parameter passing is still supported for backward compatibility
-        but is deprecated. Consider migrating to the resolver approach above.
-    """
+        """
     def __init__(
         self,
         workbook: Workbook,
@@ -143,8 +137,8 @@ class LayoutBuilder:
         # 2. Calculate header boundaries for template state capture
         header_row = self.sheet_config.get('header_row', 1)
 
-        header_to_write = self.sheet_config.get('header_to_write')
-        num_header_cols = len(header_to_write) if header_to_write else 0
+        # header_to_write removed - using bundled columns only
+        num_header_cols = 0
         
         # IMPORTANT: Clarify terminology - there are TWO types of headers:
         # 1. TEMPLATE HEADER: Decorative header section (company name, logo, etc.) - rows 1 to (table_header_row - 1)
@@ -302,11 +296,11 @@ class LayoutBuilder:
 
             try:
                 logger.debug(f"Creating HeaderBuilder at row {header_row_for_builder}")
-                logger.debug(f"HeaderBuilder input - bundled_columns: {len(bundled_columns) if bundled_columns else 0}, legacy_layout: {len(header_to_write) if header_to_write else 0}")
+                logger.debug(f"Creating HeaderBuilder at row {header_row_for_builder}")
+                logger.debug(f"HeaderBuilder input - bundled_columns: {len(bundled_columns) if bundled_columns else 0}")
                 header_builder = HeaderBuilder(
                     worksheet=self.worksheet,
                     start_row=header_row_for_builder,  # Use table_header_row (row 21), NOT header_row (row 1)
-                    header_layout_config=header_to_write,  # Legacy format (if provided)
                     bundled_columns=bundled_columns,  # Bundled format (preferred)
                     sheet_styling_config=styling_model,
                 )
@@ -417,40 +411,8 @@ class LayoutBuilder:
                     logger.info("LayoutBuilder: Skipping data table build as requested.")
 
                 # --- 6. Build Footer (FooterBuilder) ---
-                if not self.skip_footer_builder:
-                    logger.info("LayoutBuilder: Building footer...")
-                    
-                    # Get footer config from bundled config or legacy dict
-                    footer_config = self.sheet_config.get('footer')
-                    if not footer_config:
-                         footer_config = self.sheet_config.get('footer_configurations')
-                    
-                    footer_builder = FooterBuilder(
-                        worksheet=self.worksheet,
-                        footer_data=self.footer_data,
-                        style_config={'styling_config': styling_model},
-                        context_config={
-                            'header_info': self.header_info,
-                            'pallet_count': self.footer_data.total_pallets,
-                            'sheet_name': self.sheet_name,
-                            'is_last_table': True,
-                            'dynamic_desc_used': getattr(data_builder, 'dynamic_desc_used', False) if 'data_builder' in locals() else False,
-                            'total_net_weight': self.total_net_weight,
-                            'total_gross_weight': self.total_gross_weight
-                        },
-                        data_config={
-                            'sum_ranges': [(self.footer_data.data_start_row, self.footer_data.data_end_row)],
-                            'footer_config': footer_config,
-                            'all_tables_data': None,
-                            'table_keys': None,
-                            'mapping_rules': sheet_inner_mapping_rules_dict,
-                            'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
-                            'override_total_text': None,
-                            'leather_summary': None
-                        }
-                    )
-                    self.next_row_after_footer = footer_builder.build()
-                    logger.info(f"LayoutBuilder: Footer build complete. Next row index: {self.next_row_after_footer}")
+                # MOVED: Footer building is now handled explicitly after the data table block
+                # to ensure strict separation of concerns and avoid duplication.
                 
                 # Extract legacy values for logging/compatibility if needed
                 data_start_row = self.footer_data.data_start_row
@@ -459,8 +421,6 @@ class LayoutBuilder:
                 local_chunk_pallets = self.footer_data.total_pallets
 
                 # Store data range for multi-table processors to access
-                self.data_start_row = data_start_row
-                self.data_end_row = data_end_row
                 self.data_start_row = data_start_row
                 self.data_end_row = data_end_row
                 self.leather_summary = self.footer_data.leather_summary
@@ -557,7 +517,7 @@ class LayoutBuilder:
                 'mapping_rules': sheet_inner_mapping_rules_dict,
                 'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
                 'override_total_text': None,
-                'leather_summary': getattr(data_table_builder, 'leather_summary', None) if 'data_table_builder' in locals() else None
+                'leather_summary': self.footer_data.leather_summary if self.footer_data else None
             }
 
             logger.debug(f"Creating FooterBuilder at row {footer_row_position}")
