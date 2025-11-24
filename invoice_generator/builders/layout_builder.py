@@ -58,86 +58,65 @@ class LayoutBuilder:
         workbook: Workbook,
         worksheet: Worksheet,
         template_worksheet: Worksheet,
-        sheet_name: str = None,
-        sheet_config: Dict[str, Any] = None,
-        all_sheet_configs: Dict[str, Any] = None,
-        invoice_data: Dict[str, Any] = None,
-        styling_config: Optional[StylingConfigModel] = None,
-        args: Optional[Any] = None,
-        final_grand_total_pallets: int = 0,
-        enable_text_replacement: bool = False,
-        # Optional skip flags for custom processors
-        skip_template_header_restoration: bool = False,
-        skip_header_builder: bool = False,
-        skip_data_table_builder: bool = False,
-        skip_footer_builder: bool = False,
-        skip_template_footer_restoration: bool = False,
-        # Pre-captured template state (for multi-table efficiency)
-        template_state_builder = None,
-        # Bundled config support (RECOMMENDED - use BuilderConfigResolver)
-        style_config: Dict[str, Any] = None,
-        context_config: Dict[str, Any] = None,
-        layout_config: Dict[str, Any] = None,
+        style_config: Dict[str, Any],
+        context_config: Dict[str, Any],
+        layout_config: Dict[str, Any],
+        template_state_builder: Optional[TemplateStateBuilder] = None
     ):
-        # Support bundled config approach (unpack if provided)
-        if style_config:
-            styling_config = style_config.get('styling_config', styling_config)
-        if context_config:
-            sheet_name = context_config.get('sheet_name', sheet_name)
-            invoice_data = context_config.get('invoice_data', invoice_data)
-            all_sheet_configs = context_config.get('all_sheet_configs', all_sheet_configs)
-            args = context_config.get('args', args)
-            final_grand_total_pallets = context_config.get('final_grand_total_pallets', final_grand_total_pallets)
-        if layout_config:
-            sheet_config = layout_config.get('sheet_config', sheet_config)
-            enable_text_replacement = layout_config.get('enable_text_replacement', enable_text_replacement)
-            skip_header_builder = layout_config.get('skip_header_builder', skip_header_builder)
-            skip_template_header_restoration = layout_config.get('skip_template_header_restoration', skip_template_header_restoration)
-            skip_template_footer_restoration = layout_config.get('skip_template_footer_restoration', skip_template_footer_restoration)
-            skip_data_table_builder = layout_config.get('skip_data_table_builder', skip_data_table_builder)
-            skip_footer_builder = layout_config.get('skip_footer_builder', skip_footer_builder)
+        """
+        Initialize LayoutBuilder with strict bundle architecture.
         
-        # Store data source config from layout_config (if provided by resolver)
-        self.provided_data_source = layout_config.get('data_source') if layout_config else None
-        self.provided_data_source_type = layout_config.get('data_source_type') if layout_config else None
-        self.provided_header_info = layout_config.get('header_info') if layout_config else None
-        self.provided_mapping_rules = layout_config.get('mapping_rules') if layout_config else None
-        self.provided_resolved_data = layout_config.get('resolved_data') if layout_config else None  # NEW: Support resolved data from TableDataAdapter
+        Args:
+            workbook: Output workbook (writable)
+            worksheet: Output worksheet (writable)
+            template_worksheet: Template worksheet (read-only)
+            style_config: Bundle containing styling configuration
+            context_config: Bundle containing context (sheet_name, invoice_data, args, etc.)
+            layout_config: Bundle containing layout rules, structure, and resolved data
+            template_state_builder: Optional pre-captured template state (optimization)
+        """
+        self.workbook = workbook
+        self.worksheet = worksheet
+        self.template_worksheet = template_worksheet
         
-        # Store weight totals from context (if provided by processor)
-        self.total_net_weight = context_config.get('total_net_weight') if context_config else None
-        self.total_gross_weight = context_config.get('total_gross_weight') if context_config else None
+        # Unpack Style Bundle
+        self.styling_config = style_config.get('styling_config')
         
-        self.workbook = workbook  # Output workbook (writable)
-        self.worksheet = worksheet  # Output worksheet (writable)
-        self.template_worksheet = template_worksheet  # Template worksheet (read-only usage)
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.all_sheet_configs = all_sheet_configs
-        self.invoice_data = invoice_data
-        self.styling_config = styling_config
-        self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
-        self.enable_text_replacement = enable_text_replacement
+        # Unpack Context Bundle
+        self.sheet_name = context_config.get('sheet_name')
+        self.invoice_data = context_config.get('invoice_data')
+        self.all_sheet_configs = context_config.get('all_sheet_configs')
+        self.args = context_config.get('args')
+        self.final_grand_total_pallets = context_config.get('final_grand_total_pallets', 0)
+        self.total_net_weight = context_config.get('total_net_weight')
+        self.total_gross_weight = context_config.get('total_gross_weight')
         
-        # Skip flags for flexible processor customization
-        self.skip_template_header_restoration = skip_template_header_restoration
-        self.skip_header_builder = skip_header_builder
-        self.skip_data_table_builder = skip_data_table_builder
-        self.skip_footer_builder = skip_footer_builder
-        self.skip_template_footer_restoration = skip_template_footer_restoration
+        # Unpack Layout Bundle
+        self.sheet_config = layout_config.get('sheet_config', {})
+        self.enable_text_replacement = layout_config.get('enable_text_replacement', False)
         
-        # Pre-captured template state (for multi-table efficiency)
+        # Skip flags
+        self.skip_template_header_restoration = layout_config.get('skip_template_header_restoration', False)
+        self.skip_header_builder = layout_config.get('skip_header_builder', False)
+        self.skip_data_table_builder = layout_config.get('skip_data_table_builder', False)
+        self.skip_footer_builder = layout_config.get('skip_footer_builder', False)
+        self.skip_template_footer_restoration = layout_config.get('skip_template_footer_restoration', False)
+        
+        # Data Source (Must be provided via resolved_data in layout_config)
+        self.provided_resolved_data = layout_config.get('resolved_data')
+        self.provided_header_info = layout_config.get('header_info')
+        self.provided_mapping_rules = layout_config.get('mapping_rules')
+        
+        # Pre-captured template state
         self.pre_captured_template_state = template_state_builder
         
-        logger.debug(f"LayoutBuilder initialized: skip_data_table_builder={self.skip_data_table_builder}")
+        logger.debug(f"LayoutBuilder initialized for '{self.sheet_name}' with pure bundle config")
         
         # Store results after build
         self.header_info = None
         self.next_row_after_footer = -1
-        self.data_start_row = -1  # Expose data range for multi-table sum calculation
-        self.data_end_row = -1    # Expose data range for multi-table sum calculation
-        self.data_end_row = -1    # Expose data range for multi-table sum calculation
+        self.data_start_row = -1
+        self.data_end_row = -1
         self.template_state_builder = None
 
     def build(self) -> bool:
@@ -378,91 +357,18 @@ class LayoutBuilder:
             data_cell_merging_rules = self.sheet_config.get("data_cell_merging_rule", None)
             
             # ========== Data Source Resolution ==========
-            # Initialize data_source_type for Python scoping (used in legacy paths)
-            data_source_type = None
-            
-            logger.debug(f"[LayoutBuilder DEBUG] self.provided_resolved_data = {self.provided_resolved_data is not None}")
-            logger.debug(f"[LayoutBuilder DEBUG] self.provided_data_source_type = {self.provided_data_source_type}")
-            logger.debug(f"[LayoutBuilder DEBUG] self.provided_data_source = {type(self.provided_data_source) if self.provided_data_source is not None else None}")
             
             # Primary path: Use TableDataAdapter-provided resolved_data (modern approach)
-            # This is the RECOMMENDED method - data is already prepared
             if self.provided_resolved_data:
                 logger.info(f"Using resolver-provided resolved_data (modern approach)")
                 # DataTableBuilder expects resolved_data directly, not wrapped in dtb_data_config
                 dtb_data_config = self.provided_resolved_data
-            # Secondary path: Use BuilderConfigResolver-provided data source (legacy bundled config approach)
-            # This still requires DataTableBuilder to call prepare_data_rows internally
-            elif (self.provided_data_source_type is not None and 
-                self.provided_data_source is not None and
-                (not isinstance(self.provided_data_source, dict) or self.provided_data_source)):
-                logger.info(f"Using resolver-provided data source: {self.provided_data_source_type}")
-                data_to_fill = self.provided_data_source
-                data_source_type = self.provided_data_source_type
-                sheet_inner_mapping_rules_dict = self.provided_mapping_rules or {}
-                
-                dtb_data_config = {
-                    'data_source': data_to_fill,
-                    'data_source_type': data_source_type,
-                    'header_info': self.header_info,
-                    'mapping_rules': sheet_inner_mapping_rules_dict
-                }
             else:
-                # LEGACY PATH - DEPRECATED
-                # This logic is maintained for backward compatibility but should be replaced
-                # by using BuilderConfigResolver + TableDataAdapter in all calling code
-                logger.warning(f"Using legacy data source resolution. Consider using BuilderConfigResolver + TableDataAdapter instead")
-                data_source_indicator = self.sheet_config.get("data_source")
-                data_to_fill = None
-                data_source_type = None
+                # If no resolved_data is provided, we cannot proceed in strict bundle mode
+                logger.error(f"LayoutBuilder: No resolved_data provided in layout_config. Strict bundle mode requires TableDataAdapter.")
+                logger.error(f"Sheet: {self.sheet_name}")
+                return False
 
-                # Handle custom aggregation mode
-                if self.args and self.args.custom and data_source_indicator == 'aggregation':
-                    data_to_fill = self.invoice_data.get('custom_aggregation_results')
-                    data_source_type = 'custom_aggregation'
-                    logger.debug(f"Legacy: Using custom_aggregation")
-
-                # Handle DAF and standard aggregation modes
-                if data_to_fill is None:
-                    # Auto-switch to DAF mode for Invoice/Contract sheets if DAF flag is set
-                    if self.args and self.args.DAF and self.sheet_name in ["Invoice", "Contract"]:
-                        data_source_indicator = 'DAF_aggregation'
-
-                    if data_source_indicator == 'DAF_aggregation':
-                        data_to_fill = self.invoice_data.get('final_DAF_compounded_result')
-                        data_source_type = 'DAF_aggregation'
-                        logger.debug(f"Legacy: Using DAF_aggregation")
-                    elif data_source_indicator == 'aggregation':
-                        data_to_fill = self.invoice_data.get('standard_aggregation_results')
-                        data_source_type = 'aggregation'
-                        logger.debug(f"Legacy: Using standard aggregation")
-                    elif 'processed_tables_data' in self.invoice_data and data_source_indicator in self.invoice_data.get('processed_tables_data', {}):
-                        data_to_fill = self.invoice_data['processed_tables_data'].get(data_source_indicator)
-                        data_source_type = 'processed_tables'
-                        logger.debug(f"Legacy: Using processed_tables with key '{data_source_indicator}'")
-                        
-                # Check if data was found
-                if data_to_fill is None:
-                    data_source_indicator = self.sheet_config.get("data_source") if not self.provided_data_source_type else self.provided_data_source_type
-                    logger.warning(f"Data source '{data_source_indicator}' unknown or data empty. Skipping fill.")
-                    # Set next_row_after_footer to a valid value (right after header) for multi-table processors
-                    logger.debug(f"[LayoutBuilder DEBUG] Before early return:")
-                    logger.debug(f"  header_row={header_row}")
-                    logger.debug(f"  self.sheet_config.get('header_row')={self.sheet_config.get('header_row', 'NOT FOUND')}")
-                    logger.debug(f"  Calculating next_row_after_footer = header_row + 2 = {header_row + 2}")
-                    self.next_row_after_footer = header_row + 2  # After two-row header
-                    self.data_start_row = 0
-                    self.data_end_row = 0
-                    logger.debug(f"[LayoutBuilder DEBUG] Early return: header_row={header_row}, next_row_after_footer={self.next_row_after_footer}")
-                    return True
-                
-                # Legacy path: data_config with raw data
-                dtb_data_config = {
-                    'data_source': data_to_fill,
-                    'data_source_type': data_source_type,
-                    'header_info': self.header_info,
-                    'mapping_rules': sheet_inner_mapping_rules_dict
-                }
             # ========== End Data Source Resolution ==========
 
             # DataTableBuilder uses the new simplified interface
