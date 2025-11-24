@@ -1,7 +1,6 @@
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
 
-__pycache__/
 # Python
 __pycache__/
 *.py[cod]
@@ -13,18 +12,21 @@ __pycache__/
 env/
 venv/
 
-# IDE settings
+# IDEs
 .vscode/
 .idea/
 
-# Project Specific - OUTPUTS & LOGS
+# Project Output & Logs (STOP TRACKING THESE)
 result_moto/
 result_test*/
 debug_*.txt
 *.log
+*.xml
+*.zip
 
-# Excel temporary files
+# Excel temps
 ~$*.xlsx
 
-# Mac system files (if applicable)
-.DS_Store
+# Backups
+invoice_generator/config_backup/
+invoice_generator/unuse_config/
