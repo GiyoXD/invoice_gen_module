@@ -1,192 +1,354 @@
-from typing import Any, Dict, List, Tuple
-from openpyxl.worksheet.worksheet import Worksheet
+# invoice_generator/processors/multi_table_processor.py
+import sys
+import logging
+import traceback
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..utils.writing import write_header
+from openpyxl.utils import get_column_letter
+
+from .base_processor import SheetProcessor
+from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import FooterBuilder
-from ..utils.layout import unmerge_block, safe_unmerge_block
-from ..utils import merge_utils
-from ..styling import style_applier as style_utils
-from .base_processor import BaseProcessor
+from ..styling.models import StylingConfigModel, FooterData
+from ..config.builder_config_resolver import BuilderConfigResolver
+from ..builders.template_state_builder import TemplateStateBuilder
+from ..utils.text_replacement_rules import build_replacement_rules
+from ..extractors.header_extractor import HeaderExtractor
 
-class MultiTableProcessor(BaseProcessor):
+logger = logging.getLogger(__name__)
+
+class MultiTableProcessor(SheetProcessor):
+    """
+    Processes a worksheet that contains multiple, repeating blocks of tables,
+    such as a packing list. Uses LayoutBuilder for each table iteration.
+    """
+
     def process(self) -> bool:
-        write_pointer_row = self.sheet_config.get("start_row", 1)
-        all_data_ranges: List[Tuple[int, int]] = []
-        all_header_infos: List[Dict] = []
-        all_footer_rows: List[int] = []
-        grand_total_pallets = 0
-
-        header_to_write = self.sheet_config.get("header_to_write", [])
-        footer_config = self.sheet_config.get("footer_configurations", {})
-        styling_config = self.styling_config
-        mappings = self.sheet_config.get("mappings", {})
-        data_map = mappings.get("data_map", {})
-        static_col_values = mappings.get("initial_static", {}).get("values", [])
+        """
+        Executes the logic for processing a multi-table sheet using LayoutBuilder.
+        """
+        logger.info(f"Processing sheet '{self.sheet_name}' as multi-table/packing list")
         
-        raw_data = self.invoice_data.get('processed_tables_data', {})
-        table_keys = sorted(raw_data.keys())
-        num_tables = len(table_keys)
-        last_data_end_row = -1
+        # 1. Resolve Data
+        all_tables_data, table_keys = self._resolve_all_tables_data()
+        if not all_tables_data:
+            return True  # Nothing to do
 
+        # 2. Capture Template State
+        template_state_builder = self._capture_template_state()
+        if not template_state_builder:
+            return False
+
+        # 3. Initialize Tracking Variables
+        structure_config = self.sheet_config.get('structure', {}) if self.sheet_config else {}
+        current_row = structure_config.get('header_row', 21)
+        all_data_ranges = []
+        grand_total_pallets = 0
+        last_header_info = None
+        dynamic_desc_used = False
+        
+        # Use defaultdict for safer aggregation
+        aggregated_leather_summary = defaultdict(lambda: defaultdict(float))
+
+        # 4. Process Each Table
         for i, table_key in enumerate(table_keys):
-            table_data = raw_data[table_key]
-            num_data_rows = len(table_data.get('net', []))
+            result = self._process_single_table(
+                table_key=table_key,
+                index=i,
+                total_tables=len(table_keys),
+                current_row=current_row,
+                all_tables_data=all_tables_data,
+                template_state_builder=template_state_builder
+            )
             
-            is_last_table = (i == num_tables - 1) # Calculate is_last_table
-
-            header_info = write_header(self.worksheet, write_pointer_row, header_to_write, self.styling_config)
-            all_header_infos.append(header_info)
-            write_pointer_row = header_info.get('second_row_index', write_pointer_row) + 1
-            col_map = header_info.get('column_id_map', {})
-            num_columns = header_info.get('num_columns', 1)
-            static_col_idx = col_map.get(mappings.get("initial_static", {}).get("column_header_id"))
-            idx_to_id_map = {v: k for k, v in col_map.items()}
-
-            data_start_row = write_pointer_row
+            if not result:
+                return False
             
-            keys_to_convert_to_numeric = {'net', 'amount', 'price'}
-
-            data_end_row = data_start_row + num_data_rows - 1
-            safe_unmerge_block(self.worksheet, data_start_row, data_end_row, num_columns)
-
-            for r_idx in range(num_data_rows):
-                current_row = write_pointer_row + r_idx
-                if static_col_idx and r_idx < len(static_col_values):
-                    self.worksheet.cell(row=current_row, column=static_col_idx).value = static_col_values[r_idx]
-                
-                for data_key, mapping_info in data_map.items():
-                    if col_idx := col_map.get(mapping_info.get("id")):
-                        if data_key in table_data:
-                            value = table_data[data_key][r_idx]
-                            
-                            if data_key in keys_to_convert_to_numeric and isinstance(value, str):
-                                try:
-                                    numeric_value = float(value.replace(',', ''))
-                                    self.worksheet.cell(row=current_row, column=col_idx).value = numeric_value
-                                except (ValueError, TypeError):
-                                    self.worksheet.cell(row=current_row, column=col_idx).value = value
-                            else:
-                                self.worksheet.cell(row=current_row, column=col_idx).value = value
-
-                for c_idx in range(1, num_columns + 1):
-                    cell = self.worksheet.cell(row=current_row, column=c_idx)
-                    style_context = {
-                        "col_id": idx_to_id_map.get(c_idx), "col_idx": c_idx,
-                        "static_col_idx": static_col_idx, "row_index": r_idx,
-                        "num_data_rows": num_data_rows
-                    }
-                    style_utils.apply_cell_style(cell, self.styling_config, style_context)
+            # Unpack result
+            (next_row, table_pallets, data_range, header_info, 
+             table_dynamic_desc, table_leather_summary) = result
             
-            write_pointer_row += num_data_rows
-            all_data_ranges.append((data_start_row, write_pointer_row - 1))
-
-            data_end_row = write_pointer_row - 1
-            last_data_end_row = data_end_row
-            vertical_merge_ids = mappings.get("vertical_merge_on_id", [])
-            if vertical_merge_ids:
-                print(f"Applying vertical merges for table '{table_key}'...")
-                for col_id_to_merge in vertical_merge_ids:
-                    if col_idx := col_map.get(col_id_to_merge):
-                        merge_utils.merge_vertical_cells_in_range(
-                            worksheet=self.worksheet,
-                            scan_col=col_idx,
-                            start_row=data_start_row,
-                            end_row=data_end_row
-                        )
-
-            pre_footer_config = footer_config.get("pre_footer_row")
-            if pre_footer_config and isinstance(pre_footer_config, dict):
-                cells_to_write = pre_footer_config.get("cells", [])
-                for cell_data in cells_to_write:
-                    value = cell_data.get("value")
-                    if col_idx := col_map.get(col_id):
-                        self.worksheet.cell(row=write_pointer_row, column=col_idx).value = value
-                
-                for c_idx in range(1, num_columns + 1):
-                    cell = self.worksheet.cell(row=write_pointer_row, column=c_idx)
-                    col_id = idx_to_id_map.get(c_idx)
-                    style_context = {
-                        "col_id": col_id, "col_idx": c_idx,
-                        "static_col_idx": static_col_idx, "is_pre_footer": True
-                    }
-                    style_utils.apply_cell_style(cell, self.styling_config, style_context)
-                
-                pre_footer_merges = pre_footer_config.get("merge_rules")
-                merge_utils.apply_row_merges(self.worksheet, write_pointer_row, num_columns, pre_footer_merges)
-                
-                if data_row_height := self.styling_config.row_heights.get("data_default"):
-                    self.worksheet.row_dimensions[write_pointer_row].height = data_row_height
-                
-                write_pointer_row += 1
-
-            pallet_count = sum(table_data.get('pallet_count', []))
-            grand_total_pallets += pallet_count
+            # Update tracking
+            current_row = next_row
+            grand_total_pallets += table_pallets
+            if data_range:
+                all_data_ranges.append(data_range)
+            last_header_info = header_info
+            if table_dynamic_desc:
+                dynamic_desc_used = True
             
-            print(f"DEBUG: MultiTableProcessor - self.args.DAF: {self.args.DAF}") # NEW DEBUG PRINT
-            footer_builder = FooterBuilder(
-                worksheet=self.worksheet,
-                footer_row_num=write_pointer_row,
-                header_info=header_info,
-                sum_ranges=[(data_start_row, write_pointer_row - 1)],
-                footer_config={**footer_config, "type": "regular"},
-                pallet_count=pallet_count,
-                sheet_styling_config=self.styling_config,
-                all_tables_data=self.invoice_data.get('processed_tables_data', {}),
+            # Aggregate leather summary
+            if table_leather_summary:
+                for l_type, data in table_leather_summary.items():
+                    for col_id, val in data.items():
+                        aggregated_leather_summary[l_type][col_id] += val
+
+        # 5. Build Grand Total Row
+        if len(table_keys) > 1 and last_header_info:
+            current_row = self._build_grand_total_row(
+                current_row=current_row,
+                grand_total_pallets=grand_total_pallets,
+                all_data_ranges=all_data_ranges,
+                last_header_info=last_header_info,
+                all_tables_data=all_tables_data,
                 table_keys=table_keys,
-                mapping_rules=mappings,
+                aggregated_leather_summary=aggregated_leather_summary,
+                dynamic_desc_used=dynamic_desc_used
+            )
+
+        # 6. Restore Template Footer
+        self._restore_template_footer(template_state_builder, current_row, table_keys)
+        
+        logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
+        return True
+
+    def _resolve_all_tables_data(self) -> Tuple[Optional[Dict], List]:
+        """Resolves all tables data using BuilderConfigResolver."""
+        initial_resolver = BuilderConfigResolver(
+            config_loader=self.config_loader,
+            sheet_name=self.sheet_name,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,
+            pallets=0
+        )
+        
+        all_tables_data = initial_resolver._get_data_source_for_type('processed_tables_multi')
+        if not all_tables_data or not isinstance(all_tables_data, dict):
+            logger.warning(f"'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'")
+            return None, []
+
+        table_keys = sorted(all_tables_data.keys(), key=lambda x: int(x) if str(x).isdigit() else float('inf'))
+        logger.info(f"Found {len(table_keys)} tables to process: {table_keys}")
+        return all_tables_data, table_keys
+
+    def _capture_template_state(self):
+        """Captures template state (header/footer) for reuse."""
+        from ..builders.template_state_builder import TemplateStateBuilder
+        logger.info(f"[MultiTableProcessor] Capturing template state once for all tables")
+        
+        layout_config = self.sheet_config.get('layout_config', {}) if self.sheet_config else {}
+        structure_config = layout_config.get('structure', {})
+        
+        if 'header_row' not in structure_config:
+            logger.critical(f"CRITICAL: 'header_row' not found in sheet_config['layout_config']['structure'] for '{self.sheet_name}'. Cannot capture template state.")
+            return None
+        
+        table_header_row = structure_config['header_row']
+        template_header_end_row = table_header_row - 1
+        template_footer_start_row = structure_config.get('footer_row', table_header_row + 1)
+        num_header_cols = 20  # Conservative estimate
+        
+        try:
+            template_state_builder = TemplateStateBuilder(
+                worksheet=self.template_worksheet,
+                num_header_cols=num_header_cols,
+                header_end_row=template_header_end_row,
+                footer_start_row=template_footer_start_row,
+                debug=getattr(self.args, 'debug', False)
+            )
+            
+            # Apply text replacements
+            if self.args and self.invoice_data:
+                try:
+                    replacement_rules = build_replacement_rules(self.args)
+                    template_state_builder.apply_text_replacements(
+                        replacement_rules=replacement_rules,
+                        invoice_data=self.invoice_data
+                    )
+                    # Capture replacements log
+                    self.replacements_log = template_state_builder.replacements_log
+                    
+                    # Extract Header Info
+                    self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
+                    
+                except Exception as e:
+                    logger.error(f"Failed to apply text replacements or extract header: {e}")
+            
+            return template_state_builder
+        except Exception as e:
+            logger.critical(f"CRITICAL: Failed to capture template state: {e}")
+            return None
+
+    def _process_single_table(self, table_key, index, total_tables, current_row, all_tables_data, template_state_builder):
+        """Processes a single table iteration."""
+        is_first_table = (index == 0)
+        is_last_table = (index == total_tables - 1)
+        logger.info(f"Processing table '{table_key}' ({index+1}/{total_tables})")
+        
+        resolver = BuilderConfigResolver(
+            config_loader=self.config_loader,
+            sheet_name=self.sheet_name,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,
+            pallets=0
+        )
+        
+        style_config = resolver.get_style_bundle()
+        context_config = resolver.get_context_bundle(enable_text_replacement=False)
+        layout_config = resolver.get_layout_bundle()
+        
+        # Resolve table data
+        table_data_resolver = resolver.get_table_data_resolver(table_key=str(table_key))
+        resolved_data = table_data_resolver.resolve()
+        layout_config['resolved_data'] = resolved_data
+        
+        # Override header row position
+        if not 'structure' in layout_config.get('sheet_config', {}):
+            if 'sheet_config' not in layout_config:
+                layout_config['sheet_config'] = {}
+            layout_config['sheet_config']['structure'] = {}
+        layout_config['sheet_config']['structure']['header_row'] = current_row
+        
+        layout_config['enable_text_replacement'] = False
+        layout_config['skip_template_header_restoration'] = (not is_first_table)
+        layout_config['skip_template_footer_restoration'] = True
+        
+        layout_builder = LayoutBuilder(
+            self.output_workbook,
+            self.output_worksheet,
+            self.template_worksheet,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config,
+            template_state_builder=template_state_builder
+        )
+        
+        success = layout_builder.build()
+        if not success:
+            logger.error(f"Failed to build layout for table '{table_key}'")
+            return None
+        
+        # Calculate next row
+        next_row = layout_builder.next_row_after_footer
+        if not is_last_table:
+            next_row += 1
+            
+        # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
+        table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
+        
+        # Get data range
+        data_range = None
+        if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
+            data_range = (layout_builder.data_start_row, layout_builder.data_end_row)
+            
+        return (
+            next_row,
+            table_pallets,
+            data_range,
+            layout_builder.header_info,
+            resolved_data.get('dynamic_desc_used', False),
+            getattr(layout_builder, 'leather_summary', None)
+        )
+
+    def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_header_info, 
+                             all_tables_data, table_keys, aggregated_leather_summary, dynamic_desc_used):
+        """Builds the Grand Total row after all tables."""
+        logger.info("Adding Grand Total Row")
+        
+        grand_total_resolver = BuilderConfigResolver(
+            config_loader=self.config_loader,
+            sheet_name=self.sheet_name,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,
+            pallets=grand_total_pallets
+        )
+        
+        gt_style_config = grand_total_resolver.get_style_bundle()
+        gt_layout_config = grand_total_resolver.get_layout_bundle()
+        
+        # Prepare styling model
+        styling_model = gt_style_config.get('styling_config')
+        if styling_model and not isinstance(styling_model, StylingConfigModel):
+            if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
+                pass
+            else:
+                try:
+                    styling_model = StylingConfigModel(**styling_model)
+                except Exception as e:
+                    logger.warning(f"Could not create StylingConfigModel: {e}")
+                    styling_model = None
+        
+        # Prepare footer config
+        sheet_config = gt_layout_config.get('sheet_config', {})
+        footer_config = sheet_config.get('footer', {}).copy()
+        footer_config["type"] = "grand_total"
+        
+        # Legacy DAF summary logic removed - add_ons are now controlled via dictionary config
+        # if sheet_config.get('content', {}).get("summary", False) and self.args.DAF:
+        #     footer_config["add_ons"] = ["summary"]
+        
+        # Calculate overall data range
+        if all_data_ranges:
+            overall_data_start = min(r[0] for r in all_data_ranges)
+            overall_data_end = max(r[1] for r in all_data_ranges)
+        else:
+            overall_data_start = current_row - 1
+            overall_data_end = current_row - 1
+            
+        # Create FooterData using resolver to ensure normalized data (including global weights)
+        footer_data = grand_total_resolver.get_footer_data(
+            footer_row_start_idx=current_row,
+            data_start_row=overall_data_start,
+            data_end_row=overall_data_end,
+            pallet_count=grand_total_pallets,
+            leather_summary=dict(aggregated_leather_summary),
+            weight_summary={'net': 0.0, 'gross': 0.0}  # Will be auto-filled with global weights by resolver
+        )
+        
+        footer_builder = FooterBuilder(
+            worksheet=self.output_worksheet,
+            footer_data=footer_data,
+            style_config={'styling_config': styling_model},
+            context_config={
+                'header_info': last_header_info,
+                'pallet_count': grand_total_pallets,
+                'sheet_name': self.sheet_name,
+                'is_last_table': True,
+                'dynamic_desc_used': dynamic_desc_used
+            },
+            data_config={
+                'sum_ranges': all_data_ranges,
+                'footer_config': footer_config,
+                'all_tables_data': all_tables_data,
+                'table_keys': table_keys,
+                'mapping_rules': gt_layout_config.get('sheet_config', {}).get('data_flow', {}).get('mappings', {}),
+                'DAF_mode': self.args.DAF,
+                'override_total_text': None,
+                'leather_summary': dict(aggregated_leather_summary)
+            }
+        )
+        
+        return footer_builder.build()
+
+    def _restore_template_footer(self, template_state_builder, current_row, table_keys):
+        """Restores the template footer at the end."""
+        logger.info(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+        
+        actual_num_cols = None
+        if table_keys:
+            first_resolver = BuilderConfigResolver(
+                config_loader=self.config_loader,
                 sheet_name=self.sheet_name,
-                DAF_mode=self.args.DAF,
-                is_last_table=is_last_table,
-                dynamic_desc_used=self.dynamic_desc_used,
+                worksheet=self.output_worksheet,
+                args=self.args,
+                invoice_data=self.invoice_data
             )
-            write_pointer_row = footer_builder.build()
-            
-            all_footer_rows.append(write_pointer_row)
-            # write_pointer_row += 1 # This is now handled by footer_builder.build()
-
-            if i < num_tables - 1:
-                write_pointer_row += 1
-
-        if num_tables > 1:
-            last_header_info = all_header_infos[-1]
-            num_columns = last_header_info.get('num_columns', 1)
-            
-            # For the grand total footer, it is always the last table in the context of the sheet
-            is_last_table_grand_total = True 
-
-            grand_total_footer_builder = FooterBuilder(
-                worksheet=self.worksheet,
-                footer_row_num=write_pointer_row,
-                header_info=last_header_info,
-                sum_ranges=all_data_ranges,
-                footer_config={**footer_config, "type": "grand_total", "add_ons": ["summary"] if self.args.DAF and self.sheet_name == "Packing list" else []},
-                pallet_count=grand_total_pallets,
-                override_total_text="TOTAL OF:",
-                sheet_styling_config=self.styling_config,
-                all_tables_data=self.invoice_data.get('processed_tables_data', {}),
-                table_keys=table_keys,
-                mapping_rules=mappings,
-                sheet_name=self.sheet_name,
-                DAF_mode=self.args.DAF,
-                is_last_table=is_last_table_grand_total,
-                dynamic_desc_used=self.dynamic_desc_used,
+            _, _, first_layout_cfg = first_resolver.get_layout_bundles_with_data(table_key=table_keys[0])
+            if first_layout_cfg and 'sheet_config' in first_layout_cfg:
+                bundled_columns = first_layout_cfg['sheet_config'].get('structure', {}).get('columns', [])
+                if bundled_columns:
+                    actual_num_cols = len(bundled_columns)
+        
+        try:
+            template_state_builder.restore_footer_only(
+                target_worksheet=self.output_worksheet,
+                footer_start_row=current_row,
+                actual_num_cols=actual_num_cols
             )
-            write_pointer_row = grand_total_footer_builder.build()
-            
-            all_footer_rows.append(write_pointer_row)
-
-        for i, header_info in enumerate(all_header_infos):
-            data_range = all_data_ranges[i]
-            data_row_indices = list(range(data_range[0], data_range[1] + 1))
-            footer_row = all_footer_rows[i]
-            style_utils.apply_row_heights(
-                worksheet=self.worksheet,
-                sheet_styling_config=self.styling_config,
-                header_info=header_info,
-                data_row_indices=data_row_indices,
-                footer_row_index=footer_row,
-            )
-
-        self.run_text_replacement()
-
-        return write_pointer_row, last_data_end_row
+        except Exception as e:
+            logger.error(f"❌ Failed to restore template footer: {e}")
+            logger.error(traceback.format_exc())

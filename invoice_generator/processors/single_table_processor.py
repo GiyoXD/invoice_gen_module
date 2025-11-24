@@ -1,104 +1,124 @@
-print(f"Loading module: {__file__}")
-from typing import Any, Dict
-from invoice_generator.utils.writing import write_header
-from invoice_generator.builders.table_builder import TableBuilder
-from .base_processor import BaseProcessor
+# invoice_generator/processors/single_table_processor.py
+import sys
+import logging
+from .base_processor import SheetProcessor
+from ..utils import text_replace_utils
+from ..builders.layout_builder import LayoutBuilder
+from ..config.builder_config_resolver import BuilderConfigResolver
 
-class SingleTableProcessor(BaseProcessor):
+logger = logging.getLogger(__name__)
+
+class SingleTableProcessor(SheetProcessor):
+    """
+    Processes a worksheet that is configured to have a single main data table.
+    This includes writing a header, filling the table, and applying styles.
+    """
     def process(self) -> bool:
-        # Write the header based on the layout in the config file
-        # print(f
-
-        # --- Get flags and rules from the sheet's configuration ---
-        sheet_inner_mapping_rules_dict = self.sheet_config.get('mappings', {})
-        sheet_styling_config = self.styling_config
-
-        add_blank_after_hdr_flag = self.sheet_config.get("add_blank_after_header", False)
-        static_content_after_hdr_dict = self.sheet_config.get("static_content_after_header", {})
-        add_blank_before_ftr_flag = self.sheet_config.get("add_blank_before_footer", False)
-        static_content_before_ftr_dict = self.sheet_config.get("static_content_before_footer", {})
-        merge_rules_after_hdr = self.sheet_config.get("merge_rules_after_header", {})
-        merge_rules_before_ftr = self.sheet_config.get("merge_rules_before_footer", {})
-        merge_rules_footer = self.sheet_config.get("merge_rules_footer", {})
-        data_cell_merging_rules = self.sheet_config.get("data_cell_merging_rule", None)
-
-        # --- Get Data Source ---
-        data_to_fill = None
-        data_source_type = None
-        print(f"Retrieving data source for '{self.sheet_name}' using indicator: '{self.data_source_indicator}'")
-
-        # Logic to select the correct data source based on flags and config
-        if self.args.custom and self.data_source_indicator == 'aggregation':
-            data_to_fill = self.invoice_data.get('custom_aggregation_results')
-            data_source_type = 'custom_aggregation'
-
-        if data_to_fill is None:
-            if self.args.DAF and self.sheet_name in ["Invoice", "Contract"]:
-                self.data_source_indicator = 'DAF_aggregation'
-
-            if self.data_source_indicator == 'DAF_aggregation':
-                data_to_fill = self.invoice_data.get('final_DAF_compounded_result')
-                data_source_type = 'DAF_aggregation'
-            elif self.data_source_indicator == 'aggregation':
-                data_to_fill = self.invoice_data.get('standard_aggregation_results')
-                data_source_type = 'aggregation'
-            elif 'processed_tables_data' in self.invoice_data and self.data_source_indicator in self.invoice_data.get('processed_tables_data', {}):
-                data_to_fill = self.invoice_data['processed_tables_data'].get(self.data_source_indicator)
-                data_source_type = 'processed_tables'
-
-        if data_to_fill is None:
-            print(f"Warning: Data source '{self.data_source_indicator}' unknown or data empty. Skipping fill.")
-            return True
-
-        start_row = self.sheet_config.get('start_row', 1)
-        header_to_write = self.sheet_config.get('header_to_write')
-        header_info = write_header(self.worksheet, start_row, header_to_write, sheet_styling_config)
-
-        if not header_info or not header_info.get('column_map'):
-            print(f"DEBUG: header_info after write_header: {header_info}")
-            print(f"Error: Cannot fill data for '{self.sheet_name}' because header_info or column_map is missing.")
-            return False
-
-        # Instantiate TableBuilder
-        table_builder = TableBuilder(
-            worksheet=self.worksheet,
+        """
+        Executes the logic for processing a single-table sheet using the builder pattern.
+        """
+        logger.info(f"Processing sheet '{self.sheet_name}' as single table/aggregation")
+        
+        # Calculate weight totals from processed_tables_data (similar to pallet totals)
+        from decimal import Decimal, InvalidOperation
+        total_net_weight = Decimal('0')
+        total_gross_weight = Decimal('0')
+        
+        if self.invoice_data and 'processed_tables_data' in self.invoice_data:
+            processed_tables = self.invoice_data['processed_tables_data']
+            # For single table sheets, use first table (usually '1')
+            first_table_key = list(processed_tables.keys())[0] if processed_tables else None
+            if first_table_key:
+                table_data = processed_tables[first_table_key]
+                net_weights = table_data.get('net', [])
+                gross_weights = table_data.get('gross', [])
+                
+                for weight in net_weights:
+                    try:
+                        total_net_weight += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+                
+                for weight in gross_weights:
+                    try:
+                        total_gross_weight += Decimal(str(weight))
+                    except (InvalidOperation, TypeError, ValueError):
+                        continue
+        
+        logger.debug(f"Calculated weight totals for {self.sheet_name}: N.W={total_net_weight}, G.W={total_gross_weight}")
+        
+        # Use BuilderConfigResolver to prepare bundles cleanly
+        resolver = BuilderConfigResolver(
+            config_loader=self.config_loader,
             sheet_name=self.sheet_name,
-            sheet_config=self.sheet_config,
-            all_sheet_configs=self.data_mapping_config,
-            data_source=data_to_fill,
-            data_source_type=data_source_type,
-            header_info=header_info,
-            mapping_rules=sheet_inner_mapping_rules_dict,
-            sheet_styling_config=sheet_styling_config,
-            add_blank_after_header=add_blank_after_hdr_flag,
-            static_content_after_header=static_content_after_hdr_dict,
-            add_blank_before_footer=add_blank_before_ftr_flag,
-            static_content_before_footer=static_content_before_ftr_dict,
-            merge_rules_after_header=merge_rules_after_hdr,
-            merge_rules_before_footer=merge_rules_before_ftr,
-            merge_rules_footer=merge_rules_footer,
-            max_rows_to_fill=None,
-            grand_total_pallets=self.final_grand_total_pallets,
-            custom_flag=self.args.custom,
-            data_cell_merging_rules=data_cell_merging_rules,
-            DAF_mode=self.args.DAF,
-            all_tables_data=None,
-            table_keys=None,
-            is_last_table=True,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,
+            pallets=self.final_grand_total_pallets,
+            final_grand_total_pallets=self.final_grand_total_pallets,  # Context override
+            total_net_weight=float(total_net_weight),  # Add weight totals to context
+            total_gross_weight=float(total_gross_weight)
         )
-
-        print(f"DEBUG: start_row: {start_row}")
-        print(f"DEBUG: header_to_write: {header_to_write}")
-
-        # Call build method
-        fill_success, next_row_after_footer, _, _, _ = table_builder.build()
-
-        if not fill_success:
-            print(f"Failed to fill table data/footer for sheet '{self.sheet_name}'.")
+        
+        # Get the bundles needed for LayoutBuilder
+        style_config = resolver.get_style_bundle()
+        context_config = resolver.get_context_bundle(
+            invoice_data=self.invoice_data,
+            enable_text_replacement=False  # Already done at main level
+        )
+        layout_config = resolver.get_layout_bundle()
+        layout_config['enable_text_replacement'] = False
+        layout_config['skip_data_table_builder'] = False  # IMPORTANT: Enable data table builder to use resolver
+        
+        logger.debug(f"layout_config keys: {list(layout_config.keys())}")
+        logger.debug(f"skip_data_table_builder in layout_config: {layout_config.get('skip_data_table_builder', 'NOT SET')}")
+        logger.debug(f"skip_data_table_builder in sheet_config: {layout_config.get('sheet_config', {}).get('skip_data_table_builder', 'NOT SET')}")
+        
+        # Get data bundle to extract header_info and mapping_rules
+        data_bundle = resolver.get_data_bundle()
+        layout_config['header_info'] = data_bundle.get('header_info', {})
+        layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
+        layout_config['data_source'] = data_bundle.get('data_source')
+        layout_config['data_source_type'] = data_bundle.get('data_source_type')
+        # NOTE: header_info from config is just column metadata, NOT styled Excel rows
+        # HeaderBuilder still needs to run to write the actual styled header rows
+        
+        logger.debug(f"header_info keys: {list(data_bundle.get('header_info', {}).keys())}")
+        
+        # NEW: Use TableDataAdapter to prepare data
+        try:
+            table_resolver = resolver.get_table_data_resolver()
+            resolved_data = table_resolver.resolve()
+            layout_config['resolved_data'] = resolved_data
+            logger.info("Successfully resolved table data using TableDataAdapter")
+        except Exception as e:
+            logger.error(f"Error resolving table data: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-        print(f"Successfully filled table data/footer for sheet '{self.sheet_name}'.")
-
-        self.run_text_replacement()
-
-        # Placeholder for other post-table processing (e.g., weight summary, column widths, final spacers)
-        return next_row_after_footer
+        
+        # Use LayoutBuilder to orchestrate the entire layout construction
+        layout_builder = LayoutBuilder(
+            self.output_workbook,
+            self.output_worksheet,
+            self.template_worksheet,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config
+        )
+        
+        # Build the entire layout (header + table + footer)
+        success = layout_builder.build()
+        
+        if not success:
+            logger.error(f"Failed to build layout for sheet '{self.sheet_name}'")
+            return False
+            
+        logger.info(f"Successfully filled table data/footer for sheet '{self.sheet_name}'")
+        
+        # TODO: Re-implement post-processing features using new architecture:
+        # - Weight summary (should be a builder add-on)
+        # - Column widths (should be handled by styling in builders)
+        # - Summary fields (should be part of data mapping)
+        
+        return True

@@ -20,9 +20,9 @@ class TestInvoiceGeneration(unittest.TestCase):
     def setUp(self):
         """Set up paths and variables needed for the tests."""
         self.base_dir = project_root
-        self.input_data_path = self.base_dir / "CLW.json"
-        self.template_dir = self.base_dir / 'invoice_gen' / 'TEMPLATE'
-        self.config_dir = self.base_dir / 'invoice_gen' / 'config'
+        self.input_data_path = self.base_dir / 'invoice_generator' / 'JF.json'
+        self.template_dir = self.base_dir / 'invoice_generator' / 'template'
+        self.config_dir = self.base_dir / 'invoice_generator' / 'config_bundled' / 'JF_config'
         self.test_output_path = self.base_dir / 'tests' / 'test_output.xlsx'
 
         # Ensure the test output file doesn't exist before a run

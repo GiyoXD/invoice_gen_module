@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Optional, Dict, Union
 
 class FontModel(BaseModel):
     name: Optional[str] = None
@@ -35,3 +35,15 @@ class StylingConfigModel(BaseModel):
 
     class Config:
         populate_by_name = True
+
+class FooterData(BaseModel):
+    """
+    Data object passed from DataTableBuilder to FooterBuilder.
+    Contains all necessary information to render the footer without further calculation.
+    """
+    footer_row_start_idx: int
+    data_start_row: int
+    data_end_row: int
+    total_pallets: int
+    leather_summary: Optional[Dict[str, Dict[str, Union[int, float]]]] = None
+    weight_summary: Optional[Dict[str, Union[int, float]]] = None

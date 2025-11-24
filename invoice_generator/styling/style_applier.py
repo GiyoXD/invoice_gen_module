@@ -3,13 +3,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Alignment, Border, Side, Font
 from typing import Dict, Any, Optional, List, Tuple
 
-# --- Style Constants ---
-thin_side = Side(border_style="thin", color="000000")
-thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-no_border = Border(left=None, right=None, top=None, bottom=None)
-center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-bold_font = Font(bold=True)
+# Import centralized style constants
+from .style_config import (
+    THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, SIDE_BORDER
+)
 
 # --- Constants for Number Formats ---
 FORMAT_GENERAL = 'General'
@@ -24,16 +21,59 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
     Applies all styles to a single cell, including fonts, alignments,
     and complex conditional borders, based on its context.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # --- Get Context ---
     col_id = context.get("col_id")
     col_idx = context.get("col_idx")
     static_col_idx = context.get("static_col_idx")
     is_pre_footer = context.get("is_pre_footer", False)
+    is_static_row = context.get("is_static_row", False)
+    is_header = context.get("is_header", False)
     DAF_mode = context.get("DAF_mode", False)
+    
+    # Log what context we received
+    logger.debug(f"apply_cell_style: col_id={col_id}, col_idx={col_idx}, is_header={is_header}, is_static_row={is_static_row}")
+    
+    if not styling_config:
+        logger.warning(f"apply_cell_style: NO styling_config provided (col_id={col_id}, col_idx={col_idx})")
+        return
+
+    # Handle static rows first
+    if is_static_row:
+        cell.alignment = CENTER_ALIGNMENT
+        cell.border = NO_BORDER
+        if isinstance(cell.value, (int, float)):
+            cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED2 if isinstance(cell.value, float) else FORMAT_NUMBER_COMMA_SEPARATED1
+        else:
+            cell.number_format = FORMAT_TEXT
+        return
+        
+    if is_header:
+        cell.border = THIN_BORDER
+        return
 
     # --- 1. Apply Font, Alignment, and Number Formats ---
     if col_id and styling_config:
-        col_specific_style = styling_config.columnIdStyles.get(col_id)
+        col_specific_style = styling_config.columnIdStyles.get(col_id) if styling_config.columnIdStyles else None
+        
+        if not col_specific_style:
+            logger.debug(f"No column-specific style for col_id={col_id}")
+            
+        # Check if we have ANY font source
+        has_col_font = col_specific_style and col_specific_style.font
+        has_default_font = styling_config.defaultFont
+        
+        if not has_col_font and not has_default_font:
+            logger.warning(f"NO font available for col_id={col_id} - neither column-specific nor default font exists")
+        
+        # Check if we have ANY alignment source
+        has_col_alignment = col_specific_style and col_specific_style.alignment
+        has_default_alignment = styling_config.defaultAlignment
+        
+        if not has_col_alignment and not has_default_alignment:
+            logger.warning(f"NO alignment available for col_id={col_id} - neither column-specific nor default alignment exists")
         
         if col_specific_style:
             if col_specific_style.font:
@@ -64,40 +104,28 @@ def apply_cell_style(cell: Worksheet.cell, styling_config: StylingConfigModel, c
                     elif isinstance(cell.value, int): cell.number_format = FORMAT_NUMBER_COMMA_SEPARATED1
 
     # --- 2. Apply Conditional Borders ---
-    thin_side = Side(border_style="thin", color="000000")
-    
     # Special handling for the pre-footer row
     if is_pre_footer:
         if col_idx == static_col_idx:
-            cell.border = Border(left=thin_side, right=thin_side)
+            cell.border = SIDE_BORDER
         else:
-            cell.border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+            cell.border = THIN_BORDER
         return
 
     # UPDATED: Simplified logic for main data rows
     if col_idx == static_col_idx:
         # The static column ONLY ever gets side borders.
-        cell.border = Border(left=thin_side, right=thin_side)
+        cell.border = SIDE_BORDER
     elif col_idx: 
         # All other columns get a full grid.
-        cell.border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+        cell.border = THIN_BORDER
 
 
 def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[StylingConfigModel], header_info: Optional[Dict[str, Any]] = None, data_row_indices: Optional[List[int]] = None, footer_row_index: Optional[int] = None, row_after_header_idx: int = -1, row_before_footer_idx: int = -1):
-    """
-    Sets row heights based on the configuration for header, data, footer, and specific rows.
-    Footer height can now optionally match the header height.
-
-    Args:
-        worksheet: The openpyxl Worksheet object.
-        sheet_styling_config: Styling configuration containing the 'row_heights' dictionary.
-        header_info: Dictionary with header row indices.
-        data_row_indices: List of 1-based indices for the actual data rows written.
-        footer_row_index: 1-based index of the footer row.
-        row_after_header_idx: 1-based index of the static/blank row after the header (-1 if none).
-        row_before_footer_idx: 1-based index of the static/blank row before the footer (-1 if none).
-    """
-    if not sheet_styling_config.rowHeights: return
+    import logging
+    logging.debug(f"sheet_styling_config: {sheet_styling_config}")
+    if not sheet_styling_config or not sheet_styling_config.rowHeights:
+        return
     row_heights_cfg = sheet_styling_config.rowHeights
 
     actual_header_height = None # Store the applied header height
@@ -109,6 +137,8 @@ def apply_row_heights(worksheet: Worksheet, sheet_styling_config: Optional[Styli
             h_val = float(height_val)
             if h_val > 0:
                 worksheet.row_dimensions[r_idx].height = h_val
+                import logging
+                logging.debug(f"Setting row {r_idx} height to {h_val}")
                 if desc == "header": # Store the height applied to the header
                     actual_header_height = h_val
             else: pass # Ignore non-positive heights
@@ -154,14 +184,42 @@ def apply_header_style(cell: Worksheet.cell, styling_config: StylingConfigModel)
     """
     Applies styling to a header cell, using config values with fallbacks.
     """
-    effective_header_font = bold_font
-    effective_header_align = center_alignment
-
-    if styling_config:
-        if styling_config.headerFont:
-            effective_header_font = Font(**styling_config.headerFont.model_dump(exclude_none=True))
-        if styling_config.headerAlignment:
-            effective_header_align = Alignment(**styling_config.headerAlignment.model_dump(exclude_none=True))
-
-    cell.font = effective_header_font
-    cell.alignment = effective_header_align
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not styling_config:
+        logger.warning(f"apply_header_style called with NO styling_config - cannot apply header styles")
+        return
+    
+    if not styling_config.headerFont:
+        logger.warning(f"apply_header_style: styling_config has NO headerFont - header will have no font styling")
+        logger.warning(f"  styling_config attributes: {list(styling_config.model_dump().keys())}")
+    else:
+        font_dict = styling_config.headerFont.model_dump(exclude_none=True)
+        logger.debug(f"Applying header font: {font_dict}")
+        
+        # Check for missing critical font properties
+        if not font_dict.get('name'):
+            logger.warning(f"headerFont missing 'name' property")
+        if not font_dict.get('size'):
+            logger.warning(f"headerFont missing 'size' property")
+        
+        # Create Font object explicitly
+        effective_header_font = Font(
+            name=font_dict.get('name'),
+            size=font_dict.get('size'),
+            bold=font_dict.get('bold'),
+            italic=font_dict.get('italic'),
+            color=font_dict.get('color'),
+            family=2,
+            scheme='minor'
+        )
+        cell.font = effective_header_font
+        logger.debug(f"Applied font: name={effective_header_font.name}, size={effective_header_font.size}, bold={effective_header_font.bold}")
+    
+    if not styling_config.headerAlignment:
+        logger.warning(f"apply_header_style: styling_config has NO headerAlignment - header will have no alignment")
+    else:
+        effective_header_align = Alignment(**styling_config.headerAlignment.model_dump(exclude_none=True))
+        cell.alignment = effective_header_align
+        logger.debug(f"Applied alignment: {effective_header_align.horizontal}, {effective_header_align.vertical}")

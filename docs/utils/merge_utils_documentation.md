@@ -40,7 +40,7 @@ This module is critical for managing the complex state of merged cells in `openp
     - **Logic**: It iterates through all merged ranges on the sheet and removes any merge that **starts on or after** the given `start_row`.
     - **Analysis**: This is a safer alternative to unmerging the entire sheet, as it leaves header merges (which are typically above the data area) intact.
 
-- **`apply_row_merges(worksheet, row_num, num_cols, merge_rules)`**:
+- **`apply_horizontal_merge(worksheet, row_num, num_cols, merge_rules)`**:
     - **Purpose**: To apply a set of horizontal merges to a single row based on a configuration dictionary.
     - **Logic**: It takes a dictionary of `merge_rules` where the key is the starting column and the value is the number of columns to span (`colspan`). It then iterates through these rules and applies them to the specified `row_num`.
     - **Analysis**: A straightforward utility for applying declarative merge rules, often used for footers or static rows.

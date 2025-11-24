@@ -1,0 +1,394 @@
+{
+  "status": "success",
+  "output_file": "C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx",
+  "timestamp": "2025-11-24T09:33:13.205200",
+  "execution_time": 1.5942633152008057,
+  "sheets_processed": [
+    "Invoice",
+    "Contract",
+    "Packing list"
+  ],
+  "sheets_failed": [],
+  "error_message": null,
+  "config_info": {
+    "daf_mode": true,
+    "custom_mode": false,
+    "input_file": "JF.json",
+    "config_dir": "C:\\Users\\JPZ031127\\Desktop\\refactor\\invoice_generator\\config_bundled"
+  },
+  "database_export": {
+    "summary": {
+      "total_pcs": 6304,
+      "total_sqft": 237879.59999999998,
+      "total_pallets": 26,
+      "item_count": 30
+    },
+    "packing_list_items": [
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 290,
+        "sqft": 11036.9,
+        "pallet_count": 1,
+        "net": "718.5",
+        "gross": "763.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 289,
+        "sqft": 11022.9,
+        "pallet_count": 1,
+        "net": "726",
+        "gross": "771",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 277,
+        "sqft": 10326.1,
+        "pallet_count": 1,
+        "net": "680.5",
+        "gross": "725.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 145,
+        "sqft": 5335.1,
+        "pallet_count": 1,
+        "net": "344.6279",
+        "gross": "374.9767",
+        "cbm": "1.3888"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 70,
+        "sqft": 2421.4,
+        "pallet_count": 0,
+        "net": "166.3721",
+        "gross": "181.0233",
+        "cbm": "0.6704"
+      },
+      {
+        "po": "PT22848",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 270,
+        "sqft": 10179.4,
+        "pallet_count": 1,
+        "net": "668.5",
+        "gross": "713.5",
+        "cbm": "2.4948"
+      },
+      {
+        "po": "PT22848",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 140,
+        "sqft": 5360.4,
+        "pallet_count": 1,
+        "net": "351",
+        "gross": "396",
+        "cbm": "1.7424"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 171,
+        "sqft": 6406.3,
+        "pallet_count": 1,
+        "net": "409.7081",
+        "gross": "454.1879",
+        "cbm": "1.8788"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 2,
+        "sqft": 44.4,
+        "pallet_count": 0,
+        "net": "4.7919",
+        "gross": "5.3121",
+        "cbm": "0.0220"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 310,
+        "sqft": 11418.9,
+        "pallet_count": 1,
+        "net": "755",
+        "gross": "800",
+        "cbm": "2.4552"
+      },
+      {
+        "po": "PT22X37",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 310,
+        "sqft": 11702.5,
+        "pallet_count": 1,
+        "net": "760.5",
+        "gross": "805.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT22X37",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 190,
+        "sqft": 7025.8,
+        "pallet_count": 1,
+        "net": "471",
+        "gross": "516",
+        "cbm": "1.8216"
+      },
+      {
+        "po": "PT24G80",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 250,
+        "sqft": 9678.2,
+        "pallet_count": 1,
+        "net": "640",
+        "gross": "685",
+        "cbm": "2.4948"
+      },
+      {
+        "po": "PT24G80",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 199,
+        "sqft": 7696,
+        "pallet_count": 1,
+        "net": "503.5",
+        "gross": "548.5",
+        "cbm": "2.1780"
+      },
+      {
+        "po": "PT24G84",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 239,
+        "sqft": 9285.5,
+        "pallet_count": 1,
+        "net": "622",
+        "gross": "667",
+        "cbm": "2.2968"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 290,
+        "sqft": 11036.9,
+        "pallet_count": 1,
+        "net": "718.5",
+        "gross": "763.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 289,
+        "sqft": 11022.9,
+        "pallet_count": 1,
+        "net": "726",
+        "gross": "771",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 277,
+        "sqft": 10326.1,
+        "pallet_count": 1,
+        "net": "680.5",
+        "gross": "725.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 145,
+        "sqft": 5335.1,
+        "pallet_count": 1,
+        "net": "344.6279",
+        "gross": "374.9767",
+        "cbm": "1.3888"
+      },
+      {
+        "po": "PT1ZX94",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 70,
+        "sqft": 2421.4,
+        "pallet_count": 0,
+        "net": "166.3721",
+        "gross": "181.0233",
+        "cbm": "0.6704"
+      },
+      {
+        "po": "PT22848",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 270,
+        "sqft": 10179.4,
+        "pallet_count": 1,
+        "net": "668.5",
+        "gross": "713.5",
+        "cbm": "2.4948"
+      },
+      {
+        "po": "PT22848",
+        "item": 140491,
+        "description": "L LEESWORTH BUFFALO OCEAN U43809",
+        "pcs": 140,
+        "sqft": 5360.4,
+        "pallet_count": 1,
+        "net": "351",
+        "gross": "396",
+        "cbm": "1.7424"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 171,
+        "sqft": 6406.3,
+        "pallet_count": 1,
+        "net": "409.7081",
+        "gross": "454.1879",
+        "cbm": "1.8788"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 2,
+        "sqft": 44.4,
+        "pallet_count": 0,
+        "net": "4.7919",
+        "gross": "5.3121",
+        "cbm": "0.0220"
+      },
+      {
+        "po": "PT22X29",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 310,
+        "sqft": 11418.9,
+        "pallet_count": 1,
+        "net": "755",
+        "gross": "800",
+        "cbm": "2.4552"
+      },
+      {
+        "po": "PT22X37",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 310,
+        "sqft": 11702.5,
+        "pallet_count": 1,
+        "net": "760.5",
+        "gross": "805.5",
+        "cbm": "2.5740"
+      },
+      {
+        "po": "PT22X37",
+        "item": 140488,
+        "description": "L MINDANAO BUFFALO COCONUT",
+        "pcs": 190,
+        "sqft": 7025.8,
+        "pallet_count": 1,
+        "net": "471",
+        "gross": "516",
+        "cbm": "1.8216"
+      },
+      {
+        "po": "PT24G80",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 250,
+        "sqft": 9678.2,
+        "pallet_count": 1,
+        "net": "640",
+        "gross": "685",
+        "cbm": "2.4948"
+      },
+      {
+        "po": "PT24G80",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 199,
+        "sqft": 7696,
+        "pallet_count": 1,
+        "net": "503.5",
+        "gross": "548.5",
+        "cbm": "2.1780"
+      },
+      {
+        "po": "PT24G84",
+        "item": 140489,
+        "description": "L MINDANAO BUFFALO STEELU59504",
+        "pcs": 239,
+        "sqft": 9285.5,
+        "pallet_count": 1,
+        "net": "622",
+        "gross": "667",
+        "cbm": "2.2968"
+      }
+    ]
+  },
+  "invoice_terms": {
+    "detected_terms": [
+      "FCA",
+      "BAVET, SVAY RIENG"
+    ],
+    "replacements_detail": [
+      {
+        "original": "FCA :",
+        "new": "DAF :",
+        "term": "FCA",
+        "location": "header"
+      },
+      {
+        "original": "BAVET, SVAY RIENG",
+        "new": "BAVET",
+        "term": "BAVET, SVAY RIENG",
+        "location": "header"
+      }
+    ]
+  },
+  "header_info": {
+    "consignee_address": [
+      "JASON FURNITURE VIET NAM COMPANY LIMITED",
+      "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54\uff0c55, 56\uff0cB2 CLUSTER, DONG XOAI III INDUSTRIAL ZONE,",
+      "BINH PHUOC WARD,DONG NAI PROVINCE, VIETNAM",
+      "Contact Person : Mr. Thuy   TEl: 0379367084",
+      "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com",
+      "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com"
+    ]
+  },
+  "invoice_info": {
+    "inv_no": null,
+    "inv_date": null,
+    "inv_ref": null
+  }
+}

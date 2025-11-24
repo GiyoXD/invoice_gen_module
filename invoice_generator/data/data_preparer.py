@@ -1,5 +1,7 @@
 from typing import Any, Union, Dict, List, Tuple
 from decimal import Decimal
+import logging
+logger = logging.getLogger(__name__)
 
 def parse_mapping_rules(
     mapping_rules: Dict[str, Any],
@@ -59,7 +61,7 @@ def parse_mapping_rules(
                 header_text = parsed_result["static_column_header_name"]
                 parsed_result["apply_special_border_rule"] = header_text and header_text.strip() in ["Mark & Nº", "Mark & N °"]
             else:
-                print(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
+                logger.warning(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
             continue
 
         # For all other rules, get the target column index using the RELIABLE ID
@@ -74,14 +76,14 @@ def parse_mapping_rules(
                     "input_ids": rule_value.get("inputs", [])
                 }
             else:
-                print(f"Warning: Could not find target column for formula rule with id '{target_id}'.")
+                logger.warning(f"Warning: Could not find target column for formula rule with id '{target_id}'.")
 
         # --- Handler for Static Values ---
         elif "static_value" in rule_value:
             if target_col_idx:
                 parsed_result["static_value_map"][target_col_idx] = rule_value["static_value"]
             else:
-                print(f"Warning: Could not find target column for static_value rule with id '{target_id}'.")
+                logger.warning(f"Warning: Could not find target column for static_value rule with id '{target_id}'.")
         
         # --- Handler for top-level Dynamic Rules (used by 'aggregation') ---
         else:
@@ -117,13 +119,31 @@ def _apply_fallback(
 ):
     """
     Applies a fallback value to the row_dict based on the DAF_mode.
+    
+    Supports multiple fallback formats:
+    1. Bundled config with mode-specific fallbacks:
+       "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"
+    2. Bundled config with single fallback (same for both modes):
+       "fallback": "LEATHER"
+    3. Legacy format (same as #1)
     """
+    # Priority 1: Check for mode-specific fallback keys (supports both DAF and non-DAF)
     if DAF_mode:
-        fallback_key = "fallback_on_DAF"
+        if 'fallback_on_DAF' in mapping_rule:
+            row_dict[target_col_idx] = mapping_rule['fallback_on_DAF']
+            return
     else:
-        fallback_key = "fallback_on_none"
-        
-    row_dict[target_col_idx] = mapping_rule.get(fallback_key) or mapping_rule.get("fallback_on_none")
+        if 'fallback_on_none' in mapping_rule:
+            row_dict[target_col_idx] = mapping_rule['fallback_on_none']
+            return
+    
+    # Priority 2: Try single 'fallback' key (same value for both modes)
+    if 'fallback' in mapping_rule:
+        row_dict[target_col_idx] = mapping_rule['fallback']
+        return
+    
+    # Priority 3: Fallback to fallback_on_none if nothing else found
+    row_dict[target_col_idx] = mapping_rule.get("fallback_on_none")
 
 def prepare_data_rows(
     data_source_type: str,
@@ -138,7 +158,28 @@ def prepare_data_rows(
 ) -> Tuple[List[Dict[int, Any]], List[int], bool, int]:
     """
     Corrected version with typo fix and improved fallback flexibility.
+    
+    Validates that description field has fallback values defined.
     """
+    # Validate description field has fallback - CRITICAL for proper invoice generation
+    desc_mapping = None
+    for field_name, mapping_rule in dynamic_mapping_rules.items():
+        # Find description field (can be named 'description', 'desc', etc.)
+        if 'desc' in field_name.lower() and isinstance(mapping_rule, dict):
+            desc_mapping = mapping_rule
+            break
+    
+    if desc_mapping:
+        has_fallback = any(key in desc_mapping for key in ['fallback_on_none', 'fallback_on_DAF', 'fallback'])
+        if not has_fallback:
+            logger.error(f"❌ CRITICAL: Description field '{field_name}' is missing fallback configuration!")
+            logger.error(f"   Description mapping: {desc_mapping}")
+            logger.error(f"   REQUIRED: At least one of 'fallback_on_none', 'fallback_on_DAF', or 'fallback' must be defined")
+            logger.error(f"   This can cause empty description cells when source data is None/missing")
+            logger.warning(f"warning!!  Add fallback to config: \"fallback_on_none\": \"LEATHER\", \"fallback_on_DAF\": \"LEATHER\"")
+    else:
+        logger.warning(f"warning!!  No description field found in dynamic_mapping_rules - this may cause issues")
+    
     data_rows_prepared = []
     pallet_counts_for_rows = []
     num_data_rows_from_source = 0
@@ -225,7 +266,7 @@ def prepare_data_rows(
             for key_tuple, value_dict in aggregation_data.items():
                 normalized_data.append({'key_tuple': key_tuple, 'value_dict': value_dict})
 
-        elif data_source_type == 'processed_tables':
+        elif data_source_type in ['processed_tables', 'processed_tables_multi']:
             table_data = data_source or {}
             if isinstance(table_data, dict):
                 max_len = max((len(v) for v in table_data.values() if isinstance(v, list)), default=0)
