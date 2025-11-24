@@ -112,15 +112,6 @@ class TableCalculator:
                     continue
                 
                 num_val = safe_float_convert(value)
-                if num_val == 0 and value not in [0, 0.0, "0", "0.0"]:
-                     # safe_float_convert returns 0.0 for non-numeric strings, 
-                     # but we only want to sum actual numbers.
-                     # However, safe_float_convert handles whitespace/etc so if it returns 0 
-                     # it might be a valid 0 or a failure.
-                     # Let's refine: safe_float_convert returns 0.0 on failure.
-                     # If the original value was NOT something that converts to 0, we should skip it?
-                     # Actually, safe_float_convert is robust enough. If it returns 0.0, adding 0.0 is harmless.
-                     pass
 
                 if col_id not in self.leather_summary[target_type]:
                     self.leather_summary[target_type][col_id] = 0
