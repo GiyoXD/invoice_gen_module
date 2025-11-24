@@ -480,6 +480,19 @@ class LayoutBuilder:
                     logger.error("LayoutBuilder: TableCalculator failed to return data.")
                     return False
 
+                # Inject global weights if local weights are zero (for aggregation sheets like Invoice)
+                # This ensures FooterBuilder receives the correct totals calculated by GlobalSummaryCalculator
+                if (self.footer_data.weight_summary['net'] == 0 and 
+                    self.footer_data.weight_summary['gross'] == 0):
+                    
+                    if self.total_net_weight is not None and self.total_net_weight > 0:
+                        logger.info(f"Injecting global net weight into FooterData: {self.total_net_weight}")
+                        self.footer_data.weight_summary['net'] = self.total_net_weight
+                        
+                    if self.total_gross_weight is not None and self.total_gross_weight > 0:
+                        logger.info(f"Injecting global gross weight into FooterData: {self.total_gross_weight}")
+                        self.footer_data.weight_summary['gross'] = self.total_gross_weight
+
                 # --- 5. Build Data Table (DataTableBuilder) ---
                 if not self.skip_data_table_builder:
                     logger.info("LayoutBuilder: Building data table...")

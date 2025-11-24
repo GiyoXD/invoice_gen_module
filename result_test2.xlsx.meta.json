@@ -1,8 +1,8 @@
 {
   "status": "success",
   "output_file": "C:\\Users\\JPZ031127\\Desktop\\refactor\\result_test2.xlsx",
-  "timestamp": "2025-11-22T15:05:55.885074",
-  "execution_time": 2.187084674835205,
+  "timestamp": "2025-11-24T09:33:13.205200",
+  "execution_time": 1.5942633152008057,
   "sheets_processed": [
     "Invoice",
     "Contract",
@@ -385,5 +385,10 @@
       "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com",
       "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com"
     ]
+  },
+  "invoice_info": {
+    "inv_no": null,
+    "inv_date": null,
+    "inv_ref": null
   }
 }
